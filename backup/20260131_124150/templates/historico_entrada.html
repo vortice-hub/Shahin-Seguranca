@@ -4,10 +4,15 @@
     <a href="/entrada" class="text-xs font-bold text-slate-400 hover:text-slate-600 mb-2 inline-block"><i class="fas fa-arrow-left mr-1"></i> VOLTAR</a>
     <h2 class="text-lg font-bold text-slate-800">Log de Entradas</h2>
 </div>
+
 <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
     <table class="w-full text-left text-sm text-slate-600">
         <thead class="bg-slate-50 text-xs uppercase text-slate-400 font-bold">
-            <tr><th class="px-6 py-3">Data</th><th class="px-6 py-3">Item</th><th class="px-6 py-3 text-right">Qtd</th></tr>
+            <tr>
+                <th class="px-6 py-3">Data</th>
+                <th class="px-6 py-3">Item</th>
+                <th class="px-6 py-3 text-right">Qtd</th>
+            </tr>
         </thead>
         <tbody class="divide-y divide-slate-100">
             {% for log in logs %}

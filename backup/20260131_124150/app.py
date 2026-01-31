@@ -2,14 +2,14 @@ import os
 import logging
 from flask import Flask, render_template, request, redirect, url_for, flash
 from flask_sqlalchemy import SQLAlchemy
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta # Importando timedelta para o fuso
 from sqlalchemy import text
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-app.secret_key = 'chave_v8_pro_edit'
+app.secret_key = 'chave_v7_pro_secret'
 
 # --- BANCO DE DADOS ---
 db_url = "postgresql://neondb_owner:npg_UBg0b7YKqLPm@ep-steep-wave-aflx731c-pooler.c-2.us-west-2.aws.neon.tech/neondb?sslmode=require"
@@ -25,7 +25,9 @@ db = SQLAlchemy(app, engine_options={
     "pool_recycle": 300,
 })
 
+# --- UTILITÁRIOS ---
 def get_brasil_time():
+    # Retorna hora UTC - 3 horas
     return datetime.utcnow() - timedelta(hours=3)
 
 # --- MODELOS ---
@@ -33,7 +35,7 @@ class ItemEstoque(db.Model):
     __tablename__ = 'itens_estoque'
     id = db.Column(db.Integer, primary_key=True)
     nome = db.Column(db.String(100), nullable=False)
-    categoria = db.Column(db.String(50), default='Uniforme')
+    categoria = db.Column(db.String(50), default='Uniforme') # Default fixo
     tamanho = db.Column(db.String(10))
     genero = db.Column(db.String(20)) 
     quantidade = db.Column(db.Integer, default=0)
@@ -73,6 +75,7 @@ except Exception: pass
 def dashboard():
     try:
         itens = ItemEstoque.query.order_by(ItemEstoque.nome).all()
+        # Calculo de totais para os Cards do Dashboard
         total_pecas = sum(i.quantidade for i in itens)
         total_itens = len(itens)
         return render_template('dashboard.html', itens=itens, total_pecas=total_pecas, total_itens=total_itens)
@@ -84,6 +87,8 @@ def entrada():
     if request.method == 'POST':
         try:
             nome = request.form.get('nome')
+            # Categoria removida do form, fixamos no codigo
+            categoria = "Uniforme"
             tamanho = request.form.get('tamanho')
             genero = request.form.get('genero')
             quantidade = int(request.form.get('quantidade') or 1)
@@ -94,7 +99,7 @@ def entrada():
                 item.data_atualizacao = get_brasil_time()
                 flash(f'Estoque atualizado: {nome}')
             else:
-                novo = ItemEstoque(nome=nome, tamanho=tamanho, genero=genero, quantidade=quantidade)
+                novo = ItemEstoque(nome=nome, categoria=categoria, tamanho=tamanho, genero=genero, quantidade=quantidade)
                 novo.data_atualizacao = get_brasil_time()
                 db.session.add(novo)
                 flash(f'Novo item: {nome}')
@@ -102,6 +107,7 @@ def entrada():
             log = HistoricoEntrada(item_nome=f"{nome} ({genero}-{tamanho})", quantidade=quantidade)
             log.data_hora = get_brasil_time()
             db.session.add(log)
+            
             db.session.commit()
             return redirect(url_for('entrada'))
         except Exception as e:
@@ -114,17 +120,24 @@ def saida():
     try:
         if request.method == 'POST':
             item_id = request.form.get('item_id')
-            qtd_saida = int(request.form.get('quantidade') or 1)
+            qtd_saida = int(request.form.get('quantidade') or 1) # Nova logica de quantidade
             data_input = request.form.get('data')
             
             item = ItemEstoque.query.get(item_id)
-            if not item: return redirect(url_for('saida'))
+            
+            if not item:
+                flash("Erro: Item não encontrado.")
+                return redirect(url_for('saida'))
 
+            # Validação de Estoque
             if item.quantidade >= qtd_saida:
                 item.quantidade -= qtd_saida
                 item.data_atualizacao = get_brasil_time()
-                try: dt = datetime.strptime(data_input, '%Y-%m-%d')
-                except: dt = get_brasil_time()
+                
+                try:
+                    dt = datetime.strptime(data_input, '%Y-%m-%d')
+                except:
+                    dt = get_brasil_time()
                 
                 log = HistoricoSaida(
                     coordenador=request.form.get('coordenador'),
@@ -132,43 +145,21 @@ def saida():
                     item_nome=item.nome,
                     tamanho=item.tamanho,
                     genero=item.genero,
-                    quantidade=qtd_saida,
+                    quantidade=qtd_saida, # Registra a qtd exata que saiu
                     data_entrega=dt
                 )
                 db.session.add(log)
                 db.session.commit()
-                flash(f'Saída registrada!')
+                flash(f'Saída de {qtd_saida} unidade(s) registrada!')
                 return redirect(url_for('dashboard'))
             else:
-                flash(f'Erro: Estoque insuficiente.')
+                flash(f'Erro: Estoque insuficiente. Disponível: {item.quantidade}')
                 return redirect(url_for('saida'))
         
         itens = ItemEstoque.query.filter(ItemEstoque.quantidade > 0).order_by(ItemEstoque.nome).all()
         return render_template('saida.html', itens=itens)
     except Exception as e:
         return f"Erro: {e}", 500
-
-# --- NOVA ROTA: EDITAR ---
-@app.route('/editar/<int:id>', methods=['GET', 'POST'])
-def editar(id):
-    item = ItemEstoque.query.get_or_404(id)
-    if request.method == 'POST':
-        try:
-            item.nome = request.form.get('nome')
-            item.quantidade = int(request.form.get('quantidade'))
-            # Opcional: permitir editar tamanho/genero tambem se desejar
-            item.tamanho = request.form.get('tamanho')
-            item.genero = request.form.get('genero')
-            item.data_atualizacao = get_brasil_time()
-            
-            db.session.commit()
-            flash(f'Item {item.nome} atualizado com sucesso!')
-            return redirect(url_for('dashboard'))
-        except Exception as e:
-            db.session.rollback()
-            return f"Erro ao editar: {e}", 500
-            
-    return render_template('editar.html', item=item)
 
 @app.route('/historico/entrada')
 def view_historico_entrada():
