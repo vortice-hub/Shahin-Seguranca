@@ -6,48 +6,30 @@
         <i class="fas fa-history mr-1"></i>Histórico
     </a>
 </div>
-
 <div class="bg-white rounded-lg shadow-lg p-6">
     <form action="/saida" method="POST" class="space-y-4">
-        
-        <!-- Selecao do Item -->
         <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Selecione o Uniforme (Estoque Disponível)</label>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Selecione o Uniforme</label>
             <select name="item_id" class="w-full p-3 border rounded-lg bg-white" required>
                 <option value="" disabled selected>Escolha o item...</option>
                 {% for item in itens %}
-                <option value="{{ item.id }}">
-                    {{ item.nome }} | {{ item.genero }} | Tam: {{ item.tamanho }} (Disp: {{ item.quantidade }})
-                </option>
+                <option value="{{ item.id }}">{{ item.nome }} | {{ item.genero }} | Tam: {{ item.tamanho }} (Disp: {{ item.quantidade }})</option>
                 {% endfor %}
             </select>
         </div>
-
-        <!-- Coordenador -->
         <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Nome do Coordenador</label>
-            <input type="text" name="coordenador" class="w-full p-3 border rounded-lg" placeholder="Quem está entregando?" required>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Coordenador</label>
+            <input type="text" name="coordenador" class="w-full p-3 border rounded-lg" required>
         </div>
-
-        <!-- Colaborador -->
         <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Nome do Colaborador</label>
-            <input type="text" name="colaborador" class="w-full p-3 border rounded-lg" placeholder="Quem recebeu?" required>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Colaborador</label>
+            <input type="text" name="colaborador" class="w-full p-3 border rounded-lg" required>
         </div>
-
-        <!-- Data -->
         <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Data da Entrega</label>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Data</label>
             <input type="date" name="data" class="w-full p-3 border rounded-lg" required>
         </div>
-
-        <div class="bg-yellow-50 p-3 rounded text-sm text-yellow-700 border border-yellow-200">
-            <i class="fas fa-info-circle"></i> Ao salvar, será descontada 1 unidade do estoque.
-        </div>
-
-        <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold p-4 rounded-lg shadow transition">
-            REGISTRAR SAÍDA
-        </button>
+        <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold p-4 rounded-lg shadow transition">REGISTRAR SAÍDA</button>
     </form>
 </div>
 {% endblock %}

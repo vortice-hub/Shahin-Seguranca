@@ -1,5 +1,7 @@
 {% extends 'base.html' %}
 {% block content %}
+
+<!-- Botões de Ação Principais -->
 <div class="grid grid-cols-2 gap-4 mb-6">
     <a href="/entrada" class="bg-green-600 hover:bg-green-700 text-white p-6 rounded-xl shadow-lg flex flex-col items-center justify-center transition transform hover:scale-105">
         <i class="fas fa-box-open text-3xl mb-2"></i>
@@ -12,11 +14,14 @@
         <span class="text-xs opacity-75">Entrega de Uniforme</span>
     </a>
 </div>
+
+<!-- Lista de Estoque -->
 <div class="bg-white rounded-lg shadow overflow-hidden">
     <div class="p-4 bg-gray-100 border-b flex justify-between items-center">
         <h2 class="font-bold text-gray-700"><i class="fas fa-list mr-2"></i>Estoque Atual</h2>
         <span class="text-xs bg-gray-200 px-2 py-1 rounded text-gray-600">{{ itens|length }} itens</span>
     </div>
+    
     <div class="divide-y divide-gray-100">
         {% for item in itens %}
         <div class="p-4 flex justify-between items-center hover:bg-gray-50">
@@ -45,7 +50,9 @@
             </div>
         </div>
         {% else %}
-        <div class="p-8 text-center text-gray-400">Nenhum item cadastrado.</div>
+        <div class="p-8 text-center text-gray-400">
+            Nenhum item cadastrado. Use o botão ENTRADA.
+        </div>
         {% endfor %}
     </div>
 </div>

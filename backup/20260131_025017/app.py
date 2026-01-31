@@ -6,43 +6,26 @@ from sqlalchemy import text
 
 app = Flask(__name__)
 
-# --- CONFIGURAÇÃO DE SEGURANÇA E BANCO ---
+# 1. SEGURANÇA: Pega a chave secreta do Render ou usa uma provisória se rodar local
+app.secret_key = os.environ.get('SECRET_KEY', 'chave_dev_provisoria')
 
-# 1. Secret Key: Tenta pegar do ambiente, senão usa uma fixa
-app.secret_key = os.environ.get('SECRET_KEY', 'thay_rh_dev_key_fallback')
-
-# 2. Banco de Dados Híbrido
-# Tenta pegar a variável DATABASE_URL do Render.
-# Se não existir (None), usa a string hardcoded como 'Fallback' para o site não cair.
-db_url_env = os.environ.get('DATABASE_URL')
-db_fallback = 'postgresql://neondb_owner:npg_UBg0b7YKqLPm@ep-steep-wave-aflx731c-pooler.c-2.us-west-2.aws.neon.tech/neondb?sslmode=require'
-
-if db_url_env:
-    # Correção para URLs postgres antigas que começam com postgres://
-    if db_url_env.startswith("postgres://"):
-        db_url_env = db_url_env.replace("postgres://", "postgresql://", 1)
-    app.config['SQLALCHEMY_DATABASE_URI'] = db_url_env
-else:
-    app.config['SQLALCHEMY_DATABASE_URI'] = db_fallback
-
+# 2. BANCO DE DADOS: Pega a URL do Render. 
+# Se não achar (erro comum), usa a string direta como fallback temporário para não derrubar o site.
+DEFAULT_DB = 'postgresql://neondb_owner:npg_UBg0b7YKqLPm@ep-steep-wave-aflx731c-pooler.c-2.us-west-2.aws.neon.tech/neondb?sslmode=require'
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', DEFAULT_DB)
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-# 3. Correção de Queda de Conexão (SSL Error)
-# 'pool_pre_ping': Testa a conexão antes de usar.
-# 'pool_recycle': Recicla conexões a cada 300 segundos (5 min).
-db = SQLAlchemy(app, engine_options={
-    "pool_pre_ping": True, 
-    "pool_recycle": 300
-})
+# 3. ESTABILIDADE: pool_pre_ping evita queda de conexão SSL
+db = SQLAlchemy(app, engine_options={"pool_pre_ping": True})
 
-# --- MODELOS DO BANCO ---
+# --- MODELOS ---
 class ItemEstoque(db.Model):
     __tablename__ = 'itens_estoque'
     id = db.Column(db.Integer, primary_key=True)
     nome = db.Column(db.String(100), nullable=False)
     categoria = db.Column(db.String(50))
     tamanho = db.Column(db.String(10))
-    genero = db.Column(db.String(20)) 
+    genero = db.Column(db.String(20)) # Masculino/Feminino/Unissex
     quantidade = db.Column(db.Integer, default=0)
     data_atualizacao = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -64,21 +47,23 @@ class HistoricoSaida(db.Model):
     quantidade = db.Column(db.Integer)
     data_entrega = db.Column(db.DateTime, default=datetime.utcnow)
 
-# --- FUNÇÃO DE MIGRAÇÃO SEGURA ---
-def check_database():
+# --- MIGRACAO ROBUSTA ---
+def update_db_schema():
     with app.app_context():
         try:
+            # Cria tabelas se não existirem
             db.create_all()
-            # Tenta adicionar coluna genero manualmente caso não exista
+            
+            # Tenta adicionar coluna genero se nao existir (Migration manual via SQL)
             with db.engine.connect() as conn:
                 conn.execute(text("ALTER TABLE itens_estoque ADD COLUMN IF NOT EXISTS genero VARCHAR(20)"))
                 conn.commit()
         except Exception as e:
-            # Erros de migração não devem parar o app
-            print(f"DB Check Warning: {e}")
+            # Se der erro (ex: coluna ja existe), apenas ignora e segue o baile
+            print(f"Check DB: {e}")
 
-# Executa verificação ao iniciar
-check_database()
+# Executa verificação do banco ao iniciar
+update_db_schema()
 
 # --- ROTAS ---
 
@@ -99,6 +84,7 @@ def entrada():
         except:
             quantidade = 1
         
+        # Verifica se já existe item idêntico
         item = ItemEstoque.query.filter_by(nome=nome, tamanho=tamanho, genero=genero).first()
         
         if item:
@@ -110,8 +96,10 @@ def entrada():
             db.session.add(novo_item)
             flash(f'Novo item cadastrado: {nome}')
             
+        # Log Entrada
         log = HistoricoEntrada(item_nome=f"{nome} ({genero} - {tamanho})", quantidade=quantidade)
         db.session.add(log)
+        
         db.session.commit()
         return redirect(url_for('entrada'))
         
@@ -130,20 +118,13 @@ def saida():
         colaborador = request.form.get('colaborador')
         data_input = request.form.get('data')
         
-        if not item_id:
-            flash("Erro: Selecione um item.")
-            return redirect(url_for('saida'))
-
         item = ItemEstoque.query.get(item_id)
         
         if item and item.quantidade > 0:
             item.quantidade -= 1
             item.data_atualizacao = datetime.utcnow()
             
-            try:
-                data_final = datetime.strptime(data_input, '%Y-%m-%d')
-            except:
-                data_final = datetime.utcnow()
+            data_final = datetime.strptime(data_input, '%Y-%m-%d') if data_input else datetime.utcnow()
             
             log = HistoricoSaida(
                 coordenador=coordenador,
@@ -162,6 +143,7 @@ def saida():
             flash('Erro: Item não encontrado ou estoque zerado.')
             return redirect(url_for('saida'))
             
+    # Apenas itens com saldo positivo aparecem na saida
     itens_disponiveis = ItemEstoque.query.filter(ItemEstoque.quantidade > 0).order_by(ItemEstoque.nome).all()
     return render_template('saida.html', itens=itens_disponiveis)
 

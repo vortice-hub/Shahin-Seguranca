@@ -4,9 +4,12 @@ import subprocess
 import sys
 from datetime import datetime
 
+# NOTA: Não importamos sqlalchemy aqui para não dar erro no Termux.
+# As bibliotecas só serão usadas dentro do arquivo app.py gerado.
+
 # --- CONFIGURAÇÕES ---
 PROJECT_NAME = "Thay RH"
-COMMIT_MSG = "Update V3: Security Fix & Env Vars"
+COMMIT_MSG = "Fix V4: App Hibrido (Env Var + Fallback) e Correcao Termux"
 
 # --- CONTEÚDO DOS ARQUIVOS ---
 
@@ -18,7 +21,8 @@ gunicorn
 
 FILE_PROCFILE = """web: gunicorn app:app"""
 
-# --- APP.PY (Blindado para ler variáveis de ambiente) ---
+# --- APP.PY (Código do Servidor) ---
+# Aqui incluimos a lógica de conexão robusta e o pool_pre_ping para o erro de SSL
 FILE_APP = """
 import os
 from flask import Flask, render_template, request, redirect, url_for, flash
@@ -28,26 +32,43 @@ from sqlalchemy import text
 
 app = Flask(__name__)
 
-# 1. SEGURANÇA: Pega a chave secreta do Render ou usa uma provisória se rodar local
-app.secret_key = os.environ.get('SECRET_KEY', 'chave_dev_provisoria')
+# --- CONFIGURAÇÃO DE SEGURANÇA E BANCO ---
 
-# 2. BANCO DE DADOS: Pega a URL do Render. 
-# Se não achar (erro comum), usa a string direta como fallback temporário para não derrubar o site.
-DEFAULT_DB = 'postgresql://neondb_owner:npg_UBg0b7YKqLPm@ep-steep-wave-aflx731c-pooler.c-2.us-west-2.aws.neon.tech/neondb?sslmode=require'
-app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', DEFAULT_DB)
+# 1. Secret Key: Tenta pegar do ambiente, senão usa uma fixa
+app.secret_key = os.environ.get('SECRET_KEY', 'thay_rh_dev_key_fallback')
+
+# 2. Banco de Dados Híbrido
+# Tenta pegar a variável DATABASE_URL do Render.
+# Se não existir (None), usa a string hardcoded como 'Fallback' para o site não cair.
+db_url_env = os.environ.get('DATABASE_URL')
+db_fallback = 'postgresql://neondb_owner:npg_UBg0b7YKqLPm@ep-steep-wave-aflx731c-pooler.c-2.us-west-2.aws.neon.tech/neondb?sslmode=require'
+
+if db_url_env:
+    # Correção para URLs postgres antigas que começam com postgres://
+    if db_url_env.startswith("postgres://"):
+        db_url_env = db_url_env.replace("postgres://", "postgresql://", 1)
+    app.config['SQLALCHEMY_DATABASE_URI'] = db_url_env
+else:
+    app.config['SQLALCHEMY_DATABASE_URI'] = db_fallback
+
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-# 3. ESTABILIDADE: pool_pre_ping evita queda de conexão SSL
-db = SQLAlchemy(app, engine_options={"pool_pre_ping": True})
+# 3. Correção de Queda de Conexão (SSL Error)
+# 'pool_pre_ping': Testa a conexão antes de usar.
+# 'pool_recycle': Recicla conexões a cada 300 segundos (5 min).
+db = SQLAlchemy(app, engine_options={
+    "pool_pre_ping": True, 
+    "pool_recycle": 300
+})
 
-# --- MODELOS ---
+# --- MODELOS DO BANCO ---
 class ItemEstoque(db.Model):
     __tablename__ = 'itens_estoque'
     id = db.Column(db.Integer, primary_key=True)
     nome = db.Column(db.String(100), nullable=False)
     categoria = db.Column(db.String(50))
     tamanho = db.Column(db.String(10))
-    genero = db.Column(db.String(20)) # Masculino/Feminino/Unissex
+    genero = db.Column(db.String(20)) 
     quantidade = db.Column(db.Integer, default=0)
     data_atualizacao = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -69,23 +90,21 @@ class HistoricoSaida(db.Model):
     quantidade = db.Column(db.Integer)
     data_entrega = db.Column(db.DateTime, default=datetime.utcnow)
 
-# --- MIGRACAO ROBUSTA ---
-def update_db_schema():
+# --- FUNÇÃO DE MIGRAÇÃO SEGURA ---
+def check_database():
     with app.app_context():
         try:
-            # Cria tabelas se não existirem
             db.create_all()
-            
-            # Tenta adicionar coluna genero se nao existir (Migration manual via SQL)
+            # Tenta adicionar coluna genero manualmente caso não exista
             with db.engine.connect() as conn:
                 conn.execute(text("ALTER TABLE itens_estoque ADD COLUMN IF NOT EXISTS genero VARCHAR(20)"))
                 conn.commit()
         except Exception as e:
-            # Se der erro (ex: coluna ja existe), apenas ignora e segue o baile
-            print(f"Check DB: {e}")
+            # Erros de migração não devem parar o app
+            print(f"DB Check Warning: {e}")
 
-# Executa verificação do banco ao iniciar
-update_db_schema()
+# Executa verificação ao iniciar
+check_database()
 
 # --- ROTAS ---
 
@@ -106,7 +125,6 @@ def entrada():
         except:
             quantidade = 1
         
-        # Verifica se já existe item idêntico
         item = ItemEstoque.query.filter_by(nome=nome, tamanho=tamanho, genero=genero).first()
         
         if item:
@@ -118,10 +136,8 @@ def entrada():
             db.session.add(novo_item)
             flash(f'Novo item cadastrado: {nome}')
             
-        # Log Entrada
         log = HistoricoEntrada(item_nome=f"{nome} ({genero} - {tamanho})", quantidade=quantidade)
         db.session.add(log)
-        
         db.session.commit()
         return redirect(url_for('entrada'))
         
@@ -140,13 +156,20 @@ def saida():
         colaborador = request.form.get('colaborador')
         data_input = request.form.get('data')
         
+        if not item_id:
+            flash("Erro: Selecione um item.")
+            return redirect(url_for('saida'))
+
         item = ItemEstoque.query.get(item_id)
         
         if item and item.quantidade > 0:
             item.quantidade -= 1
             item.data_atualizacao = datetime.utcnow()
             
-            data_final = datetime.strptime(data_input, '%Y-%m-%d') if data_input else datetime.utcnow()
+            try:
+                data_final = datetime.strptime(data_input, '%Y-%m-%d')
+            except:
+                data_final = datetime.utcnow()
             
             log = HistoricoSaida(
                 coordenador=coordenador,
@@ -165,7 +188,6 @@ def saida():
             flash('Erro: Item não encontrado ou estoque zerado.')
             return redirect(url_for('saida'))
             
-    # Apenas itens com saldo positivo aparecem na saida
     itens_disponiveis = ItemEstoque.query.filter(ItemEstoque.quantidade > 0).order_by(ItemEstoque.nome).all()
     return render_template('saida.html', itens=itens_disponiveis)
 
@@ -178,7 +200,7 @@ if __name__ == '__main__':
     app.run(debug=True)
 """
 
-# --- TEMPLATES (V2 COMPLETO - REPLICADO PARA GARANTIR INTEGRIDADE) ---
+# --- RECRIAÇÃO DOS TEMPLATES (V2) ---
 
 FILE_BASE = """
 <!DOCTYPE html>
@@ -220,8 +242,6 @@ FILE_BASE = """
 FILE_DASHBOARD = """
 {% extends 'base.html' %}
 {% block content %}
-
-<!-- Botões de Ação Principais -->
 <div class="grid grid-cols-2 gap-4 mb-6">
     <a href="/entrada" class="bg-green-600 hover:bg-green-700 text-white p-6 rounded-xl shadow-lg flex flex-col items-center justify-center transition transform hover:scale-105">
         <i class="fas fa-box-open text-3xl mb-2"></i>
@@ -234,14 +254,11 @@ FILE_DASHBOARD = """
         <span class="text-xs opacity-75">Entrega de Uniforme</span>
     </a>
 </div>
-
-<!-- Lista de Estoque -->
 <div class="bg-white rounded-lg shadow overflow-hidden">
     <div class="p-4 bg-gray-100 border-b flex justify-between items-center">
         <h2 class="font-bold text-gray-700"><i class="fas fa-list mr-2"></i>Estoque Atual</h2>
         <span class="text-xs bg-gray-200 px-2 py-1 rounded text-gray-600">{{ itens|length }} itens</span>
     </div>
-    
     <div class="divide-y divide-gray-100">
         {% for item in itens %}
         <div class="p-4 flex justify-between items-center hover:bg-gray-50">
@@ -270,9 +287,7 @@ FILE_DASHBOARD = """
             </div>
         </div>
         {% else %}
-        <div class="p-8 text-center text-gray-400">
-            Nenhum item cadastrado. Use o botão ENTRADA.
-        </div>
+        <div class="p-8 text-center text-gray-400">Nenhum item cadastrado.</div>
         {% endfor %}
     </div>
 </div>
@@ -288,14 +303,11 @@ FILE_ENTRADA = """
         <i class="fas fa-history mr-1"></i>Histórico
     </a>
 </div>
-
 <div class="bg-white rounded-lg shadow-lg p-6">
     <form action="/entrada" method="POST" class="space-y-4">
-        
-        <!-- Nome do Uniforme -->
         <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Nome do Item/Uniforme</label>
-            <input type="text" name="nome" list="nomes_sugestao" class="w-full p-3 border rounded-lg focus:ring-2 focus:ring-green-500 outline-none" placeholder="Ex: Camisa Polo, Calça Brim..." required>
+            <input type="text" name="nome" list="nomes_sugestao" class="w-full p-3 border rounded-lg focus:ring-2 focus:ring-green-500 outline-none" required>
             <datalist id="nomes_sugestao">
                 <option value="Camisa Polo">
                 <option value="Calça Brim">
@@ -303,9 +315,7 @@ FILE_ENTRADA = """
                 <option value="Capacete">
             </datalist>
         </div>
-
         <div class="grid grid-cols-2 gap-4">
-            <!-- Tamanho -->
             <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">Tamanho</label>
                 <select name="tamanho" class="w-full p-3 border rounded-lg bg-white">
@@ -322,8 +332,6 @@ FILE_ENTRADA = """
                     <option value="44">44</option>
                 </select>
             </div>
-            
-            <!-- Genero -->
             <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">Gênero</label>
                 <select name="genero" class="w-full p-3 border rounded-lg bg-white">
@@ -333,8 +341,6 @@ FILE_ENTRADA = """
                 </select>
             </div>
         </div>
-
-        <!-- Categoria -->
         <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Categoria</label>
             <select name="categoria" class="w-full p-3 border rounded-lg bg-white">
@@ -343,16 +349,11 @@ FILE_ENTRADA = """
                 <option value="Escritorio">Escritório</option>
             </select>
         </div>
-
-        <!-- Quantidade -->
         <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Quantidade a Adicionar</label>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Quantidade</label>
             <input type="number" name="quantidade" min="1" value="1" class="w-full p-3 border rounded-lg font-bold text-lg text-green-700" required>
         </div>
-
-        <button type="submit" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold p-4 rounded-lg shadow transition">
-            CONFIRMAR ENTRADA
-        </button>
+        <button type="submit" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold p-4 rounded-lg shadow transition">CONFIRMAR ENTRADA</button>
     </form>
 </div>
 {% endblock %}
@@ -367,48 +368,30 @@ FILE_SAIDA = """
         <i class="fas fa-history mr-1"></i>Histórico
     </a>
 </div>
-
 <div class="bg-white rounded-lg shadow-lg p-6">
     <form action="/saida" method="POST" class="space-y-4">
-        
-        <!-- Selecao do Item -->
         <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Selecione o Uniforme (Estoque Disponível)</label>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Selecione o Uniforme</label>
             <select name="item_id" class="w-full p-3 border rounded-lg bg-white" required>
                 <option value="" disabled selected>Escolha o item...</option>
                 {% for item in itens %}
-                <option value="{{ item.id }}">
-                    {{ item.nome }} | {{ item.genero }} | Tam: {{ item.tamanho }} (Disp: {{ item.quantidade }})
-                </option>
+                <option value="{{ item.id }}">{{ item.nome }} | {{ item.genero }} | Tam: {{ item.tamanho }} (Disp: {{ item.quantidade }})</option>
                 {% endfor %}
             </select>
         </div>
-
-        <!-- Coordenador -->
         <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Nome do Coordenador</label>
-            <input type="text" name="coordenador" class="w-full p-3 border rounded-lg" placeholder="Quem está entregando?" required>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Coordenador</label>
+            <input type="text" name="coordenador" class="w-full p-3 border rounded-lg" required>
         </div>
-
-        <!-- Colaborador -->
         <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Nome do Colaborador</label>
-            <input type="text" name="colaborador" class="w-full p-3 border rounded-lg" placeholder="Quem recebeu?" required>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Colaborador</label>
+            <input type="text" name="colaborador" class="w-full p-3 border rounded-lg" required>
         </div>
-
-        <!-- Data -->
         <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Data da Entrega</label>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Data</label>
             <input type="date" name="data" class="w-full p-3 border rounded-lg" required>
         </div>
-
-        <div class="bg-yellow-50 p-3 rounded text-sm text-yellow-700 border border-yellow-200">
-            <i class="fas fa-info-circle"></i> Ao salvar, será descontada 1 unidade do estoque.
-        </div>
-
-        <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold p-4 rounded-lg shadow transition">
-            REGISTRAR SAÍDA
-        </button>
+        <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold p-4 rounded-lg shadow transition">REGISTRAR SAÍDA</button>
     </form>
 </div>
 {% endblock %}
@@ -421,7 +404,6 @@ FILE_HIST_ENTRADA = """
     <a href="/entrada" class="text-gray-500 hover:text-gray-700"><i class="fas fa-arrow-left"></i> Voltar</a>
     <h2 class="text-xl font-bold">Histórico de Entradas</h2>
 </div>
-
 <div class="bg-white rounded shadow overflow-hidden">
     <table class="min-w-full text-sm text-left text-gray-500">
         <thead class="text-xs text-gray-700 uppercase bg-gray-50">
@@ -434,9 +416,7 @@ FILE_HIST_ENTRADA = """
         <tbody>
             {% for log in logs %}
             <tr class="border-b hover:bg-gray-50">
-                <td class="px-4 py-3 font-medium text-gray-900 whitespace-nowrap">
-                    {{ log.data_hora.strftime('%d/%m/%Y %H:%M') }}
-                </td>
+                <td class="px-4 py-3 font-medium text-gray-900 whitespace-nowrap">{{ log.data_hora.strftime('%d/%m/%Y %H:%M') }}</td>
                 <td class="px-4 py-3">{{ log.item_nome }}</td>
                 <td class="px-4 py-3 text-right font-bold text-green-600">+{{ log.quantidade }}</td>
             </tr>
@@ -454,7 +434,6 @@ FILE_HIST_SAIDA = """
     <a href="/saida" class="text-gray-500 hover:text-gray-700"><i class="fas fa-arrow-left"></i> Voltar</a>
     <h2 class="text-xl font-bold">Histórico de Entregas</h2>
 </div>
-
 <div class="space-y-4">
     {% for log in logs %}
     <div class="bg-white rounded shadow p-4 border-l-4 border-blue-500">
@@ -471,7 +450,7 @@ FILE_HIST_SAIDA = """
         </div>
     </div>
     {% else %}
-    <p class="text-center text-gray-500 mt-10">Nenhuma entrega registrada ainda.</p>
+    <p class="text-center text-gray-500 mt-10">Nenhuma entrega registrada.</p>
     {% endfor %}
 </div>
 {% endblock %}
@@ -482,36 +461,32 @@ FILE_HIST_SAIDA = """
 def create_backup():
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     backup_dir = os.path.join("backup", timestamp)
+    print(f"Criando backup em: {backup_dir}...")
     
     files_to_check = ["app.py", "requirements.txt", "Procfile"]
     for root, dirs, files in os.walk("templates"):
         for file in files:
             files_to_check.append(os.path.join(root, file))
             
-    created_backup = False
     for file_path in files_to_check:
         if os.path.exists(file_path):
-            if not created_backup:
-                os.makedirs(backup_dir, exist_ok=True)
-                created_backup = True
             dest = os.path.join(backup_dir, file_path)
             os.makedirs(os.path.dirname(dest), exist_ok=True)
             shutil.copy2(file_path, dest)
-    print(f"Backup realizado em: {backup_dir}")
 
 def write_file(path, content):
     os.makedirs(os.path.dirname(path) if os.path.dirname(path) else '.', exist_ok=True)
     with open(path, 'w', encoding='utf-8') as f:
         f.write(content.strip())
-    print(f"Arquivo gerado: {path}")
+    print(f"Recriado: {path}")
 
 def git_update():
     try:
+        print("Executando Git...")
         subprocess.run(["git", "add", "."], check=True)
         subprocess.run(["git", "commit", "-m", COMMIT_MSG], check=False)
-        print("Enviando codigo corrigido para o GitHub...")
         subprocess.run(["git", "push"], check=True)
-        print("\n>>> SUCESSO! Deploy em andamento no Render. <<<")
+        print("\n>>> SUCESSO! Correção enviada para o Render. <<<")
     except subprocess.CalledProcessError as e:
         print(f"Erro no Git: {e}")
 
@@ -522,15 +497,14 @@ def self_destruct():
         pass
 
 def main():
-    print(f"--- ATUALIZAÇÃO SEGURA: {PROJECT_NAME} ---")
+    print(f"--- CORREÇÃO CRÍTICA V4: {PROJECT_NAME} ---")
+    
     create_backup()
     
-    # Core
     write_file("requirements.txt", FILE_REQ)
     write_file("Procfile", FILE_PROCFILE)
-    write_file("app.py", FILE_APP) # App limpo e pronto para Env Vars
+    write_file("app.py", FILE_APP) # App com lógica híbrida de conexão
     
-    # Templates
     write_file("templates/base.html", FILE_BASE)
     write_file("templates/dashboard.html", FILE_DASHBOARD)
     write_file("templates/entrada.html", FILE_ENTRADA)
