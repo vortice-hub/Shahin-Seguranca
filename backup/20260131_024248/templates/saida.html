@@ -17,7 +17,7 @@
                 <option value="" disabled selected>Escolha o item...</option>
                 {% for item in itens %}
                 <option value="{{ item.id }}">
-                    {{ item.nome }} | {{ item.genero }} | Tam: {{ item.tamanho }} (Disp: {{ item.quantidade }})
+                    {{ item.nome }} | {{ item.genero }} | Tam: {{ item.tamanho }} (Qtd: {{ item.quantidade }})
                 </option>
                 {% endfor %}
             </select>

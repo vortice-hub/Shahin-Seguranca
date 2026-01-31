@@ -3,14 +3,16 @@ import shutil
 import subprocess
 import sys
 from datetime import datetime
+from sqlalchemy import text # Importante para migracao
 
 # --- CONFIGURAÇÕES ---
 PROJECT_NAME = "Thay RH"
-COMMIT_MSG = "Update V2: Fluxo Entrada/Saida, Genero e Historicos"
+COMMIT_MSG = "Fix V2: Database Hardcoded e Pool Pre-Ping"
+# A URL exata que voce forneceu
+DB_URL = "postgresql://neondb_owner:npg_UBg0b7YKqLPm@ep-steep-wave-aflx731c-pooler.c-2.us-west-2.aws.neon.tech/neondb?sslmode=require"
 
 # --- CONTEÚDO DOS ARQUIVOS ---
 
-# Mantemos requirements e Procfile iguais, mas garantimos que estao la
 FILE_REQ = """flask
 flask-sqlalchemy
 psycopg2-binary
@@ -19,8 +21,8 @@ gunicorn
 
 FILE_PROCFILE = """web: gunicorn app:app"""
 
-# --- APP.PY (TOTALMENTE REESCRITO PARA V2) ---
-FILE_APP = """
+# --- APP.PY (COM CORREÇÃO DE CONEXÃO E URL FIXA) ---
+FILE_APP = f"""
 import os
 from flask import Flask, render_template, request, redirect, url_for, flash
 from flask_sqlalchemy import SQLAlchemy
@@ -30,11 +32,12 @@ from sqlalchemy import text
 app = Flask(__name__)
 app.secret_key = 'chave_secreta_thay_rh'
 
-# Configuração DB
-app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL')
+# CORRECAO 1: Usa a URL fixa se a variavel de ambiente nao existir
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', '{DB_URL}')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-db = SQLAlchemy(app)
+# CORRECAO 2: 'pool_pre_ping' evita o erro de SSL connection closed
+db = SQLAlchemy(app, engine_options={{"pool_pre_ping": True}})
 
 # --- MODELOS ---
 class ItemEstoque(db.Model):
@@ -43,14 +46,14 @@ class ItemEstoque(db.Model):
     nome = db.Column(db.String(100), nullable=False)
     categoria = db.Column(db.String(50))
     tamanho = db.Column(db.String(10))
-    genero = db.Column(db.String(20)) # Novo campo
+    genero = db.Column(db.String(20)) # Masculino/Feminino
     quantidade = db.Column(db.Integer, default=0)
     data_atualizacao = db.Column(db.DateTime, default=datetime.utcnow)
 
 class HistoricoEntrada(db.Model):
     __tablename__ = 'historico_entrada'
     id = db.Column(db.Integer, primary_key=True)
-    item_nome = db.Column(db.String(150)) # Guardamos o nome caso o item seja deletado
+    item_nome = db.Column(db.String(150))
     quantidade = db.Column(db.Integer)
     data_hora = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -65,30 +68,32 @@ class HistoricoSaida(db.Model):
     quantidade = db.Column(db.Integer)
     data_entrega = db.Column(db.DateTime, default=datetime.utcnow)
 
-# --- MIGRACAO AUTOMATICA SIMPLES ---
+# --- MIGRACAO ROBUSTA ---
 def update_db_schema():
     with app.app_context():
-        # Tenta criar tabelas que nao existem
-        db.create_all()
-        
-        # Tenta adicionar coluna genero se nao existir (Migracao Manual)
         try:
+            # Garante que tabelas existam
+            db.create_all()
+            
+            # Tenta adicionar coluna genero se nao existir (para nao quebrar dados antigos)
             with db.engine.connect() as conn:
+                # O texto da query deve ser encapsulado em text()
                 conn.execute(text("ALTER TABLE itens_estoque ADD COLUMN IF NOT EXISTS genero VARCHAR(20)"))
                 conn.commit()
         except Exception as e:
-            print(f"Aviso DB: {e}")
+            print(f"Nota sobre DB (pode ignorar se ja existir): {{e}}")
 
+# Executa migracao ao iniciar (pode causar lentidao no boot, mas garante estrutura)
 update_db_schema()
 
 # --- ROTAS ---
 
 @app.route('/')
 def dashboard():
+    # Ordena por nome
     itens = ItemEstoque.query.order_by(ItemEstoque.nome).all()
     return render_template('dashboard.html', itens=itens)
 
-# --- FLUXO DE ENTRADA ---
 @app.route('/entrada', methods=['GET', 'POST'])
 def entrada():
     if request.method == 'POST':
@@ -98,26 +103,25 @@ def entrada():
         genero = request.form.get('genero')
         quantidade = int(request.form.get('quantidade'))
         
-        # Verifica se item ja existe (mesmo nome, tamanho e genero)
+        # Verifica duplicidade exata
         item = ItemEstoque.query.filter_by(nome=nome, tamanho=tamanho, genero=genero).first()
         
         if item:
             item.quantidade += quantidade
             item.data_atualizacao = datetime.utcnow()
-            flash(f'Adicionado +{quantidade} ao estoque de {nome}.')
+            flash(f'Estoque atualizado: {{nome}} (+{{quantidade}})')
         else:
             novo_item = ItemEstoque(nome=nome, categoria=categoria, tamanho=tamanho, genero=genero, quantidade=quantidade)
             db.session.add(novo_item)
-            flash(f'Novo item {nome} criado com sucesso.')
+            flash(f'Novo item cadastrado: {{nome}}')
             
-        # Log Historico
-        log = HistoricoEntrada(item_nome=f"{nome} ({genero} - {tamanho})", quantidade=quantidade)
+        # Log Entrada
+        log = HistoricoEntrada(item_nome=f"{{nome}} ({{genero}} - {{tamanho}})", quantidade=quantidade)
         db.session.add(log)
         
         db.session.commit()
         return redirect(url_for('entrada'))
         
-    # GET: Lista itens existentes para facilitar preenchimento (opcional, ou apenas form limpo)
     return render_template('entrada.html')
 
 @app.route('/historico/entrada')
@@ -125,7 +129,6 @@ def view_historico_entrada():
     logs = HistoricoEntrada.query.order_by(HistoricoEntrada.data_hora.desc()).all()
     return render_template('historico_entrada.html', logs=logs)
 
-# --- FLUXO DE SAIDA ---
 @app.route('/saida', methods=['GET', 'POST'])
 def saida():
     if request.method == 'POST':
@@ -137,11 +140,9 @@ def saida():
         item = ItemEstoque.query.get(item_id)
         
         if item and item.quantidade > 0:
-            item.quantidade -= 1 # Assume saida unitaria ou adicionar campo qtd
+            item.quantidade -= 1
             item.data_atualizacao = datetime.utcnow()
             
-            # Log Historico
-            # Converte string data input para datetime se necessario, ou usa data atual se vazio
             data_final = datetime.strptime(data_input, '%Y-%m-%d') if data_input else datetime.utcnow()
             
             log = HistoricoSaida(
@@ -160,6 +161,7 @@ def saida():
         else:
             flash('Erro: Item não encontrado ou estoque zerado.')
             
+    # Apenas itens com saldo positivo aparecem na saida
     itens_disponiveis = ItemEstoque.query.filter(ItemEstoque.quantidade > 0).order_by(ItemEstoque.nome).all()
     return render_template('saida.html', itens=itens_disponiveis)
 
@@ -168,11 +170,19 @@ def view_historico_saida():
     logs = HistoricoSaida.query.order_by(HistoricoSaida.data_entrega.desc()).all()
     return render_template('historico_saida.html', logs=logs)
 
+# Rota temporaria para limpar itens problematicos se necessario (opcional)
+@app.route('/admin/limpar/<int:id>')
+def limpar_item(id):
+    item = ItemEstoque.query.get_or_404(id)
+    db.session.delete(item)
+    db.session.commit()
+    return redirect(url_for('dashboard'))
+
 if __name__ == '__main__':
     app.run(debug=True)
 """
 
-# --- TEMPLATES ---
+# --- TEMPLATES (V2 COMPLETO) ---
 
 FILE_BASE = """
 <!DOCTYPE html>
@@ -290,6 +300,12 @@ FILE_ENTRADA = """
         <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Nome do Item/Uniforme</label>
             <input type="text" name="nome" list="nomes_sugestao" class="w-full p-3 border rounded-lg focus:ring-2 focus:ring-green-500 outline-none" placeholder="Ex: Camisa Polo, Calça Brim..." required>
+            <datalist id="nomes_sugestao">
+                <option value="Camisa Polo">
+                <option value="Calça Brim">
+                <option value="Bota de Segurança">
+                <option value="Capacete">
+            </datalist>
         </div>
 
         <div class="grid grid-cols-2 gap-4">
@@ -303,6 +319,11 @@ FILE_ENTRADA = """
                     <option value="GG">GG</option>
                     <option value="XG">XG</option>
                     <option value="Unico">Único</option>
+                    <option value="36">36</option>
+                    <option value="38">38</option>
+                    <option value="40">40</option>
+                    <option value="42">42</option>
+                    <option value="44">44</option>
                 </select>
             </div>
             
@@ -361,7 +382,7 @@ FILE_SAIDA = """
                 <option value="" disabled selected>Escolha o item...</option>
                 {% for item in itens %}
                 <option value="{{ item.id }}">
-                    {{ item.nome }} | {{ item.genero }} | Tam: {{ item.tamanho }} (Qtd: {{ item.quantidade }})
+                    {{ item.nome }} | {{ item.genero }} | Tam: {{ item.tamanho }} (Disp: {{ item.quantidade }})
                 </option>
                 {% endfor %}
             </select>
@@ -445,7 +466,7 @@ FILE_HIST_SAIDA = """
             <div>
                 <p class="text-xs text-gray-400 mb-1"><i class="far fa-calendar-alt"></i> {{ log.data_entrega.strftime('%d/%m/%Y') }}</p>
                 <h3 class="font-bold text-gray-800">{{ log.colaborador }}</h3>
-                <p class="text-sm text-gray-600">Recebeu: <span class="font-medium">{{ log.item_nome }} ({{ log.tamanho }}) - {{ log.genero }}</span></p>
+                <p class="text-sm text-gray-600">Recebeu: <span class="font-medium">{{ log.item_nome }} ({{ log.tamanho }} - {{ log.genero }})</span></p>
             </div>
             <div class="text-right">
                 <span class="block text-xs text-gray-400">Coord.</span>
@@ -466,7 +487,6 @@ def create_backup():
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     backup_dir = os.path.join("backup", timestamp)
     
-    # Lista expandida de arquivos para backup
     files_to_check = ["app.py", "requirements.txt", "Procfile"]
     for root, dirs, files in os.walk("templates"):
         for file in files:
@@ -481,21 +501,21 @@ def create_backup():
             dest = os.path.join(backup_dir, file_path)
             os.makedirs(os.path.dirname(dest), exist_ok=True)
             shutil.copy2(file_path, dest)
-    print(f"Backup V1 salvo em: {backup_dir}")
+    print(f"Backup de seguranca salvo em: {backup_dir}")
 
 def write_file(path, content):
     os.makedirs(os.path.dirname(path) if os.path.dirname(path) else '.', exist_ok=True)
     with open(path, 'w', encoding='utf-8') as f:
         f.write(content.strip())
-    print(f"Gerado: {path}")
+    print(f"Recriado: {path}")
 
 def git_update():
     try:
         subprocess.run(["git", "add", "."], check=True)
         subprocess.run(["git", "commit", "-m", COMMIT_MSG], check=False)
-        print("Enviando atualizações...")
+        print("Enviando correção crítica...")
         subprocess.run(["git", "push"], check=True)
-        print("\n>>> SUCESSO! V2 Enviada para o Render. <<<")
+        print("\n>>> SUCESSO! Correção enviada. Aguarde o deploy no Render. <<<")
     except subprocess.CalledProcessError as e:
         print(f"Erro no Git: {e}")
 
@@ -506,27 +526,21 @@ def self_destruct():
         pass
 
 def main():
-    print(f"--- ATUALIZANDO {PROJECT_NAME} PARA V2 ---")
-    
+    print(f"--- CORRIGINDO CONEXÃO V2: {PROJECT_NAME} ---")
     create_backup()
     
     # Core
     write_file("requirements.txt", FILE_REQ)
     write_file("Procfile", FILE_PROCFILE)
-    write_file("app.py", FILE_APP)
+    write_file("app.py", FILE_APP) # Aqui esta a correcao principal
     
-    # Templates
+    # Templates (Garantindo que todos estejam la)
     write_file("templates/base.html", FILE_BASE)
     write_file("templates/dashboard.html", FILE_DASHBOARD)
     write_file("templates/entrada.html", FILE_ENTRADA)
     write_file("templates/saida.html", FILE_SAIDA)
     write_file("templates/historico_entrada.html", FILE_HIST_ENTRADA)
     write_file("templates/historico_saida.html", FILE_HIST_SAIDA)
-    
-    # Remover arquivo antigo se existir (estoque.html foi substituido por dashboard.html)
-    if os.path.exists("templates/estoque.html"):
-        os.remove("templates/estoque.html")
-        print("Removido arquivo obsoleto: templates/estoque.html")
     
     git_update()
     self_destruct()
