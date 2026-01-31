@@ -5,8 +5,8 @@ import sys
 from datetime import datetime
 
 # --- CONFIGURAÇÕES ---
-PROJECT_NAME = "Thay RH"
-COMMIT_MSG = "V12: Sidebar, Entrada Pre-Definida, Historico Detalhado e Gestao Users"
+PROJECT_NAME = "TdS Gestão de RH"
+COMMIT_MSG = "V13: Rebranding TdS, Dashboard Clean, Menu Limpo e Cadastro Flexivel"
 DB_URL_FIXA = "postgresql://neondb_owner:npg_UBg0b7YKqLPm@ep-steep-wave-aflx731c-pooler.c-2.us-west-2.aws.neon.tech/neondb?sslmode=require"
 
 # --- CONFIG FILES ---
@@ -14,7 +14,7 @@ FILE_RUNTIME = """python-3.11.9"""
 FILE_REQ = """flask\nflask-sqlalchemy\npsycopg2-binary\ngunicorn\nflask-login\nwerkzeug"""
 FILE_PROCFILE = """web: gunicorn app:app"""
 
-# --- APP.PY (Lógica atualizada para Entrada 'Outros' e Rotas V11) ---
+# --- APP.PY ---
 FILE_APP = f"""
 import os
 import logging
@@ -30,7 +30,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-app.secret_key = 'chave_v12_master_secret'
+app.secret_key = 'chave_v13_tds_secret'
 
 # --- BANCO DE DADOS ---
 db_url = "{DB_URL_FIXA}"
@@ -108,14 +108,14 @@ def load_user(user_id):
 try:
     with app.app_context():
         db.create_all()
-        # Garante colunas
+        # Garante colunas se nao existirem
         try:
             with db.engine.connect() as conn:
                 conn.execute(text("ALTER TABLE itens_estoque ADD COLUMN IF NOT EXISTS genero VARCHAR(20)"))
                 conn.execute(text("ALTER TABLE itens_estoque ADD COLUMN IF NOT EXISTS estoque_minimo INTEGER DEFAULT 5"))
                 conn.commit()
         except: pass
-        # Garante Master
+        
         if not User.query.filter_by(username='Thaynara').first():
             master = User(username='Thaynara', real_name='Thaynara Master', role='Master', is_first_access=False)
             master.set_password('1855')
@@ -123,7 +123,7 @@ try:
             db.session.commit()
 except Exception: pass
 
-# --- ROTAS DE AUTENTICAÇÃO ---
+# --- ROTAS AUTH ---
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -156,32 +156,38 @@ def primeiro_acesso():
         flash('Senhas não conferem.')
     return render_template('primeiro_acesso.html')
 
-# --- ROTAS DE ADMINISTRAÇÃO (V11) ---
+# --- ROTAS ADMIN (NOVAS) ---
 
-@app.route('/admin/usuarios', methods=['GET', 'POST'])
+@app.route('/admin/usuarios')
 @login_required
 def gerenciar_usuarios():
     if current_user.role != 'Master': return redirect(url_for('dashboard'))
-    
-    senha_gerada = None
-    novo_user_nome = None
+    users = User.query.all()
+    # Recupera senha temporaria da sessao flash se houver (logica adaptada no template via query params ou flash)
+    return render_template('admin_usuarios.html', users=users)
+
+@app.route('/admin/usuarios/novo', methods=['GET', 'POST'])
+@login_required
+def novo_usuario():
+    if current_user.role != 'Master': return redirect(url_for('dashboard'))
     
     if request.method == 'POST':
         username = request.form.get('username')
         if User.query.filter_by(username=username).first():
-            flash('Usuário já existe.')
+            flash('Erro: Usuário já existe.')
         else:
             senha_temp = secrets.token_hex(3)
-            novo = User(username=username, real_name=request.form.get('real_name'), role=request.form.get('role'), is_first_access=True)
+            novo = User(username=username, 
+                       real_name=request.form.get('real_name'), 
+                       role=request.form.get('role'), # Campo livre agora
+                       is_first_access=True)
             novo.set_password(senha_temp)
             db.session.add(novo)
             db.session.commit()
-            senha_gerada = senha_temp
-            novo_user_nome = username
-            flash('Usuário criado.')
+            # Passando a senha via flash message especial ou renderizando template de sucesso
+            return render_template('sucesso_usuario.html', novo_user=username, senha_gerada=senha_temp)
             
-    users = User.query.all()
-    return render_template('admin_usuarios.html', users=users, senha_gerada=senha_gerada, novo_user=novo_user_nome)
+    return render_template('novo_usuario.html')
 
 @app.route('/admin/usuarios/editar/<int:id>', methods=['GET', 'POST'])
 @login_required
@@ -207,7 +213,8 @@ def editar_usuario(id):
         else:
             user.real_name = request.form.get('real_name')
             user.username = request.form.get('username')
-            if user.username != 'Thaynara': user.role = request.form.get('role')
+            if user.username != 'Thaynara': 
+                user.role = request.form.get('role') # Campo livre
             db.session.commit()
             flash('Atualizado.')
             return redirect(url_for('gerenciar_usuarios'))
@@ -221,22 +228,16 @@ def dashboard():
     if current_user.is_first_access: return redirect(url_for('primeiro_acesso'))
     try:
         itens = ItemEstoque.query.order_by(ItemEstoque.nome).all()
-        return render_template('dashboard.html', itens=itens, total_pecas=sum(i.quantidade for i in itens), total_itens=len(itens))
+        return render_template('dashboard.html', itens=itens)
     except: return "Erro DB", 500
 
 @app.route('/entrada', methods=['GET', 'POST'])
 @login_required
 def entrada():
-    if current_user.is_first_access: return redirect(url_for('primeiro_acesso'))
     if request.method == 'POST':
         try:
-            # Lógica para "Outros"
             nome_select = request.form.get('nome_select')
-            if nome_select == 'Outros':
-                nome = request.form.get('nome_outros')
-            else:
-                nome = nome_select
-
+            nome = request.form.get('nome_outros') if nome_select == 'Outros' else nome_select
             tamanho = request.form.get('tamanho')
             genero = request.form.get('genero')
             qtd = int(request.form.get('quantidade') or 1)
@@ -254,7 +255,6 @@ def entrada():
                                  estoque_ideal=int(request.form.get('estoque_ideal') or 20))
                 novo.data_atualizacao = get_brasil_time()
                 db.session.add(novo)
-                flash(f'Novo item cadastrado: {{nome}}')
             
             db.session.add(HistoricoEntrada(item_nome=f"{{nome}} ({{genero}}-{{tamanho}})", quantidade=qtd, data_hora=get_brasil_time()))
             db.session.commit()
@@ -301,15 +301,12 @@ def editar_item(id):
     item = ItemEstoque.query.get_or_404(id)
     if request.method == 'POST':
         if request.form.get('acao') == 'excluir':
-            db.session.delete(item)
-            db.session.commit()
-            return redirect(url_for('dashboard'))
+            db.session.delete(item); db.session.commit(); return redirect(url_for('dashboard'))
         item.nome = request.form.get('nome')
         item.quantidade = int(request.form.get('quantidade'))
         item.estoque_minimo = int(request.form.get('estoque_minimo'))
         item.estoque_ideal = int(request.form.get('estoque_ideal'))
-        db.session.commit()
-        return redirect(url_for('dashboard'))
+        db.session.commit(); return redirect(url_for('dashboard'))
     return render_template('editar_item.html', item=item)
 
 @app.route('/historico/entrada')
@@ -322,7 +319,6 @@ def view_historico_entrada():
 def view_historico_saida():
     return render_template('historico_saida.html', logs=HistoricoSaida.query.order_by(HistoricoSaida.data_entrega.desc()).all())
 
-# Rotas de edição de histórico (mantidas)
 @app.route('/historico/entrada/editar/<int:id>', methods=['GET', 'POST'])
 @login_required
 def editar_historico_entrada(id):
@@ -352,14 +348,14 @@ if __name__ == '__main__':
     app.run(host='0.0.0.0', port=port)
 """
 
-# --- TEMPLATE BASE (V11 SIDEBAR) ---
+# --- TEMPLATE BASE (V13 TdS + Menu Limpo) ---
 FILE_BASE = """
 <!DOCTYPE html>
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Thay RH</title>
+    <title>TdS Gestão de RH</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
@@ -385,39 +381,30 @@ FILE_BASE = """
     {% if current_user.is_authenticated and not current_user.is_first_access %}
     <div class="md:hidden bg-white border-b border-slate-200 p-4 flex justify-between items-center sticky top-0 z-40">
         <button onclick="toggleSidebar()" class="text-slate-600 focus:outline-none"><i class="fas fa-bars text-xl"></i></button>
-        <span class="font-bold text-lg text-slate-800">Thay RH</span>
+        <span class="font-bold text-lg text-slate-800">TdS Gestão</span>
         <div class="w-8"></div>
     </div>
     <div id="overlay" onclick="toggleSidebar()" class="fixed inset-0 bg-black bg-opacity-50 z-40 hidden md:hidden"></div>
     <aside id="sidebar" class="sidebar fixed inset-y-0 left-0 z-50 w-64 bg-slate-900 text-slate-300 transform -translate-x-full md:translate-x-0 md:static md:h-screen md:flex-shrink-0 flex flex-col shadow-2xl">
         <div class="h-16 flex items-center px-6 bg-slate-950 border-b border-slate-800">
             <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold text-lg mr-3">T</div>
-            <span class="font-bold text-xl text-white tracking-tight">Thay RH</span>
+            <span class="font-bold text-xl text-white tracking-tight">TdS Gestão</span>
         </div>
         <div class="p-6 border-b border-slate-800">
-            <div class="text-xs font-bold text-slate-500 uppercase mb-1">Logado como</div>
-            <div class="text-sm font-bold text-white">{{ current_user.real_name }}</div>
-            <div class="text-xs text-blue-400 mt-1">{{ current_user.role }}</div>
+            <div class="text-xs font-bold text-slate-500 uppercase mb-1">Olá,</div>
+            <div class="text-sm font-bold text-white truncate">{{ current_user.real_name }}</div>
         </div>
         <nav class="flex-1 overflow-y-auto py-4">
             <ul class="space-y-1">
                 <li><a href="/" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-home w-6 text-center mr-2 text-slate-500 group-hover:text-blue-500"></i><span class="font-medium">Início</span></a></li>
-                <li class="pt-4 pb-2 px-6 text-[10px] font-bold uppercase text-slate-600">Operacional</li>
-                <li><a href="/entrada" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-arrow-down w-6 text-center mr-2 text-slate-500 group-hover:text-emerald-500"></i><span class="font-medium">Entrada</span></a></li>
-                <li><a href="/saida" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-arrow-up w-6 text-center mr-2 text-slate-500 group-hover:text-red-500"></i><span class="font-medium">Saída</span></a></li>
-                <li><a href="/gerenciar/selecao" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-boxes w-6 text-center mr-2 text-slate-500 group-hover:text-yellow-500"></i><span class="font-medium">Inventário</span></a></li>
-                <li class="pt-4 pb-2 px-6 text-[10px] font-bold uppercase text-slate-600">Relatórios</li>
-                <li><a href="/historico/entrada" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-history w-6 text-center mr-2 text-slate-500"></i><span class="font-medium">Hist. Entradas</span></a></li>
-                <li><a href="/historico/saida" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-clipboard-list w-6 text-center mr-2 text-slate-500"></i><span class="font-medium">Hist. Saídas</span></a></li>
+                
                 {% if current_user.role == 'Master' %}
-                <li class="pt-4 pb-2 px-6 text-[10px] font-bold uppercase text-slate-600">Administração</li>
-                <li><a href="/admin/usuarios" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group border-l-4 border-transparent hover:border-blue-500 bg-slate-800/50"><i class="fas fa-users-cog w-6 text-center mr-2 text-blue-400"></i><span class="font-medium text-blue-100">Funcionários</span></a></li>
+                <li><a href="/admin/usuarios" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-users w-6 text-center mr-2 text-slate-500 group-hover:text-blue-500"></i><span class="font-medium">Funcionários</span></a></li>
                 {% endif %}
+                
+                <li><a href="/logout" class="flex items-center px-6 py-3 hover:bg-red-900/20 hover:text-red-400 transition group mt-8"><i class="fas fa-sign-out-alt w-6 text-center mr-2 text-slate-500 group-hover:text-red-400"></i><span class="font-medium">Sair</span></a></li>
             </ul>
         </nav>
-        <div class="p-4 border-t border-slate-800">
-            <a href="/logout" class="flex items-center justify-center w-full bg-slate-800 hover:bg-red-900/50 text-slate-300 hover:text-red-400 py-3 rounded-lg transition font-bold text-sm"><i class="fas fa-sign-out-alt mr-2"></i> Sair</a>
-        </div>
     </aside>
     {% endif %}
     <div class="{% if current_user.is_authenticated and not current_user.is_first_access %}md:flex md:flex-row h-screen overflow-hidden{% endif %}">
@@ -433,7 +420,7 @@ FILE_BASE = """
                 {% block content %}{% endblock %}
             </div>
             {% if current_user.is_authenticated and not current_user.is_first_access %}
-            <footer class="py-6 text-center text-xs text-slate-400">&copy; 2026 Thay RH System. Enterprise V12</footer>
+            <footer class="py-6 text-center text-xs text-slate-400">&copy; 2026 TdS Gestão de RH</footer>
             {% endif %}
         </div>
     </div>
@@ -441,11 +428,249 @@ FILE_BASE = """
 </html>
 """
 
-# --- TEMPLATE ENTRADA ATUALIZADO (SELECT PRÉ-DEFINIDO) ---
+# --- DASHBOARD V13 (Botões Pílula e Sem Cards) ---
+FILE_DASHBOARD = """
+{% extends 'base.html' %}
+{% block content %}
+
+<!-- Botões de Ação (Pílulas) -->
+<div class="flex flex-col gap-4 mb-8">
+    <div class="grid grid-cols-2 gap-4">
+        <a href="/entrada" class="bg-emerald-600 hover:bg-emerald-700 text-white p-4 rounded-full shadow-lg flex items-center justify-center gap-2 transition transform active:scale-95 text-center">
+            <i class="fas fa-arrow-down"></i>
+            <span class="font-bold">ENTRADA</span>
+        </a>
+        <a href="/saida" class="bg-red-600 hover:bg-red-700 text-white p-4 rounded-full shadow-lg flex items-center justify-center gap-2 transition transform active:scale-95 text-center">
+            <i class="fas fa-arrow-up"></i>
+            <span class="font-bold">SAÍDA</span>
+        </a>
+    </div>
+    
+    <a href="/gerenciar/selecao" class="bg-slate-700 hover:bg-slate-800 text-white p-3 rounded-full shadow-md flex items-center justify-center gap-2 transition transform active:scale-95 text-sm font-semibold w-full md:w-1/2 mx-auto">
+        <i class="fas fa-pencil-alt"></i>
+        <span>EDITAR / GERENCIAR ITENS</span>
+    </a>
+</div>
+
+<!-- Lista de Inventário -->
+<div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+    <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+        <h2 class="font-semibold text-slate-800">Inventário</h2>
+        <div class="flex gap-2 text-[10px] font-bold uppercase">
+            <span class="text-emerald-600"><i class="fas fa-circle text-[6px]"></i> Bom</span>
+            <span class="text-yellow-600"><i class="fas fa-circle text-[6px]"></i> Médio</span>
+            <span class="text-red-600"><i class="fas fa-circle text-[6px]"></i> Ruim</span>
+        </div>
+    </div>
+    
+    <div class="divide-y divide-slate-100">
+        {% for item in itens %}
+        <div class="px-6 py-4 flex items-center justify-between hover:bg-slate-50 transition">
+            <div class="flex items-center gap-4">
+                <div class="w-10 h-10 rounded-full flex items-center justify-center text-slate-500 bg-slate-100 font-bold text-xs border border-slate-200">
+                    {{ item.tamanho }}
+                </div>
+                <div>
+                    <div class="font-semibold text-slate-800 text-sm">{{ item.nome }}</div>
+                    <div class="text-xs text-slate-500 flex items-center gap-1">
+                        {{ item.genero }}
+                    </div>
+                </div>
+            </div>
+            
+            <div class="text-right">
+                <div class="text-lg font-bold 
+                    {% if item.quantidade <= item.estoque_minimo %} text-red-600
+                    {% elif item.quantidade >= item.estoque_ideal %} text-emerald-600
+                    {% else %} text-yellow-600 {% endif %}">
+                    {{ item.quantidade }}
+                </div>
+                <div class="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Estoque</div>
+            </div>
+        </div>
+        {% else %}
+        <div class="p-12 text-center text-slate-400">Nenhum item registrado.</div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}
+"""
+
+# --- ADMIN USUARIOS (LISTA + BOTÃO NOVO) ---
+FILE_ADMIN_USUARIOS = """
+{% extends 'base.html' %}
+{% block content %}
+<div class="flex items-center justify-between mb-6">
+    <h2 class="text-2xl font-bold text-slate-800">Funcionários</h2>
+</div>
+
+<!-- Botão Novo Cadastro -->
+<a href="/admin/usuarios/novo" class="block w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl shadow-md text-center mb-8 transition transform hover:-translate-y-1">
+    <i class="fas fa-user-plus mr-2"></i> CADASTRAR NOVO FUNCIONÁRIO
+</a>
+
+<div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+    <div class="px-6 py-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
+        <h3 class="font-bold text-slate-700">Equipe Cadastrada</h3>
+        <span class="text-xs bg-slate-200 text-slate-600 px-2 py-1 rounded-full font-bold">{{ users|length }}</span>
+    </div>
+    <div class="divide-y divide-slate-100">
+        {% for u in users %}
+        <div class="px-6 py-4 flex items-center justify-between hover:bg-slate-50 transition group">
+            <div class="flex items-center gap-4">
+                <div class="w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm bg-slate-100 text-slate-600">
+                    {{ u.real_name[:2].upper() }}
+                </div>
+                <div>
+                    <div class="font-bold text-slate-800">{{ u.real_name }}</div>
+                    <div class="text-xs text-slate-500">{{ u.role }}</div>
+                </div>
+            </div>
+            
+            <div class="flex items-center gap-3">
+                {% if u.is_first_access %}
+                    <span class="px-2 py-1 bg-yellow-100 text-yellow-700 text-[10px] font-bold uppercase rounded">Pendente</span>
+                {% else %}
+                    <span class="px-2 py-1 bg-emerald-100 text-emerald-700 text-[10px] font-bold uppercase rounded">Ativo</span>
+                {% endif %}
+                
+                <a href="/admin/usuarios/editar/{{ u.id }}" class="w-8 h-8 flex items-center justify-center rounded-full text-slate-300 hover:bg-white hover:text-blue-600 hover:shadow border border-transparent hover:border-slate-200 transition">
+                    <i class="fas fa-pencil-alt text-xs"></i>
+                </a>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}
+"""
+
+# --- NOVO USUARIO (TELA DEDICADA) ---
+FILE_NOVO_USUARIO = """
+{% extends 'base.html' %}
+{% block content %}
+<div class="max-w-lg mx-auto">
+    <div class="flex items-center justify-between mb-6">
+        <h2 class="text-lg font-bold text-slate-800">Novo Cadastro</h2>
+        <a href="/admin/usuarios" class="text-xs font-medium text-slate-500 hover:text-slate-800">Cancelar</a>
+    </div>
+
+    <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <form action="/admin/usuarios/novo" method="POST" class="p-8 space-y-6">
+            
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Nome Completo</label>
+                    <input type="text" name="real_name" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Ex: Maria Silva" required>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Login (Usuário)</label>
+                    <input type="text" name="username" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Ex: maria.silva" required>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Cargo / Função</label>
+                    <input type="text" name="role" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Ex: Assistente de RH" required>
+                    <p class="text-[10px] text-slate-400 mt-1">Digite "Master" para dar acesso total.</p>
+                </div>
+            </div>
+
+            <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-lg shadow-md transition transform active:scale-95">
+                CRIAR ACESSO
+            </button>
+        </form>
+    </div>
+</div>
+{% endblock %}
+"""
+
+# --- SUCESSO USUARIO (TELA PARA MOSTRAR SENHA) ---
+FILE_SUCESSO_USUARIO = """
+{% extends 'base.html' %}
+{% block content %}
+<div class="max-w-lg mx-auto flex flex-col items-center justify-center min-h-[50vh] text-center">
+    
+    <div class="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center text-green-600 mb-6 shadow-sm">
+        <i class="fas fa-check text-2xl"></i>
+    </div>
+    
+    <h2 class="text-2xl font-bold text-slate-800 mb-2">Cadastro Realizado!</h2>
+    <p class="text-slate-500 mb-8">O usuário <strong>{{ novo_user }}</strong> foi criado.</p>
+    
+    <div class="bg-white border-2 border-dashed border-slate-200 p-6 rounded-xl w-full mb-8">
+        <p class="text-xs font-bold text-slate-400 uppercase mb-2">Senha Temporária</p>
+        <div class="text-3xl font-mono font-bold text-slate-800 tracking-wider select-all">{{ senha_gerada }}</div>
+    </div>
+    
+    <a href="/admin/usuarios" class="bg-slate-800 hover:bg-slate-900 text-white font-bold py-3 px-8 rounded-full transition">
+        VOLTAR PARA LISTA
+    </a>
+    
+</div>
+{% endblock %}
+"""
+
+# --- EDITAR USUARIO (CAMPO CARGO LIVRE) ---
+FILE_EDITAR_USUARIO = """
+{% extends 'base.html' %}
+{% block content %}
+<div class="max-w-lg mx-auto">
+    <div class="flex items-center justify-between mb-6">
+        <h2 class="text-lg font-bold text-slate-800">Editar Funcionário</h2>
+        <a href="/admin/usuarios" class="text-xs font-medium text-slate-500 hover:text-slate-800">Cancelar</a>
+    </div>
+
+    <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <form action="/admin/usuarios/editar/{{ user.id }}" method="POST" class="p-8 space-y-6">
+            
+            <div class="flex flex-col items-center mb-6">
+                <div class="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center text-2xl font-bold text-slate-400 mb-3">
+                    {{ user.real_name[:2].upper() }}
+                </div>
+                <div class="text-sm font-mono text-slate-400">ID: {{ user.id }}</div>
+            </div>
+
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Nome Completo</label>
+                    <input type="text" name="real_name" value="{{ user.real_name }}" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-slate-800 font-bold focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Login</label>
+                    <input type="text" name="username" value="{{ user.username }}" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500" {% if user.username == 'Thaynara' %}readonly{% endif %}>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Cargo</label>
+                    <input type="text" name="role" value="{{ user.role }}" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500" {% if user.username == 'Thaynara' %}disabled{% endif %}>
+                </div>
+            </div>
+
+            <div class="pt-6 border-t border-slate-100 flex flex-col gap-3">
+                <button type="submit" name="acao" value="salvar" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg shadow transition">
+                    SALVAR DADOS
+                </button>
+                
+                <div class="grid grid-cols-2 gap-3">
+                    <button type="submit" name="acao" value="resetar_senha" class="bg-yellow-50 hover:bg-yellow-100 text-yellow-700 font-bold py-3 rounded-lg transition text-xs border border-yellow-200">
+                        <i class="fas fa-key mr-1"></i> RESETAR SENHA
+                    </button>
+                    {% if user.username != 'Thaynara' %}
+                    <button type="submit" name="acao" value="excluir" class="bg-red-50 hover:bg-red-100 text-red-600 font-bold py-3 rounded-lg transition text-xs border border-red-200" onclick="return confirm('Tem certeza que deseja excluir este usuário?')">
+                        <i class="fas fa-trash mr-1"></i> EXCLUIR
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+"""
+
+# --- ENTRADA (LINK HISTORICO RESTAURADO) ---
 FILE_ENTRADA = """
 {% extends 'base.html' %}
 {% block content %}
-<div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+<div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-6">
     <div class="bg-emerald-50 px-6 py-4 border-b border-emerald-100">
         <h2 class="text-lg font-bold text-emerald-800">Nova Entrada</h2>
         <p class="text-xs text-emerald-600">Adicione itens pré-definidos ou crie novos.</p>
@@ -464,22 +689,15 @@ FILE_ENTRADA = """
                 <option value="Outros">Outros...</option>
             </select>
         </div>
-
-        <!-- Campo Oculto para Outros -->
         <div id="div_outros" class="hidden animate-fade-in">
             <label class="label-pro text-blue-600">Digite o nome do Item</label>
             <input type="text" name="nome_outros" id="nome_outros" class="input-pro border-blue-300 bg-blue-50" placeholder="Ex: Sapato Social">
         </div>
-
         <div class="grid grid-cols-2 gap-4">
             <div><label class="label-pro">Tamanho</label><select name="tamanho" class="input-pro"><option value="P">P</option><option value="M">M</option><option value="G">G</option><option value="GG">GG</option><option value="XG">XG</option></select></div>
             <div><label class="label-pro">Gênero</label><select name="genero" class="input-pro"><option value="Masculino">Masculino</option><option value="Feminino">Feminino</option><option value="Unissex">Unissex</option></select></div>
         </div>
-        <div>
-            <label class="label-pro text-emerald-600">Quantidade</label>
-            <input type="number" name="quantidade" min="1" value="1" class="input-pro font-bold text-lg text-emerald-700" required>
-        </div>
-        
+        <div><label class="label-pro text-emerald-600">Quantidade</label><input type="number" name="quantidade" min="1" value="1" class="input-pro font-bold text-lg text-emerald-700" required></div>
         <div class="pt-4 border-t border-slate-100">
             <p class="text-xs font-bold text-slate-400 uppercase mb-3">Definição de Níveis (Opcional)</p>
             <div class="grid grid-cols-2 gap-4">
@@ -487,136 +705,24 @@ FILE_ENTRADA = """
                 <div><label class="label-pro text-emerald-400">Ideal (Bom)</label><input type="number" name="estoque_ideal" value="20" class="input-pro text-xs"></div>
             </div>
         </div>
-
         <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-4 rounded-lg shadow-md hover:shadow-lg transition">ADICIONAR</button>
     </form>
 </div>
+
+<!-- Botão de Histórico Restaurado -->
+<a href="/historico/entrada" class="block bg-slate-100 hover:bg-slate-200 text-slate-600 text-center py-3 rounded-lg font-bold text-xs transition">
+    <i class="fas fa-history mr-1"></i> VER HISTÓRICO DE ENTRADAS
+</a>
+
 <script>
     function verificarOutros(select) {
         const div = document.getElementById('div_outros');
         const input = document.getElementById('nome_outros');
-        if (select.value === 'Outros') {
-            div.classList.remove('hidden');
-            input.required = true;
-            input.focus();
-        } else {
-            div.classList.add('hidden');
-            input.required = false;
-        }
+        if (select.value === 'Outros') { div.classList.remove('hidden'); input.required = true; input.focus(); } 
+        else { div.classList.add('hidden'); input.required = false; }
     }
 </script>
 <style>.label-pro { display: block; font-size: 0.7rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem; } .input-pro { width: 100%; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 0.5rem; padding: 0.75rem 1rem; color: #1e293b; font-weight: 500; outline: none; }</style>
-{% endblock %}
-"""
-
-# --- TEMPLATE HISTÓRICO SAÍDA ATUALIZADO (REGISTRO DE ENTREGAS) ---
-FILE_HIST_SAIDA = """
-{% extends 'base.html' %}
-{% block content %}
-<div class="mb-6"><h2 class="text-lg font-bold text-slate-800">Registro de Entregas</h2></div>
-<div class="space-y-3">
-    {% for log in logs %}
-    <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition relative group">
-        <a href="/historico/saida/editar/{{ log.id }}" class="absolute top-4 right-4 text-slate-300 hover:text-blue-500 p-2"><i class="fas fa-pencil-alt"></i></a>
-        <div class="flex justify-between items-start mb-2">
-            <div class="text-xs font-bold text-slate-400 uppercase tracking-wide">{{ log.data_entrega.strftime('%d/%m/%Y') }}</div>
-            <div class="bg-blue-50 text-blue-700 text-xs px-2 py-1 rounded font-bold mr-8">-{{ log.quantidade }} UN</div>
-        </div>
-        <div class="flex items-center gap-3 mb-3">
-             <div class="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 font-bold text-xs">{{ log.colaborador[:1] }}</div>
-             <div><div class="font-bold text-slate-800">{{ log.colaborador }}</div><div class="text-xs text-slate-500">Autorizado por: {{ log.coordenador }}</div></div>
-        </div>
-        <!-- Detalhes de Tamanho e Genero -->
-        <div class="pt-3 border-t border-slate-100 text-sm text-slate-700 flex items-center gap-2">
-            <i class="fas fa-tshirt text-slate-400"></i> 
-            <span class="font-semibold">{{ log.item_nome }}</span>
-            <span class="text-slate-300">|</span>
-            <span class="bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded text-xs font-bold">{{ log.tamanho }}</span>
-            <span class="text-slate-300">|</span>
-            <span class="text-xs text-slate-500">{{ log.genero }}</span>
-        </div>
-    </div>
-    {% else %}
-    <div class="text-center py-10 text-slate-400">Nenhuma entrega registrada.</div>
-    {% endfor %}
-</div>
-{% endblock %}
-"""
-
-# --- TEMPLATE ADMIN USUARIOS (V11) ---
-FILE_ADMIN_USUARIOS = """
-{% extends 'base.html' %}
-{% block content %}
-<div class="flex items-center justify-between mb-8">
-    <div><h2 class="text-2xl font-bold text-slate-800">Funcionários</h2><p class="text-sm text-slate-500">Gestão de acesso.</p></div>
-</div>
-{% if senha_gerada %}
-<div class="bg-green-50 border border-green-200 p-6 rounded-xl mb-8 flex flex-col items-center justify-center text-center shadow-sm">
-    <div class="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center text-green-600 mb-3"><i class="fas fa-check"></i></div>
-    <h3 class="text-lg font-bold text-green-800 mb-1">Usuário Criado!</h3>
-    <p class="text-sm text-green-700 mb-4">Entregue as credenciais para <strong>{{ novo_user }}</strong>.</p>
-    <div class="bg-white px-6 py-3 rounded-lg border border-green-200 font-mono text-xl font-bold text-slate-800 shadow-inner">{{ senha_gerada }}</div>
-</div>
-{% endif %}
-<div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-    <div class="lg:col-span-2">
-        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-            <div class="px-6 py-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center"><h3 class="font-bold text-slate-700">Equipe</h3><span class="text-xs bg-slate-200 text-slate-600 px-2 py-1 rounded-full font-bold">{{ users|length }}</span></div>
-            <div class="divide-y divide-slate-100">
-                {% for u in users %}
-                <div class="px-6 py-4 flex items-center justify-between hover:bg-slate-50 transition group">
-                    <div class="flex items-center gap-4">
-                        <div class="w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm bg-blue-100 text-blue-600">{{ u.real_name[:2].upper() }}</div>
-                        <div><div class="font-bold text-slate-800">{{ u.real_name }}</div><div class="text-xs text-slate-500">{{ u.role }}</div></div>
-                    </div>
-                    <div class="flex items-center gap-3">
-                        {% if u.is_first_access %}<span class="px-2 py-1 bg-yellow-100 text-yellow-700 text-[10px] font-bold uppercase rounded">Pendente</span>{% else %}<span class="px-2 py-1 bg-emerald-100 text-emerald-700 text-[10px] font-bold uppercase rounded">Ativo</span>{% endif %}
-                        <a href="/admin/usuarios/editar/{{ u.id }}" class="w-8 h-8 flex items-center justify-center rounded-full text-slate-300 hover:bg-white hover:text-blue-600 hover:shadow border border-transparent hover:border-slate-200 transition"><i class="fas fa-pencil-alt text-xs"></i></a>
-                    </div>
-                </div>
-                {% endfor %}
-            </div>
-        </div>
-    </div>
-    <div class="lg:col-span-1">
-        <div class="bg-slate-800 rounded-xl shadow-lg p-6 text-white sticky top-6">
-            <h3 class="font-bold text-lg mb-1">Novo Funcionário</h3>
-            <form action="/admin/usuarios" method="POST" class="space-y-4 mt-4">
-                <div><label class="block text-xs font-bold text-slate-400 uppercase mb-2">Nome</label><input type="text" name="real_name" class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-3 text-sm" required></div>
-                <div><label class="block text-xs font-bold text-slate-400 uppercase mb-2">Login</label><input type="text" name="username" class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-3 text-sm" required></div>
-                <div><label class="block text-xs font-bold text-slate-400 uppercase mb-2">Cargo</label><select name="role" class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-3 text-sm"><option value="Colaborador">Colaborador</option><option value="Master">Master</option></select></div>
-                <button type="submit" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-lg shadow-md transition mt-2">Criar Acesso</button>
-            </form>
-        </div>
-    </div>
-</div>
-{% endblock %}
-"""
-
-# --- TEMPLATE EDITAR USUARIO (V11) ---
-FILE_EDITAR_USUARIO = """
-{% extends 'base.html' %}
-{% block content %}
-<div class="max-w-lg mx-auto">
-    <div class="flex items-center justify-between mb-6"><h2 class="text-lg font-bold text-slate-800">Editar Funcionário</h2><a href="/admin/usuarios" class="text-xs font-medium text-slate-500 hover:text-slate-800">Cancelar</a></div>
-    <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-        <form action="/admin/usuarios/editar/{{ user.id }}" method="POST" class="p-8 space-y-6">
-            <div class="flex flex-col items-center mb-6"><div class="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center text-2xl font-bold text-slate-400 mb-3">{{ user.real_name[:2].upper() }}</div><div class="text-sm font-mono text-slate-400">ID: {{ user.id }}</div></div>
-            <div class="space-y-4">
-                <div><label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Nome</label><input type="text" name="real_name" value="{{ user.real_name }}" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-slate-800 font-bold"></div>
-                <div><label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Login</label><input type="text" name="username" value="{{ user.username }}" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-slate-800" {% if user.username == 'Thaynara' %}readonly{% endif %}></div>
-                <div><label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Cargo</label><select name="role" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-slate-800" {% if user.username == 'Thaynara' %}disabled{% endif %}><option value="Colaborador" {% if user.role == 'Colaborador' %}selected{% endif %}>Colaborador</option><option value="Master" {% if user.role == 'Master' %}selected{% endif %}>Master</option></select></div>
-            </div>
-            <div class="pt-6 border-t border-slate-100 flex flex-col gap-3">
-                <button type="submit" name="acao" value="salvar" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg shadow transition">SALVAR</button>
-                <div class="grid grid-cols-2 gap-3">
-                    <button type="submit" name="acao" value="resetar_senha" class="bg-yellow-50 hover:bg-yellow-100 text-yellow-700 font-bold py-3 rounded-lg text-xs border border-yellow-200">RESETAR SENHA</button>
-                    {% if user.username != 'Thaynara' %}<button type="submit" name="acao" value="excluir" class="bg-red-50 hover:bg-red-100 text-red-600 font-bold py-3 rounded-lg text-xs border border-red-200" onclick="return confirm('Excluir?')">EXCLUIR</button>{% endif %}
-                </div>
-            </div>
-        </form>
-    </div>
-</div>
 {% endblock %}
 """
 
@@ -643,7 +749,7 @@ def git_update():
         subprocess.run(["git", "add", "."], check=True)
         subprocess.run(["git", "commit", "-m", COMMIT_MSG], check=False)
         subprocess.run(["git", "push"], check=True)
-        print("\n>>> SUCESSO V12 COMPLETA! <<<")
+        print("\n>>> SUCESSO V13 TDS! <<<")
     except Exception as e: print(f"Git: {e}")
 
 def self_destruct():
@@ -651,7 +757,7 @@ def self_destruct():
     except: pass
 
 def main():
-    print(f"--- UPDATE V12 COMPLETA: {PROJECT_NAME} ---")
+    print(f"--- UPDATE V13 TDS: {PROJECT_NAME} ---")
     create_backup()
     write_file("runtime.txt", FILE_RUNTIME)
     write_file("requirements.txt", FILE_REQ)
@@ -659,10 +765,12 @@ def main():
     write_file("app.py", FILE_APP)
     
     write_file("templates/base.html", FILE_BASE)
-    write_file("templates/entrada.html", FILE_ENTRADA)
-    write_file("templates/historico_saida.html", FILE_HIST_SAIDA)
+    write_file("templates/dashboard.html", FILE_DASHBOARD)
     write_file("templates/admin_usuarios.html", FILE_ADMIN_USUARIOS)
+    write_file("templates/novo_usuario.html", FILE_NOVO_USUARIO) # Novo
+    write_file("templates/sucesso_usuario.html", FILE_SUCESSO_USUARIO) # Novo
     write_file("templates/editar_usuario.html", FILE_EDITAR_USUARIO)
+    write_file("templates/entrada.html", FILE_ENTRADA)
     
     git_update()
     self_destruct()

@@ -12,7 +12,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-app.secret_key = 'chave_v13_tds_secret'
+app.secret_key = 'chave_v12_master_secret'
 
 # --- BANCO DE DADOS ---
 db_url = "postgresql://neondb_owner:npg_UBg0b7YKqLPm@ep-steep-wave-aflx731c-pooler.c-2.us-west-2.aws.neon.tech/neondb?sslmode=require"
@@ -90,14 +90,14 @@ def load_user(user_id):
 try:
     with app.app_context():
         db.create_all()
-        # Garante colunas se nao existirem
+        # Garante colunas
         try:
             with db.engine.connect() as conn:
                 conn.execute(text("ALTER TABLE itens_estoque ADD COLUMN IF NOT EXISTS genero VARCHAR(20)"))
                 conn.execute(text("ALTER TABLE itens_estoque ADD COLUMN IF NOT EXISTS estoque_minimo INTEGER DEFAULT 5"))
                 conn.commit()
         except: pass
-        
+        # Garante Master
         if not User.query.filter_by(username='Thaynara').first():
             master = User(username='Thaynara', real_name='Thaynara Master', role='Master', is_first_access=False)
             master.set_password('1855')
@@ -105,7 +105,7 @@ try:
             db.session.commit()
 except Exception: pass
 
-# --- ROTAS AUTH ---
+# --- ROTAS DE AUTENTICAÇÃO ---
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -138,38 +138,32 @@ def primeiro_acesso():
         flash('Senhas não conferem.')
     return render_template('primeiro_acesso.html')
 
-# --- ROTAS ADMIN (NOVAS) ---
+# --- ROTAS DE ADMINISTRAÇÃO (V11) ---
 
-@app.route('/admin/usuarios')
+@app.route('/admin/usuarios', methods=['GET', 'POST'])
 @login_required
 def gerenciar_usuarios():
     if current_user.role != 'Master': return redirect(url_for('dashboard'))
-    users = User.query.all()
-    # Recupera senha temporaria da sessao flash se houver (logica adaptada no template via query params ou flash)
-    return render_template('admin_usuarios.html', users=users)
-
-@app.route('/admin/usuarios/novo', methods=['GET', 'POST'])
-@login_required
-def novo_usuario():
-    if current_user.role != 'Master': return redirect(url_for('dashboard'))
+    
+    senha_gerada = None
+    novo_user_nome = None
     
     if request.method == 'POST':
         username = request.form.get('username')
         if User.query.filter_by(username=username).first():
-            flash('Erro: Usuário já existe.')
+            flash('Usuário já existe.')
         else:
             senha_temp = secrets.token_hex(3)
-            novo = User(username=username, 
-                       real_name=request.form.get('real_name'), 
-                       role=request.form.get('role'), # Campo livre agora
-                       is_first_access=True)
+            novo = User(username=username, real_name=request.form.get('real_name'), role=request.form.get('role'), is_first_access=True)
             novo.set_password(senha_temp)
             db.session.add(novo)
             db.session.commit()
-            # Passando a senha via flash message especial ou renderizando template de sucesso
-            return render_template('sucesso_usuario.html', novo_user=username, senha_gerada=senha_temp)
+            senha_gerada = senha_temp
+            novo_user_nome = username
+            flash('Usuário criado.')
             
-    return render_template('novo_usuario.html')
+    users = User.query.all()
+    return render_template('admin_usuarios.html', users=users, senha_gerada=senha_gerada, novo_user=novo_user_nome)
 
 @app.route('/admin/usuarios/editar/<int:id>', methods=['GET', 'POST'])
 @login_required
@@ -195,8 +189,7 @@ def editar_usuario(id):
         else:
             user.real_name = request.form.get('real_name')
             user.username = request.form.get('username')
-            if user.username != 'Thaynara': 
-                user.role = request.form.get('role') # Campo livre
+            if user.username != 'Thaynara': user.role = request.form.get('role')
             db.session.commit()
             flash('Atualizado.')
             return redirect(url_for('gerenciar_usuarios'))
@@ -210,16 +203,22 @@ def dashboard():
     if current_user.is_first_access: return redirect(url_for('primeiro_acesso'))
     try:
         itens = ItemEstoque.query.order_by(ItemEstoque.nome).all()
-        return render_template('dashboard.html', itens=itens)
+        return render_template('dashboard.html', itens=itens, total_pecas=sum(i.quantidade for i in itens), total_itens=len(itens))
     except: return "Erro DB", 500
 
 @app.route('/entrada', methods=['GET', 'POST'])
 @login_required
 def entrada():
+    if current_user.is_first_access: return redirect(url_for('primeiro_acesso'))
     if request.method == 'POST':
         try:
+            # Lógica para "Outros"
             nome_select = request.form.get('nome_select')
-            nome = request.form.get('nome_outros') if nome_select == 'Outros' else nome_select
+            if nome_select == 'Outros':
+                nome = request.form.get('nome_outros')
+            else:
+                nome = nome_select
+
             tamanho = request.form.get('tamanho')
             genero = request.form.get('genero')
             qtd = int(request.form.get('quantidade') or 1)
@@ -237,6 +236,7 @@ def entrada():
                                  estoque_ideal=int(request.form.get('estoque_ideal') or 20))
                 novo.data_atualizacao = get_brasil_time()
                 db.session.add(novo)
+                flash(f'Novo item cadastrado: {nome}')
             
             db.session.add(HistoricoEntrada(item_nome=f"{nome} ({genero}-{tamanho})", quantidade=qtd, data_hora=get_brasil_time()))
             db.session.commit()
@@ -283,12 +283,15 @@ def editar_item(id):
     item = ItemEstoque.query.get_or_404(id)
     if request.method == 'POST':
         if request.form.get('acao') == 'excluir':
-            db.session.delete(item); db.session.commit(); return redirect(url_for('dashboard'))
+            db.session.delete(item)
+            db.session.commit()
+            return redirect(url_for('dashboard'))
         item.nome = request.form.get('nome')
         item.quantidade = int(request.form.get('quantidade'))
         item.estoque_minimo = int(request.form.get('estoque_minimo'))
         item.estoque_ideal = int(request.form.get('estoque_ideal'))
-        db.session.commit(); return redirect(url_for('dashboard'))
+        db.session.commit()
+        return redirect(url_for('dashboard'))
     return render_template('editar_item.html', item=item)
 
 @app.route('/historico/entrada')
@@ -301,6 +304,7 @@ def view_historico_entrada():
 def view_historico_saida():
     return render_template('historico_saida.html', logs=HistoricoSaida.query.order_by(HistoricoSaida.data_entrega.desc()).all())
 
+# Rotas de edição de histórico (mantidas)
 @app.route('/historico/entrada/editar/<int:id>', methods=['GET', 'POST'])
 @login_required
 def editar_historico_entrada(id):
