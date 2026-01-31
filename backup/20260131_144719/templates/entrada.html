@@ -3,29 +3,14 @@
 <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
     <div class="bg-emerald-50 px-6 py-4 border-b border-emerald-100">
         <h2 class="text-lg font-bold text-emerald-800">Nova Entrada</h2>
-        <p class="text-xs text-emerald-600">Adicione itens pré-definidos ou crie novos.</p>
+        <p class="text-xs text-emerald-600">Adicione itens ou crie novos cadastros.</p>
     </div>
     <form action="/entrada" method="POST" class="p-6 space-y-5">
         <div>
-            <label class="label-pro">Item / Uniforme</label>
-            <select name="nome_select" id="nome_select" class="input-pro" onchange="verificarOutros(this)">
-                <option value="Camisa Tático">Camisa Tático</option>
-                <option value="Calça Tático">Calça Tático</option>
-                <option value="Camisa Portaria">Camisa Portaria</option>
-                <option value="Calça Portaria">Calça Portaria</option>
-                <option value="Blazer Portaria">Blazer Portaria</option>
-                <option value="Camisa Limpeza">Camisa Limpeza</option>
-                <option value="Calça Limpeza">Calça Limpeza</option>
-                <option value="Outros">Outros...</option>
-            </select>
+            <label class="label-pro">Item</label>
+            <input type="text" name="nome" list="sugestoes" class="input-pro" placeholder="Ex: Camisa Polo" required>
+            <datalist id="sugestoes"><option value="Camisa Polo"><option value="Calça Brim"><option value="Bota de Segurança"></datalist>
         </div>
-
-        <!-- Campo Oculto para Outros -->
-        <div id="div_outros" class="hidden animate-fade-in">
-            <label class="label-pro text-blue-600">Digite o nome do Item</label>
-            <input type="text" name="nome_outros" id="nome_outros" class="input-pro border-blue-300 bg-blue-50" placeholder="Ex: Sapato Social">
-        </div>
-
         <div class="grid grid-cols-2 gap-4">
             <div><label class="label-pro">Tamanho</label><select name="tamanho" class="input-pro"><option value="P">P</option><option value="M">M</option><option value="G">G</option><option value="GG">GG</option><option value="XG">XG</option></select></div>
             <div><label class="label-pro">Gênero</label><select name="genero" class="input-pro"><option value="Masculino">Masculino</option><option value="Feminino">Feminino</option><option value="Unissex">Unissex</option></select></div>
@@ -35,6 +20,7 @@
             <input type="number" name="quantidade" min="1" value="1" class="input-pro font-bold text-lg text-emerald-700" required>
         </div>
         
+        <!-- Configuração de Niveis na Entrada -->
         <div class="pt-4 border-t border-slate-100">
             <p class="text-xs font-bold text-slate-400 uppercase mb-3">Definição de Níveis (Opcional)</p>
             <div class="grid grid-cols-2 gap-4">
@@ -46,19 +32,6 @@
         <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-4 rounded-lg shadow-md hover:shadow-lg transition">ADICIONAR</button>
     </form>
 </div>
-<script>
-    function verificarOutros(select) {
-        const div = document.getElementById('div_outros');
-        const input = document.getElementById('nome_outros');
-        if (select.value === 'Outros') {
-            div.classList.remove('hidden');
-            input.required = true;
-            input.focus();
-        } else {
-            div.classList.add('hidden');
-            input.required = false;
-        }
-    }
-</script>
+<div class="text-center mt-4"><a href="/historico/entrada" class="text-xs font-bold text-emerald-600 hover:underline">VER HISTÓRICO DE ENTRADAS</a></div>
 <style>.label-pro { display: block; font-size: 0.7rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem; } .input-pro { width: 100%; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 0.5rem; padding: 0.75rem 1rem; color: #1e293b; font-weight: 500; outline: none; }</style>
 {% endblock %}
