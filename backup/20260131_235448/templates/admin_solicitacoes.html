@@ -37,18 +37,15 @@
             <div class="mt-3 text-xs text-slate-600 italic border-t pt-2">"{{ s.justificativa }}"</div>
         </div>
 
-        <!-- FORMULARIO CORRIGIDO -->
         <form action="/admin/solicitacoes" method="POST" class="flex flex-col gap-2">
             <input type="hidden" name="solic_id" value="{{ s.id }}">
-            
             <div class="flex gap-2">
                 <button type="submit" name="decisao" value="aprovar" class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 rounded text-xs transition">APROVAR</button>
-                <button type="button" onclick="toggleReprova('repro-{{ s.id }}')" class="flex-1 bg-red-100 hover:bg-red-200 text-red-600 font-bold py-2 rounded text-xs transition">REPROVAR</button>
+                <button type="button" onclick="document.getElementById('repro-{{ s.id }}').classList.remove('hidden')" class="flex-1 bg-red-100 hover:bg-red-200 text-red-600 font-bold py-2 rounded text-xs transition">REPROVAR</button>
             </div>
-            
             <div id="repro-{{ s.id }}" class="hidden mt-2">
-                <input type="text" name="motivo_repro" class="w-full border border-red-200 rounded p-2 text-xs mb-2 bg-red-50" placeholder="Motivo da reprovação (obrigatório)...">
-                <button type="submit" name="decisao" value="reprovar" class="w-full bg-red-600 text-white font-bold py-2 rounded text-xs">CONFIRMAR REPROVAÇÃO</button>
+                <input type="text" name="motivo_repro" class="w-full border border-red-200 rounded p-2 text-xs mb-2 bg-red-50" placeholder="Motivo da reprovação (obrigatório)..." required>
+                <button type="submit" name="decisao" value="reprovar" class="w-full bg-red-600 text-white font-bold py-2 rounded text-xs">ENVIAR</button>
             </div>
         </form>
     </div>
@@ -58,9 +55,4 @@
     </div>
     {% endfor %}
 </div>
-<script>
-    function toggleReprova(id) {
-        document.getElementById(id).classList.toggle('hidden');
-    }
-</script>
 {% endblock %}

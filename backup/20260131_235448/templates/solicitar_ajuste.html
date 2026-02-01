@@ -3,7 +3,7 @@
 <div class="max-w-2xl mx-auto">
     <div class="mb-6"><h2 class="text-xl font-bold text-slate-800">Solicitar Ajuste</h2><p class="text-sm text-slate-500">Gestão de ponto.</p></div>
 
-    <!-- Seletor -->
+    <!-- Seletor de Data -->
     <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6 mb-6">
         <form action="/ponto/solicitar-ajuste" method="POST" class="flex gap-4 items-end">
             <div class="flex-1">
@@ -35,7 +35,7 @@
             {% endfor %}
         </div>
 
-        <!-- FORMULARIO OCULTO -->
+        <!-- FORMULARIO OCULTO (POP-UP INLINE) -->
         <div id="formContainer" class="hidden bg-slate-50 p-4 rounded-xl border border-blue-200 shadow-inner">
             <h3 class="font-bold text-blue-700 mb-4 text-sm uppercase" id="formTitle">Detalhes da Solicitação</h3>
             <form action="/ponto/solicitar-ajuste" method="POST" class="space-y-4">
@@ -74,43 +74,27 @@
     </div>
     {% endif %}
 
-    <!-- MEUS PEDIDOS DETALHADOS -->
+    <!-- TABELA DE FEEDBACK (MEUS PEDIDOS) -->
     <div class="mt-8">
         <h3 class="font-bold text-slate-700 text-sm mb-4 border-b pb-2">Meus Pedidos Recentes</h3>
         <div class="space-y-3">
             {% for req in meus_ajustes %}
-            <div class="bg-white border border-slate-200 rounded-lg p-4 shadow-sm relative pl-4 border-l-4 
-                {% if req.status == 'Aprovado' %} border-l-emerald-500 
-                {% elif req.status == 'Reprovado' %} border-l-red-500 
-                {% else %} border-l-yellow-500 {% endif %}">
-                
-                <div class="flex justify-between items-start mb-1">
-                    <span class="text-[10px] font-bold uppercase text-slate-400">{{ req.data_referencia.strftime('%d/%m/%Y') }}</span>
-                    <span class="text-[10px] font-bold uppercase px-2 py-0.5 rounded
+            <div class="bg-white border border-slate-200 rounded-lg p-4 shadow-sm">
+                <div class="flex justify-between items-start mb-2">
+                    <div>
+                        <span class="text-xs font-bold text-slate-400 block">{{ req.data_referencia.strftime('%d/%m') }} - {{ req.tipo_solicitacao }}</span>
+                        {% if req.status == 'Reprovado' %}
+                            <p class="text-xs text-red-600 font-bold mt-1 bg-red-50 p-2 rounded">Motivo: "{{ req.motivo_reprovacao }}"</p>
+                        {% endif %}
+                    </div>
+                    <span class="px-2 py-1 rounded text-[10px] font-bold uppercase
                         {% if req.status == 'Pendente' %} bg-yellow-100 text-yellow-700
                         {% elif req.status == 'Aprovado' %} bg-emerald-100 text-emerald-700
                         {% else %} bg-red-100 text-red-700 {% endif %}">
                         {{ req.status }}
                     </span>
                 </div>
-
-                <div class="mb-2">
-                    {% if req.tipo_solicitacao == 'Exclusao' %}
-                        <p class="text-sm font-bold text-red-600">Excluir Ponto</p>
-                    {% elif req.tipo_solicitacao == 'Inclusao' %}
-                        <p class="text-sm font-bold text-emerald-600">Incluir: <span class="font-mono">{{ req.novo_horario }}</span> ({{ req.tipo_batida }})</p>
-                    {% else %}
-                        <p class="text-sm font-bold text-blue-600">Editar para: <span class="font-mono">{{ req.novo_horario }}</span></p>
-                    {% endif %}
-                </div>
-
-                <div class="text-xs text-slate-500 italic mb-2">"{{ req.justificativa }}"</div>
-
-                {% if req.status == 'Reprovado' %}
-                    <div class="bg-red-50 p-2 rounded border border-red-100 text-xs text-red-700">
-                        <strong>Motivo da Reprovação:</strong> {{ req.motivo_reprovacao }}
-                    </div>
-                {% endif %}
+                <div class="text-xs text-slate-500 italic">"{{ req.justificativa }}"</div>
             </div>
             {% else %}
             <p class="text-center text-xs text-slate-400 py-4">Nenhum pedido recente.</p>
@@ -127,6 +111,7 @@
         document.getElementById('form_tipo_solic').value = "Inclusao";
         document.getElementById('formContainer').classList.remove('hidden');
     }
+
     function abrirEdicao(id, hora, tipo) {
         resetForm();
         document.getElementById('formTitle').innerText = "EDITAR PONTO";
@@ -137,20 +122,23 @@
         document.getElementById('form_tipo_solic').value = "Edicao";
         document.getElementById('formContainer').classList.remove('hidden');
     }
+
     function abrirExclusao(id, hora) {
         resetForm();
         document.getElementById('formTitle').innerText = "SOLICITAR EXCLUSÃO";
         document.getElementById('formTitle').className = "font-bold text-red-700 mb-4 text-sm uppercase";
         document.getElementById('form_ponto_id').value = id;
         document.getElementById('form_tipo_solic').value = "Exclusao";
-        document.getElementById('divHorarioTipo').classList.add('hidden');
+        document.getElementById('divHorarioTipo').classList.add('hidden'); // Esconde hora pois é exclusao
         document.getElementById('formContainer').classList.remove('hidden');
     }
+
     function resetForm() {
         document.getElementById('form_ponto_id').value = "";
         document.getElementById('form_horario').value = "";
         document.getElementById('divHorarioTipo').classList.remove('hidden');
     }
+
     function fecharForm() {
         document.getElementById('formContainer').classList.add('hidden');
     }
