@@ -12,7 +12,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-app.secret_key = 'chave_v17_fixes_secret'
+app.secret_key = 'chave_v18_filters_secret'
 
 # --- BANCO DE DADOS ---
 db_url = "postgresql://neondb_owner:npg_UBg0b7YKqLPm@ep-steep-wave-aflx731c-pooler.c-2.us-west-2.aws.neon.tech/neondb?sslmode=require"
@@ -45,7 +45,6 @@ class User(UserMixin, db.Model):
     role = db.Column(db.String(50)) 
     is_first_access = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=get_brasil_time)
-    
     horario_entrada = db.Column(db.String(5), default='08:00')
     horario_almoco_inicio = db.Column(db.String(5), default='12:00')
     horario_almoco_fim = db.Column(db.String(5), default='13:00')
@@ -53,7 +52,6 @@ class User(UserMixin, db.Model):
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
-    
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
 
@@ -81,7 +79,6 @@ class PontoAjuste(db.Model):
     status = db.Column(db.String(20), default='Pendente')
     motivo_reprovacao = db.Column(db.String(255))
     created_at = db.Column(db.DateTime, default=get_brasil_time)
-    
     user = db.relationship('User', backref=db.backref('ajustes', lazy=True))
 
 class ItemEstoque(db.Model):
@@ -115,8 +112,7 @@ class HistoricoSaida(db.Model):
     data_entrega = db.Column(db.DateTime, default=get_brasil_time)
 
 @login_manager.user_loader
-def load_user(user_id):
-    return User.query.get(int(user_id))
+def load_user(user_id): return User.query.get(int(user_id))
 
 # --- BOOT ---
 try:
@@ -125,87 +121,16 @@ try:
         if not User.query.filter_by(username='Thaynara').first():
             master = User(username='Thaynara', real_name='Thaynara Master', role='Master', is_first_access=False)
             master.set_password('1855')
-            db.session.add(master)
-            db.session.commit()
-except Exception: pass
+            db.session.add(master); db.session.commit()
+except: pass
 
 # --- ROTAS PRINCIPAIS ---
-
-@app.route('/admin/solicitacoes', methods=['GET', 'POST'])
-@login_required
-def admin_solicitacoes():
-    if current_user.role != 'Master': return redirect(url_for('dashboard'))
-    
-    if request.method == 'POST':
-        try:
-            solic_id = request.form.get('solic_id')
-            decisao = request.form.get('decisao')
-            solic = PontoAjuste.query.get(solic_id)
-            
-            if not solic:
-                flash('Solicitação não encontrada.')
-                return redirect(url_for('admin_solicitacoes'))
-
-            if decisao == 'aprovar':
-                solic.status = 'Aprovado'
-                
-                # Logica de Aprovação Robusta
-                if solic.tipo_solicitacao == 'Exclusao':
-                    if solic.ponto_original_id:
-                        ponto = PontoRegistro.query.get(solic.ponto_original_id)
-                        if ponto: db.session.delete(ponto)
-                
-                elif solic.tipo_solicitacao == 'Edicao':
-                    ponto = PontoRegistro.query.get(solic.ponto_original_id)
-                    if ponto:
-                        h, m = map(int, solic.novo_horario.split(':'))
-                        ponto.hora_registro = time(h, m)
-                        ponto.tipo = solic.tipo_batida
-                
-                elif solic.tipo_solicitacao == 'Inclusao':
-                    h, m = map(int, solic.novo_horario.split(':'))
-                    novo_p = PontoRegistro(
-                        user_id=solic.user_id,
-                        data_registro=solic.data_referencia,
-                        hora_registro=time(h, m),
-                        tipo=solic.tipo_batida,
-                        latitude='Ajuste', longitude='Manual'
-                    )
-                    db.session.add(novo_p)
-                    
-                db.session.commit()
-                flash(f'Solicitação #{solic.id} Aprovada com Sucesso!')
-                
-            elif decisao == 'reprovar':
-                motivo = request.form.get('motivo_repro')
-                solic.status = 'Reprovado'
-                solic.motivo_reprovacao = motivo
-                db.session.commit()
-                flash('Solicitação Reprovada.')
-                
-        except Exception as e:
-            db.session.rollback()
-            logger.error(f"Erro ao processar solicitacao: {e}")
-            flash(f'Erro ao processar: {str(e)}')
-            
-        return redirect(url_for('admin_solicitacoes'))
-
-    pendentes = PontoAjuste.query.filter_by(status='Pendente').order_by(PontoAjuste.created_at).all()
-    dados_extras = {}
-    for p in pendentes:
-        if p.ponto_original_id:
-            original = PontoRegistro.query.get(p.ponto_original_id)
-            if original:
-                dados_extras[p.id] = original.hora_registro.strftime('%H:%M')
-    
-    return render_template('admin_solicitacoes.html', solicitacoes=pendentes, extras=dados_extras)
 
 @app.route('/ponto/solicitar-ajuste', methods=['GET', 'POST'])
 @login_required
 def solicitar_ajuste():
     pontos_dia = []
     data_selecionada = None
-    meus_ajustes = PontoAjuste.query.filter_by(user_id=current_user.id).order_by(PontoAjuste.created_at.desc()).limit(20).all()
     
     if request.method == 'POST':
         acao = request.form.get('acao')
@@ -218,36 +143,92 @@ def solicitar_ajuste():
             try:
                 dt_obj = datetime.strptime(request.form.get('data_ref'), '%Y-%m-%d').date()
                 p_id = int(request.form.get('ponto_id')) if request.form.get('ponto_id') else None
-                
-                solicitacao = PontoAjuste(
-                    user_id=current_user.id,
-                    data_referencia=dt_obj,
-                    ponto_original_id=p_id,
-                    novo_horario=request.form.get('novo_horario'),
-                    tipo_batida=request.form.get('tipo_batida'),
-                    tipo_solicitacao=request.form.get('tipo_solicitacao'),
-                    justificativa=request.form.get('justificativa')
-                )
-                db.session.add(solicitacao)
-                db.session.commit()
-                flash('Solicitação enviada!')
+                solic = PontoAjuste(user_id=current_user.id, data_referencia=dt_obj, ponto_original_id=p_id, novo_horario=request.form.get('novo_horario'), tipo_batida=request.form.get('tipo_batida'), tipo_solicitacao=request.form.get('tipo_solicitacao'), justificativa=request.form.get('justificativa'))
+                db.session.add(solic); db.session.commit(); flash('Solicitação enviada!')
                 return redirect(url_for('solicitar_ajuste'))
-            except Exception as e:
-                flash(f'Erro: {e}')
-            
-    return render_template('solicitar_ajuste.html', pontos=pontos_dia, data_sel=data_selecionada, meus_ajustes=meus_ajustes)
+            except Exception as e: flash(f'Erro: {e}')
 
-# --- ROTAS MANTIDAS ---
+    # Busca meus ajustes e popula dados extras (horario antigo)
+    meus_ajustes = PontoAjuste.query.filter_by(user_id=current_user.id).order_by(PontoAjuste.created_at.desc()).limit(20).all()
+    dados_extras = {}
+    for p in meus_ajustes:
+        if p.ponto_original_id:
+            original = PontoRegistro.query.get(p.ponto_original_id)
+            if original: dados_extras[p.id] = original.hora_registro.strftime('%H:%M')
+            else: dados_extras[p.id] = "?"
+            
+    return render_template('solicitar_ajuste.html', pontos=pontos_dia, data_sel=data_selecionada, meus_ajustes=meus_ajustes, extras=dados_extras)
+
+@app.route('/ponto/espelho')
+@login_required
+def espelho_ponto():
+    data_filtro = request.args.get('data_filtro')
+    
+    query = PontoRegistro.query
+    
+    if current_user.role != 'Master':
+        query = query.filter_by(user_id=current_user.id)
+    
+    if data_filtro:
+        try:
+            dt_obj = datetime.strptime(data_filtro, '%Y-%m-%d').date()
+            query = query.filter_by(data_registro=dt_obj)
+        except: pass
+    
+    if current_user.role == 'Master':
+        registros_raw = query.join(User).order_by(PontoRegistro.data_registro.desc(), User.real_name, PontoRegistro.hora_registro).limit(1000).all()
+        espelho_agrupado = {} 
+        for r in registros_raw:
+            chave = f"{r.data_registro}_{r.user_id}"
+            if chave not in espelho_agrupado: espelho_agrupado[chave] = {'user': r.user, 'data': r.data_registro, 'pontos': []}
+            espelho_agrupado[chave]['pontos'].append(r)
+        return render_template('ponto_espelho_master.html', grupos=espelho_agrupado.values(), filtro_data=data_filtro)
+    else:
+        registros = query.order_by(PontoRegistro.data_registro.desc(), PontoRegistro.hora_registro.desc()).limit(100).all()
+        return render_template('ponto_espelho.html', registros=registros, filtro_data=data_filtro)
+
+@app.route('/admin/solicitacoes', methods=['GET', 'POST'])
+@login_required
+def admin_solicitacoes():
+    if current_user.role != 'Master': return redirect(url_for('dashboard'))
+    if request.method == 'POST':
+        try:
+            solic = PontoAjuste.query.get(request.form.get('solic_id'))
+            decisao = request.form.get('decisao')
+            if decisao == 'aprovar':
+                solic.status = 'Aprovado'
+                if solic.tipo_solicitacao == 'Exclusao':
+                    if solic.ponto_original_id: db.session.delete(PontoRegistro.query.get(solic.ponto_original_id))
+                elif solic.tipo_solicitacao == 'Edicao':
+                    p = PontoRegistro.query.get(solic.ponto_original_id)
+                    h, m = map(int, solic.novo_horario.split(':'))
+                    p.hora_registro = time(h, m); p.tipo = solic.tipo_batida
+                elif solic.tipo_solicitacao == 'Inclusao':
+                    h, m = map(int, solic.novo_horario.split(':'))
+                    db.session.add(PontoRegistro(user_id=solic.user_id, data_registro=solic.data_referencia, hora_registro=time(h, m), tipo=solic.tipo_batida, latitude='Ajuste', longitude='Manual'))
+                db.session.commit(); flash('Aprovado.')
+            elif decisao == 'reprovar':
+                solic.status = 'Reprovado'; solic.motivo_reprovacao = request.form.get('motivo_repro'); db.session.commit(); flash('Reprovado.')
+        except Exception as e: db.session.rollback(); flash(f'Erro: {e}')
+        return redirect(url_for('admin_solicitacoes'))
+
+    pendentes = PontoAjuste.query.filter_by(status='Pendente').order_by(PontoAjuste.created_at).all()
+    dados_extras = {}
+    for p in pendentes:
+        if p.ponto_original_id:
+            original = PontoRegistro.query.get(p.ponto_original_id)
+            if original: dados_extras[p.id] = original.hora_registro.strftime('%H:%M')
+    return render_template('admin_solicitacoes.html', solicitacoes=pendentes, extras=dados_extras)
+
+# --- ROTAS MANTIDAS (Login, Estoque, User Admin) ---
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if current_user.is_authenticated: return redirect(url_for('dashboard'))
     if request.method == 'POST':
         user = User.query.filter_by(username=request.form.get('username')).first()
         if user and user.check_password(request.form.get('password')):
-            login_user(user)
-            if user.is_first_access: return redirect(url_for('primeiro_acesso'))
-            return redirect(url_for('dashboard'))
-        flash('Credenciais inválidas.')
+            login_user(user); return redirect(url_for('primeiro_acesso')) if user.is_first_access else redirect(url_for('dashboard'))
+        flash('Inválido.')
     return render_template('login.html')
 
 @app.route('/logout')
@@ -258,62 +239,67 @@ def logout(): logout_user(); return redirect(url_for('login'))
 @login_required
 def primeiro_acesso():
     if request.method == 'POST':
-        if request.form.get('nova_senha') == request.form.get('confirmacao'):
-            current_user.set_password(request.form.get('nova_senha')); current_user.is_first_access = False; db.session.commit(); return redirect(url_for('dashboard'))
-        flash('Senhas não conferem.')
+        if request.form.get('nova_senha') == request.form.get('confirmacao'): current_user.set_password(request.form.get('nova_senha')); current_user.is_first_access = False; db.session.commit(); return redirect(url_for('dashboard'))
     return render_template('primeiro_acesso.html')
+
+@app.route('/admin/usuarios')
+@login_required
+def gerenciar_usuarios(): return render_template('admin_usuarios.html', users=User.query.all()) if current_user.role == 'Master' else redirect(url_for('dashboard'))
+
+@app.route('/admin/usuarios/novo', methods=['GET', 'POST'])
+@login_required
+def novo_usuario(): 
+    if request.method == 'POST':
+        uname = request.form.get('username')
+        if User.query.filter_by(username=uname).first(): flash('Erro: Existe.')
+        else:
+            senha = secrets.token_hex(3)
+            novo = User(username=uname, real_name=request.form.get('real_name'), role=request.form.get('role'), is_first_access=True, horario_entrada=request.form.get('h_ent'), horario_almoco_inicio=request.form.get('h_alm_ini'), horario_almoco_fim=request.form.get('h_alm_fim'), horario_saida=request.form.get('h_sai'))
+            novo.set_password(senha); db.session.add(novo); db.session.commit()
+            return render_template('sucesso_usuario.html', novo_user=uname, senha_gerada=senha)
+    return render_template('novo_usuario.html')
+
+@app.route('/admin/usuarios/editar/<int:id>', methods=['GET', 'POST'])
+@login_required
+def editar_usuario(id):
+    user = User.query.get_or_404(id)
+    if request.method == 'POST':
+        if request.form.get('acao') == 'resetar_senha': nova = secrets.token_hex(3); user.set_password(nova); user.is_first_access = True; db.session.commit(); flash(f'Senha: {nova}'); return redirect(url_for('editar_usuario', id=id))
+        elif request.form.get('acao') == 'excluir': 
+            if user.username != 'Thaynara': db.session.delete(user); db.session.commit()
+            return redirect(url_for('gerenciar_usuarios'))
+        else:
+            user.real_name = request.form.get('real_name'); user.username = request.form.get('username'); user.horario_entrada = request.form.get('h_ent'); user.horario_almoco_inicio = request.form.get('h_alm_ini'); user.horario_almoco_fim = request.form.get('h_alm_fim'); user.horario_saida = request.form.get('h_sai')
+            if user.username != 'Thaynara': user.role = request.form.get('role')
+            db.session.commit(); return redirect(url_for('gerenciar_usuarios'))
+    return render_template('editar_usuario.html', user=user)
 
 @app.route('/')
 @login_required
 def dashboard():
     hoje = get_brasil_time().date()
-    pontos_hoje = PontoRegistro.query.filter_by(user_id=current_user.id, data_registro=hoje).count()
-    status_ponto = "Não Iniciado"
-    if pontos_hoje == 1: status_ponto = "Trabalhando"
-    elif pontos_hoje == 2: status_ponto = "Almoço"
-    elif pontos_hoje == 3: status_ponto = "Trabalhando (Tarde)"
-    elif pontos_hoje >= 4: status_ponto = "Dia Finalizado"
-    return render_template('dashboard.html', status_ponto=status_ponto)
+    pontos = PontoRegistro.query.filter_by(user_id=current_user.id, data_registro=hoje).count()
+    status = "Não Iniciado"
+    if pontos == 1: status = "Trabalhando"
+    elif pontos == 2: status = "Almoço"
+    elif pontos == 3: status = "Trabalhando (Tarde)"
+    elif pontos >= 4: status = "Dia Finalizado"
+    return render_template('dashboard.html', status_ponto=status)
 
 @app.route('/ponto/registrar', methods=['GET', 'POST'])
 @login_required
 def registrar_ponto():
     hoje = get_brasil_time().date()
-    pontos_hoje = PontoRegistro.query.filter_by(user_id=current_user.id, data_registro=hoje).order_by(PontoRegistro.hora_registro).all()
-    proxima = "Entrada"
-    if len(pontos_hoje) == 1: proxima = "Ida Almoço"
-    elif len(pontos_hoje) == 2: proxima = "Volta Almoço"
-    elif len(pontos_hoje) == 3: proxima = "Saída"
-    elif len(pontos_hoje) >= 4: proxima = "Extra"
+    pontos = PontoRegistro.query.filter_by(user_id=current_user.id, data_registro=hoje).order_by(PontoRegistro.hora_registro).all()
+    prox = "Entrada"
+    if len(pontos) == 1: prox = "Ida Almoço"
+    elif len(pontos) == 2: prox = "Volta Almoço"
+    elif len(pontos) == 3: prox = "Saída"
+    elif len(pontos) >= 4: prox = "Extra"
     if request.method == 'POST':
-        lat, lon = request.form.get('latitude'), request.form.get('longitude')
-        novo = PontoRegistro(user_id=current_user.id, data_registro=hoje, hora_registro=get_brasil_time().time(), tipo=proxima, latitude=lat, longitude=lon)
-        db.session.add(novo); db.session.commit()
-        return redirect(url_for('dashboard'))
-    return render_template('ponto_registro.html', proxima_acao=proxima, hoje=hoje, pontos=pontos_hoje)
-
-@app.route('/ponto/espelho')
-@login_required
-def espelho_ponto():
-    if current_user.role == 'Master':
-        registros_raw = PontoRegistro.query.join(User).order_by(PontoRegistro.data_registro.desc(), User.real_name, PontoRegistro.hora_registro).limit(500).all()
-        espelho_agrupado = {} 
-        for r in registros_raw:
-            chave = f"{r.data_registro}_{r.user_id}"
-            if chave not in espelho_agrupado: espelho_agrupado[chave] = {'user': r.user, 'data': r.data_registro, 'pontos': []}
-            espelho_agrupado[chave]['pontos'].append(r)
-        return render_template('ponto_espelho_master.html', grupos=espelho_agrupado.values())
-    else:
-        registros = PontoRegistro.query.filter_by(user_id=current_user.id).order_by(PontoRegistro.data_registro.desc(), PontoRegistro.hora_registro.desc()).all()
-        return render_template('ponto_espelho.html', registros=registros)
-
-@app.route('/admin/usuarios')
-@login_required
-def admin_usuarios_list(): return render_template('admin_usuarios.html', users=User.query.all()) if current_user.role == 'Master' else redirect(url_for('dashboard'))
-
-@app.route('/admin/usuarios/novo', methods=['GET', 'POST'])
-@login_required
-def novo_usuario(): return render_template('novo_usuario.html') # Simplificado
+        db.session.add(PontoRegistro(user_id=current_user.id, data_registro=hoje, hora_registro=get_brasil_time().time(), tipo=prox, latitude=request.form.get('latitude'), longitude=request.form.get('longitude')))
+        db.session.commit(); return redirect(url_for('dashboard'))
+    return render_template('ponto_registro.html', proxima_acao=prox, hoje=hoje, pontos=pontos)
 
 @app.route('/controle-uniforme')
 @login_required
@@ -322,14 +308,34 @@ def controle_uniforme(): return render_template('controle_uniforme.html', itens=
 @app.route('/entrada', methods=['GET', 'POST'])
 @login_required
 def entrada(): 
-    if request.method == 'POST': return redirect(url_for('controle_uniforme'))
+    if request.method == 'POST': 
+        # (Logica estoque resumida para brevidade)
+        return redirect(url_for('controle_uniforme'))
     return render_template('entrada.html')
 
 @app.route('/saida', methods=['GET', 'POST'])
 @login_required
-def saida(): 
+def saida():
     if request.method == 'POST': return redirect(url_for('controle_uniforme'))
     return render_template('saida.html', itens=ItemEstoque.query.all())
+
+@app.route('/gerenciar/item/<int:id>', methods=['GET', 'POST'])
+@login_required
+def editar_item(id):
+    item = ItemEstoque.query.get_or_404(id)
+    if request.method == 'POST':
+        if request.form.get('acao') == 'excluir': db.session.delete(item); db.session.commit()
+        else: item.nome = request.form.get('nome'); item.quantidade = int(request.form.get('quantidade')); db.session.commit()
+        return redirect(url_for('controle_uniforme'))
+    return render_template('editar_item.html', item=item)
+
+@app.route('/historico/entrada')
+@login_required
+def view_historico_entrada(): return render_template('historico_entrada.html', logs=HistoricoEntrada.query.all())
+
+@app.route('/historico/saida')
+@login_required
+def view_historico_saida(): return render_template('historico_saida.html', logs=HistoricoSaida.query.all())
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
