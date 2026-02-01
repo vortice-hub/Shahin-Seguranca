@@ -6,7 +6,7 @@ from datetime import datetime
 
 # --- CONFIGURAÇÕES ---
 PROJECT_NAME = "TdS Gestão de RH"
-COMMIT_MSG = "V13: Rebranding TdS, Dashboard Clean, Menu Limpo e Cadastro Flexivel"
+COMMIT_MSG = "V14: Correção Layout Desktop (Sidebar Lado a Lado)"
 DB_URL_FIXA = "postgresql://neondb_owner:npg_UBg0b7YKqLPm@ep-steep-wave-aflx731c-pooler.c-2.us-west-2.aws.neon.tech/neondb?sslmode=require"
 
 # --- CONFIG FILES ---
@@ -14,7 +14,7 @@ FILE_RUNTIME = """python-3.11.9"""
 FILE_REQ = """flask\nflask-sqlalchemy\npsycopg2-binary\ngunicorn\nflask-login\nwerkzeug"""
 FILE_PROCFILE = """web: gunicorn app:app"""
 
-# --- APP.PY ---
+# --- APP.PY (Mantido igual V13) ---
 FILE_APP = f"""
 import os
 import logging
@@ -30,7 +30,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-app.secret_key = 'chave_v13_tds_secret'
+app.secret_key = 'chave_v14_layout_fix'
 
 # --- BANCO DE DADOS ---
 db_url = "{DB_URL_FIXA}"
@@ -108,7 +108,6 @@ def load_user(user_id):
 try:
     with app.app_context():
         db.create_all()
-        # Garante colunas se nao existirem
         try:
             with db.engine.connect() as conn:
                 conn.execute(text("ALTER TABLE itens_estoque ADD COLUMN IF NOT EXISTS genero VARCHAR(20)"))
@@ -123,7 +122,7 @@ try:
             db.session.commit()
 except Exception: pass
 
-# --- ROTAS AUTH ---
+# --- ROTAS ---
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -156,14 +155,11 @@ def primeiro_acesso():
         flash('Senhas não conferem.')
     return render_template('primeiro_acesso.html')
 
-# --- ROTAS ADMIN (NOVAS) ---
-
 @app.route('/admin/usuarios')
 @login_required
 def gerenciar_usuarios():
     if current_user.role != 'Master': return redirect(url_for('dashboard'))
     users = User.query.all()
-    # Recupera senha temporaria da sessao flash se houver (logica adaptada no template via query params ou flash)
     return render_template('admin_usuarios.html', users=users)
 
 @app.route('/admin/usuarios/novo', methods=['GET', 'POST'])
@@ -179,12 +175,11 @@ def novo_usuario():
             senha_temp = secrets.token_hex(3)
             novo = User(username=username, 
                        real_name=request.form.get('real_name'), 
-                       role=request.form.get('role'), # Campo livre agora
+                       role=request.form.get('role'), 
                        is_first_access=True)
             novo.set_password(senha_temp)
             db.session.add(novo)
             db.session.commit()
-            # Passando a senha via flash message especial ou renderizando template de sucesso
             return render_template('sucesso_usuario.html', novo_user=username, senha_gerada=senha_temp)
             
     return render_template('novo_usuario.html')
@@ -214,13 +209,11 @@ def editar_usuario(id):
             user.real_name = request.form.get('real_name')
             user.username = request.form.get('username')
             if user.username != 'Thaynara': 
-                user.role = request.form.get('role') # Campo livre
+                user.role = request.form.get('role') 
             db.session.commit()
             flash('Atualizado.')
             return redirect(url_for('gerenciar_usuarios'))
     return render_template('editar_usuario.html', user=user)
-
-# --- ROTAS PRINCIPAIS ---
 
 @app.route('/')
 @login_required
@@ -348,7 +341,7 @@ if __name__ == '__main__':
     app.run(host='0.0.0.0', port=port)
 """
 
-# --- TEMPLATE BASE (V13 TdS + Menu Limpo) ---
+# --- TEMPLATE BASE CORRIGIDO (LAYOUT LADO A LADO) ---
 FILE_BASE = """
 <!DOCTYPE html>
 <html lang="pt-br">
@@ -378,6 +371,7 @@ FILE_BASE = """
     </script>
 </head>
 <body class="bg-slate-50 text-slate-800">
+    <!-- Mobile Header (Fora do Flex) -->
     {% if current_user.is_authenticated and not current_user.is_first_access %}
     <div class="md:hidden bg-white border-b border-slate-200 p-4 flex justify-between items-center sticky top-0 z-40">
         <button onclick="toggleSidebar()" class="text-slate-600 focus:outline-none"><i class="fas fa-bars text-xl"></i></button>
@@ -385,30 +379,38 @@ FILE_BASE = """
         <div class="w-8"></div>
     </div>
     <div id="overlay" onclick="toggleSidebar()" class="fixed inset-0 bg-black bg-opacity-50 z-40 hidden md:hidden"></div>
-    <aside id="sidebar" class="sidebar fixed inset-y-0 left-0 z-50 w-64 bg-slate-900 text-slate-300 transform -translate-x-full md:translate-x-0 md:static md:h-screen md:flex-shrink-0 flex flex-col shadow-2xl">
-        <div class="h-16 flex items-center px-6 bg-slate-950 border-b border-slate-800">
-            <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold text-lg mr-3">T</div>
-            <span class="font-bold text-xl text-white tracking-tight">TdS Gestão</span>
-        </div>
-        <div class="p-6 border-b border-slate-800">
-            <div class="text-xs font-bold text-slate-500 uppercase mb-1">Olá,</div>
-            <div class="text-sm font-bold text-white truncate">{{ current_user.real_name }}</div>
-        </div>
-        <nav class="flex-1 overflow-y-auto py-4">
-            <ul class="space-y-1">
-                <li><a href="/" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-home w-6 text-center mr-2 text-slate-500 group-hover:text-blue-500"></i><span class="font-medium">Início</span></a></li>
-                
-                {% if current_user.role == 'Master' %}
-                <li><a href="/admin/usuarios" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-users w-6 text-center mr-2 text-slate-500 group-hover:text-blue-500"></i><span class="font-medium">Funcionários</span></a></li>
-                {% endif %}
-                
-                <li><a href="/logout" class="flex items-center px-6 py-3 hover:bg-red-900/20 hover:text-red-400 transition group mt-8"><i class="fas fa-sign-out-alt w-6 text-center mr-2 text-slate-500 group-hover:text-red-400"></i><span class="font-medium">Sair</span></a></li>
-            </ul>
-        </nav>
-    </aside>
     {% endif %}
-    <div class="{% if current_user.is_authenticated and not current_user.is_first_access %}md:flex md:flex-row h-screen overflow-hidden{% endif %}">
-        <div class="flex-1 h-full overflow-y-auto bg-slate-50">
+
+    <!-- Wrapper Principal (Flex Row) -->
+    <div class="{% if current_user.is_authenticated and not current_user.is_first_access %}flex h-screen overflow-hidden{% endif %}">
+        
+        <!-- Sidebar (Dentro do Flex) -->
+        {% if current_user.is_authenticated and not current_user.is_first_access %}
+        <aside id="sidebar" class="sidebar fixed inset-y-0 left-0 z-50 w-64 bg-slate-900 text-slate-300 transform -translate-x-full md:translate-x-0 md:static md:flex-shrink-0 flex flex-col shadow-2xl h-full">
+            <div class="h-16 flex items-center px-6 bg-slate-950 border-b border-slate-800">
+                <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold text-lg mr-3">T</div>
+                <span class="font-bold text-xl text-white tracking-tight">TdS Gestão</span>
+            </div>
+            <div class="p-6 border-b border-slate-800">
+                <div class="text-xs font-bold text-slate-500 uppercase mb-1">Olá,</div>
+                <div class="text-sm font-bold text-white truncate">{{ current_user.real_name }}</div>
+            </div>
+            <nav class="flex-1 overflow-y-auto py-4">
+                <ul class="space-y-1">
+                    <li><a href="/" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-home w-6 text-center mr-2 text-slate-500 group-hover:text-blue-500"></i><span class="font-medium">Início</span></a></li>
+                    
+                    {% if current_user.role == 'Master' %}
+                    <li><a href="/admin/usuarios" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-users w-6 text-center mr-2 text-slate-500 group-hover:text-blue-500"></i><span class="font-medium">Funcionários</span></a></li>
+                    {% endif %}
+                    
+                    <li><a href="/logout" class="flex items-center px-6 py-3 hover:bg-red-900/20 hover:text-red-400 transition group mt-8"><i class="fas fa-sign-out-alt w-6 text-center mr-2 text-slate-500 group-hover:text-red-400"></i><span class="font-medium">Sair</span></a></li>
+                </ul>
+            </nav>
+        </aside>
+        {% endif %}
+
+        <!-- Conteúdo Principal (Dentro do Flex, ocupa o resto) -->
+        <div class="flex-1 h-full overflow-y-auto bg-slate-50 relative w-full">
             <div class="max-w-5xl mx-auto p-4 md:p-8 pb-20">
                 {% with messages = get_flashed_messages() %}
                     {% if messages %}
@@ -419,6 +421,7 @@ FILE_BASE = """
                 {% endwith %}
                 {% block content %}{% endblock %}
             </div>
+            
             {% if current_user.is_authenticated and not current_user.is_first_access %}
             <footer class="py-6 text-center text-xs text-slate-400">&copy; 2026 TdS Gestão de RH</footer>
             {% endif %}
@@ -428,31 +431,23 @@ FILE_BASE = """
 </html>
 """
 
-# --- DASHBOARD V13 (Botões Pílula e Sem Cards) ---
+# --- RECRIAÇÃO DOS TEMPLATES PRINCIPAIS (GARANTIA) ---
 FILE_DASHBOARD = """
 {% extends 'base.html' %}
 {% block content %}
-
-<!-- Botões de Ação (Pílulas) -->
 <div class="flex flex-col gap-4 mb-8">
     <div class="grid grid-cols-2 gap-4">
         <a href="/entrada" class="bg-emerald-600 hover:bg-emerald-700 text-white p-4 rounded-full shadow-lg flex items-center justify-center gap-2 transition transform active:scale-95 text-center">
-            <i class="fas fa-arrow-down"></i>
-            <span class="font-bold">ENTRADA</span>
+            <i class="fas fa-arrow-down"></i> <span class="font-bold">ENTRADA</span>
         </a>
         <a href="/saida" class="bg-red-600 hover:bg-red-700 text-white p-4 rounded-full shadow-lg flex items-center justify-center gap-2 transition transform active:scale-95 text-center">
-            <i class="fas fa-arrow-up"></i>
-            <span class="font-bold">SAÍDA</span>
+            <i class="fas fa-arrow-up"></i> <span class="font-bold">SAÍDA</span>
         </a>
     </div>
-    
     <a href="/gerenciar/selecao" class="bg-slate-700 hover:bg-slate-800 text-white p-3 rounded-full shadow-md flex items-center justify-center gap-2 transition transform active:scale-95 text-sm font-semibold w-full md:w-1/2 mx-auto">
-        <i class="fas fa-pencil-alt"></i>
-        <span>EDITAR / GERENCIAR ITENS</span>
+        <i class="fas fa-pencil-alt"></i> <span>EDITAR / GERENCIAR ITENS</span>
     </a>
 </div>
-
-<!-- Lista de Inventário -->
 <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
     <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
         <h2 class="font-semibold text-slate-800">Inventário</h2>
@@ -462,29 +457,15 @@ FILE_DASHBOARD = """
             <span class="text-red-600"><i class="fas fa-circle text-[6px]"></i> Ruim</span>
         </div>
     </div>
-    
     <div class="divide-y divide-slate-100">
         {% for item in itens %}
         <div class="px-6 py-4 flex items-center justify-between hover:bg-slate-50 transition">
             <div class="flex items-center gap-4">
-                <div class="w-10 h-10 rounded-full flex items-center justify-center text-slate-500 bg-slate-100 font-bold text-xs border border-slate-200">
-                    {{ item.tamanho }}
-                </div>
-                <div>
-                    <div class="font-semibold text-slate-800 text-sm">{{ item.nome }}</div>
-                    <div class="text-xs text-slate-500 flex items-center gap-1">
-                        {{ item.genero }}
-                    </div>
-                </div>
+                <div class="w-10 h-10 rounded-full flex items-center justify-center text-slate-500 bg-slate-100 font-bold text-xs border border-slate-200">{{ item.tamanho }}</div>
+                <div><div class="font-semibold text-slate-800 text-sm">{{ item.nome }}</div><div class="text-xs text-slate-500 flex items-center gap-1">{{ item.genero }}</div></div>
             </div>
-            
             <div class="text-right">
-                <div class="text-lg font-bold 
-                    {% if item.quantidade <= item.estoque_minimo %} text-red-600
-                    {% elif item.quantidade >= item.estoque_ideal %} text-emerald-600
-                    {% else %} text-yellow-600 {% endif %}">
-                    {{ item.quantidade }}
-                </div>
+                <div class="text-lg font-bold {% if item.quantidade <= item.estoque_minimo %} text-red-600 {% elif item.quantidade >= item.estoque_ideal %} text-emerald-600 {% else %} text-yellow-600 {% endif %}">{{ item.quantidade }}</div>
                 <div class="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Estoque</div>
             </div>
         </div>
@@ -493,236 +474,6 @@ FILE_DASHBOARD = """
         {% endfor %}
     </div>
 </div>
-{% endblock %}
-"""
-
-# --- ADMIN USUARIOS (LISTA + BOTÃO NOVO) ---
-FILE_ADMIN_USUARIOS = """
-{% extends 'base.html' %}
-{% block content %}
-<div class="flex items-center justify-between mb-6">
-    <h2 class="text-2xl font-bold text-slate-800">Funcionários</h2>
-</div>
-
-<!-- Botão Novo Cadastro -->
-<a href="/admin/usuarios/novo" class="block w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl shadow-md text-center mb-8 transition transform hover:-translate-y-1">
-    <i class="fas fa-user-plus mr-2"></i> CADASTRAR NOVO FUNCIONÁRIO
-</a>
-
-<div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-    <div class="px-6 py-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
-        <h3 class="font-bold text-slate-700">Equipe Cadastrada</h3>
-        <span class="text-xs bg-slate-200 text-slate-600 px-2 py-1 rounded-full font-bold">{{ users|length }}</span>
-    </div>
-    <div class="divide-y divide-slate-100">
-        {% for u in users %}
-        <div class="px-6 py-4 flex items-center justify-between hover:bg-slate-50 transition group">
-            <div class="flex items-center gap-4">
-                <div class="w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm bg-slate-100 text-slate-600">
-                    {{ u.real_name[:2].upper() }}
-                </div>
-                <div>
-                    <div class="font-bold text-slate-800">{{ u.real_name }}</div>
-                    <div class="text-xs text-slate-500">{{ u.role }}</div>
-                </div>
-            </div>
-            
-            <div class="flex items-center gap-3">
-                {% if u.is_first_access %}
-                    <span class="px-2 py-1 bg-yellow-100 text-yellow-700 text-[10px] font-bold uppercase rounded">Pendente</span>
-                {% else %}
-                    <span class="px-2 py-1 bg-emerald-100 text-emerald-700 text-[10px] font-bold uppercase rounded">Ativo</span>
-                {% endif %}
-                
-                <a href="/admin/usuarios/editar/{{ u.id }}" class="w-8 h-8 flex items-center justify-center rounded-full text-slate-300 hover:bg-white hover:text-blue-600 hover:shadow border border-transparent hover:border-slate-200 transition">
-                    <i class="fas fa-pencil-alt text-xs"></i>
-                </a>
-            </div>
-        </div>
-        {% endfor %}
-    </div>
-</div>
-{% endblock %}
-"""
-
-# --- NOVO USUARIO (TELA DEDICADA) ---
-FILE_NOVO_USUARIO = """
-{% extends 'base.html' %}
-{% block content %}
-<div class="max-w-lg mx-auto">
-    <div class="flex items-center justify-between mb-6">
-        <h2 class="text-lg font-bold text-slate-800">Novo Cadastro</h2>
-        <a href="/admin/usuarios" class="text-xs font-medium text-slate-500 hover:text-slate-800">Cancelar</a>
-    </div>
-
-    <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-        <form action="/admin/usuarios/novo" method="POST" class="p-8 space-y-6">
-            
-            <div class="space-y-4">
-                <div>
-                    <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Nome Completo</label>
-                    <input type="text" name="real_name" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Ex: Maria Silva" required>
-                </div>
-                <div>
-                    <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Login (Usuário)</label>
-                    <input type="text" name="username" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Ex: maria.silva" required>
-                </div>
-                <div>
-                    <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Cargo / Função</label>
-                    <input type="text" name="role" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Ex: Assistente de RH" required>
-                    <p class="text-[10px] text-slate-400 mt-1">Digite "Master" para dar acesso total.</p>
-                </div>
-            </div>
-
-            <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-lg shadow-md transition transform active:scale-95">
-                CRIAR ACESSO
-            </button>
-        </form>
-    </div>
-</div>
-{% endblock %}
-"""
-
-# --- SUCESSO USUARIO (TELA PARA MOSTRAR SENHA) ---
-FILE_SUCESSO_USUARIO = """
-{% extends 'base.html' %}
-{% block content %}
-<div class="max-w-lg mx-auto flex flex-col items-center justify-center min-h-[50vh] text-center">
-    
-    <div class="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center text-green-600 mb-6 shadow-sm">
-        <i class="fas fa-check text-2xl"></i>
-    </div>
-    
-    <h2 class="text-2xl font-bold text-slate-800 mb-2">Cadastro Realizado!</h2>
-    <p class="text-slate-500 mb-8">O usuário <strong>{{ novo_user }}</strong> foi criado.</p>
-    
-    <div class="bg-white border-2 border-dashed border-slate-200 p-6 rounded-xl w-full mb-8">
-        <p class="text-xs font-bold text-slate-400 uppercase mb-2">Senha Temporária</p>
-        <div class="text-3xl font-mono font-bold text-slate-800 tracking-wider select-all">{{ senha_gerada }}</div>
-    </div>
-    
-    <a href="/admin/usuarios" class="bg-slate-800 hover:bg-slate-900 text-white font-bold py-3 px-8 rounded-full transition">
-        VOLTAR PARA LISTA
-    </a>
-    
-</div>
-{% endblock %}
-"""
-
-# --- EDITAR USUARIO (CAMPO CARGO LIVRE) ---
-FILE_EDITAR_USUARIO = """
-{% extends 'base.html' %}
-{% block content %}
-<div class="max-w-lg mx-auto">
-    <div class="flex items-center justify-between mb-6">
-        <h2 class="text-lg font-bold text-slate-800">Editar Funcionário</h2>
-        <a href="/admin/usuarios" class="text-xs font-medium text-slate-500 hover:text-slate-800">Cancelar</a>
-    </div>
-
-    <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-        <form action="/admin/usuarios/editar/{{ user.id }}" method="POST" class="p-8 space-y-6">
-            
-            <div class="flex flex-col items-center mb-6">
-                <div class="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center text-2xl font-bold text-slate-400 mb-3">
-                    {{ user.real_name[:2].upper() }}
-                </div>
-                <div class="text-sm font-mono text-slate-400">ID: {{ user.id }}</div>
-            </div>
-
-            <div class="space-y-4">
-                <div>
-                    <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Nome Completo</label>
-                    <input type="text" name="real_name" value="{{ user.real_name }}" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-slate-800 font-bold focus:outline-none focus:ring-2 focus:ring-blue-500">
-                </div>
-                <div>
-                    <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Login</label>
-                    <input type="text" name="username" value="{{ user.username }}" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500" {% if user.username == 'Thaynara' %}readonly{% endif %}>
-                </div>
-                <div>
-                    <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Cargo</label>
-                    <input type="text" name="role" value="{{ user.role }}" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500" {% if user.username == 'Thaynara' %}disabled{% endif %}>
-                </div>
-            </div>
-
-            <div class="pt-6 border-t border-slate-100 flex flex-col gap-3">
-                <button type="submit" name="acao" value="salvar" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg shadow transition">
-                    SALVAR DADOS
-                </button>
-                
-                <div class="grid grid-cols-2 gap-3">
-                    <button type="submit" name="acao" value="resetar_senha" class="bg-yellow-50 hover:bg-yellow-100 text-yellow-700 font-bold py-3 rounded-lg transition text-xs border border-yellow-200">
-                        <i class="fas fa-key mr-1"></i> RESETAR SENHA
-                    </button>
-                    {% if user.username != 'Thaynara' %}
-                    <button type="submit" name="acao" value="excluir" class="bg-red-50 hover:bg-red-100 text-red-600 font-bold py-3 rounded-lg transition text-xs border border-red-200" onclick="return confirm('Tem certeza que deseja excluir este usuário?')">
-                        <i class="fas fa-trash mr-1"></i> EXCLUIR
-                    </button>
-                    {% endif %}
-                </div>
-            </div>
-        </form>
-    </div>
-</div>
-{% endblock %}
-"""
-
-# --- ENTRADA (LINK HISTORICO RESTAURADO) ---
-FILE_ENTRADA = """
-{% extends 'base.html' %}
-{% block content %}
-<div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-6">
-    <div class="bg-emerald-50 px-6 py-4 border-b border-emerald-100">
-        <h2 class="text-lg font-bold text-emerald-800">Nova Entrada</h2>
-        <p class="text-xs text-emerald-600">Adicione itens pré-definidos ou crie novos.</p>
-    </div>
-    <form action="/entrada" method="POST" class="p-6 space-y-5">
-        <div>
-            <label class="label-pro">Item / Uniforme</label>
-            <select name="nome_select" id="nome_select" class="input-pro" onchange="verificarOutros(this)">
-                <option value="Camisa Tático">Camisa Tático</option>
-                <option value="Calça Tático">Calça Tático</option>
-                <option value="Camisa Portaria">Camisa Portaria</option>
-                <option value="Calça Portaria">Calça Portaria</option>
-                <option value="Blazer Portaria">Blazer Portaria</option>
-                <option value="Camisa Limpeza">Camisa Limpeza</option>
-                <option value="Calça Limpeza">Calça Limpeza</option>
-                <option value="Outros">Outros...</option>
-            </select>
-        </div>
-        <div id="div_outros" class="hidden animate-fade-in">
-            <label class="label-pro text-blue-600">Digite o nome do Item</label>
-            <input type="text" name="nome_outros" id="nome_outros" class="input-pro border-blue-300 bg-blue-50" placeholder="Ex: Sapato Social">
-        </div>
-        <div class="grid grid-cols-2 gap-4">
-            <div><label class="label-pro">Tamanho</label><select name="tamanho" class="input-pro"><option value="P">P</option><option value="M">M</option><option value="G">G</option><option value="GG">GG</option><option value="XG">XG</option></select></div>
-            <div><label class="label-pro">Gênero</label><select name="genero" class="input-pro"><option value="Masculino">Masculino</option><option value="Feminino">Feminino</option><option value="Unissex">Unissex</option></select></div>
-        </div>
-        <div><label class="label-pro text-emerald-600">Quantidade</label><input type="number" name="quantidade" min="1" value="1" class="input-pro font-bold text-lg text-emerald-700" required></div>
-        <div class="pt-4 border-t border-slate-100">
-            <p class="text-xs font-bold text-slate-400 uppercase mb-3">Definição de Níveis (Opcional)</p>
-            <div class="grid grid-cols-2 gap-4">
-                <div><label class="label-pro text-red-400">Mínimo (Ruim)</label><input type="number" name="estoque_minimo" value="5" class="input-pro text-xs"></div>
-                <div><label class="label-pro text-emerald-400">Ideal (Bom)</label><input type="number" name="estoque_ideal" value="20" class="input-pro text-xs"></div>
-            </div>
-        </div>
-        <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-4 rounded-lg shadow-md hover:shadow-lg transition">ADICIONAR</button>
-    </form>
-</div>
-
-<!-- Botão de Histórico Restaurado -->
-<a href="/historico/entrada" class="block bg-slate-100 hover:bg-slate-200 text-slate-600 text-center py-3 rounded-lg font-bold text-xs transition">
-    <i class="fas fa-history mr-1"></i> VER HISTÓRICO DE ENTRADAS
-</a>
-
-<script>
-    function verificarOutros(select) {
-        const div = document.getElementById('div_outros');
-        const input = document.getElementById('nome_outros');
-        if (select.value === 'Outros') { div.classList.remove('hidden'); input.required = true; input.focus(); } 
-        else { div.classList.add('hidden'); input.required = false; }
-    }
-</script>
-<style>.label-pro { display: block; font-size: 0.7rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem; } .input-pro { width: 100%; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 0.5rem; padding: 0.75rem 1rem; color: #1e293b; font-weight: 500; outline: none; }</style>
 {% endblock %}
 """
 
@@ -749,7 +500,7 @@ def git_update():
         subprocess.run(["git", "add", "."], check=True)
         subprocess.run(["git", "commit", "-m", COMMIT_MSG], check=False)
         subprocess.run(["git", "push"], check=True)
-        print("\n>>> SUCESSO V13 TDS! <<<")
+        print("\n>>> SUCESSO V14 LAYOUT! <<<")
     except Exception as e: print(f"Git: {e}")
 
 def self_destruct():
@@ -757,20 +508,16 @@ def self_destruct():
     except: pass
 
 def main():
-    print(f"--- UPDATE V13 TDS: {PROJECT_NAME} ---")
+    print(f"--- UPDATE V14 (LAYOUT FIX): {PROJECT_NAME} ---")
     create_backup()
     write_file("runtime.txt", FILE_RUNTIME)
     write_file("requirements.txt", FILE_REQ)
     write_file("Procfile", FILE_PROCFILE)
     write_file("app.py", FILE_APP)
-    
-    write_file("templates/base.html", FILE_BASE)
+    write_file("templates/base.html", FILE_BASE) # Correção Crítica Aqui
     write_file("templates/dashboard.html", FILE_DASHBOARD)
-    write_file("templates/admin_usuarios.html", FILE_ADMIN_USUARIOS)
-    write_file("templates/novo_usuario.html", FILE_NOVO_USUARIO) # Novo
-    write_file("templates/sucesso_usuario.html", FILE_SUCESSO_USUARIO) # Novo
-    write_file("templates/editar_usuario.html", FILE_EDITAR_USUARIO)
-    write_file("templates/entrada.html", FILE_ENTRADA)
+    
+    # Mantem os outros templates necessarios
     
     git_update()
     self_destruct()

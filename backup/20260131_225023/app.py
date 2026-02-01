@@ -12,7 +12,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-app.secret_key = 'chave_v14_layout_fix'
+app.secret_key = 'chave_v13_tds_secret'
 
 # --- BANCO DE DADOS ---
 db_url = "postgresql://neondb_owner:npg_UBg0b7YKqLPm@ep-steep-wave-aflx731c-pooler.c-2.us-west-2.aws.neon.tech/neondb?sslmode=require"
@@ -90,6 +90,7 @@ def load_user(user_id):
 try:
     with app.app_context():
         db.create_all()
+        # Garante colunas se nao existirem
         try:
             with db.engine.connect() as conn:
                 conn.execute(text("ALTER TABLE itens_estoque ADD COLUMN IF NOT EXISTS genero VARCHAR(20)"))
@@ -104,7 +105,7 @@ try:
             db.session.commit()
 except Exception: pass
 
-# --- ROTAS ---
+# --- ROTAS AUTH ---
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -137,11 +138,14 @@ def primeiro_acesso():
         flash('Senhas não conferem.')
     return render_template('primeiro_acesso.html')
 
+# --- ROTAS ADMIN (NOVAS) ---
+
 @app.route('/admin/usuarios')
 @login_required
 def gerenciar_usuarios():
     if current_user.role != 'Master': return redirect(url_for('dashboard'))
     users = User.query.all()
+    # Recupera senha temporaria da sessao flash se houver (logica adaptada no template via query params ou flash)
     return render_template('admin_usuarios.html', users=users)
 
 @app.route('/admin/usuarios/novo', methods=['GET', 'POST'])
@@ -157,11 +161,12 @@ def novo_usuario():
             senha_temp = secrets.token_hex(3)
             novo = User(username=username, 
                        real_name=request.form.get('real_name'), 
-                       role=request.form.get('role'), 
+                       role=request.form.get('role'), # Campo livre agora
                        is_first_access=True)
             novo.set_password(senha_temp)
             db.session.add(novo)
             db.session.commit()
+            # Passando a senha via flash message especial ou renderizando template de sucesso
             return render_template('sucesso_usuario.html', novo_user=username, senha_gerada=senha_temp)
             
     return render_template('novo_usuario.html')
@@ -191,11 +196,13 @@ def editar_usuario(id):
             user.real_name = request.form.get('real_name')
             user.username = request.form.get('username')
             if user.username != 'Thaynara': 
-                user.role = request.form.get('role') 
+                user.role = request.form.get('role') # Campo livre
             db.session.commit()
             flash('Atualizado.')
             return redirect(url_for('gerenciar_usuarios'))
     return render_template('editar_usuario.html', user=user)
+
+# --- ROTAS PRINCIPAIS ---
 
 @app.route('/')
 @login_required

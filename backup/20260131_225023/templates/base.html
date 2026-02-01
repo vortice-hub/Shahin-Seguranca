@@ -26,7 +26,6 @@
     </script>
 </head>
 <body class="bg-slate-50 text-slate-800">
-    <!-- Mobile Header (Fora do Flex) -->
     {% if current_user.is_authenticated and not current_user.is_first_access %}
     <div class="md:hidden bg-white border-b border-slate-200 p-4 flex justify-between items-center sticky top-0 z-40">
         <button onclick="toggleSidebar()" class="text-slate-600 focus:outline-none"><i class="fas fa-bars text-xl"></i></button>
@@ -34,38 +33,30 @@
         <div class="w-8"></div>
     </div>
     <div id="overlay" onclick="toggleSidebar()" class="fixed inset-0 bg-black bg-opacity-50 z-40 hidden md:hidden"></div>
+    <aside id="sidebar" class="sidebar fixed inset-y-0 left-0 z-50 w-64 bg-slate-900 text-slate-300 transform -translate-x-full md:translate-x-0 md:static md:h-screen md:flex-shrink-0 flex flex-col shadow-2xl">
+        <div class="h-16 flex items-center px-6 bg-slate-950 border-b border-slate-800">
+            <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold text-lg mr-3">T</div>
+            <span class="font-bold text-xl text-white tracking-tight">TdS Gestão</span>
+        </div>
+        <div class="p-6 border-b border-slate-800">
+            <div class="text-xs font-bold text-slate-500 uppercase mb-1">Olá,</div>
+            <div class="text-sm font-bold text-white truncate">{{ current_user.real_name }}</div>
+        </div>
+        <nav class="flex-1 overflow-y-auto py-4">
+            <ul class="space-y-1">
+                <li><a href="/" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-home w-6 text-center mr-2 text-slate-500 group-hover:text-blue-500"></i><span class="font-medium">Início</span></a></li>
+                
+                {% if current_user.role == 'Master' %}
+                <li><a href="/admin/usuarios" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-users w-6 text-center mr-2 text-slate-500 group-hover:text-blue-500"></i><span class="font-medium">Funcionários</span></a></li>
+                {% endif %}
+                
+                <li><a href="/logout" class="flex items-center px-6 py-3 hover:bg-red-900/20 hover:text-red-400 transition group mt-8"><i class="fas fa-sign-out-alt w-6 text-center mr-2 text-slate-500 group-hover:text-red-400"></i><span class="font-medium">Sair</span></a></li>
+            </ul>
+        </nav>
+    </aside>
     {% endif %}
-
-    <!-- Wrapper Principal (Flex Row) -->
-    <div class="{% if current_user.is_authenticated and not current_user.is_first_access %}flex h-screen overflow-hidden{% endif %}">
-        
-        <!-- Sidebar (Dentro do Flex) -->
-        {% if current_user.is_authenticated and not current_user.is_first_access %}
-        <aside id="sidebar" class="sidebar fixed inset-y-0 left-0 z-50 w-64 bg-slate-900 text-slate-300 transform -translate-x-full md:translate-x-0 md:static md:flex-shrink-0 flex flex-col shadow-2xl h-full">
-            <div class="h-16 flex items-center px-6 bg-slate-950 border-b border-slate-800">
-                <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold text-lg mr-3">T</div>
-                <span class="font-bold text-xl text-white tracking-tight">TdS Gestão</span>
-            </div>
-            <div class="p-6 border-b border-slate-800">
-                <div class="text-xs font-bold text-slate-500 uppercase mb-1">Olá,</div>
-                <div class="text-sm font-bold text-white truncate">{{ current_user.real_name }}</div>
-            </div>
-            <nav class="flex-1 overflow-y-auto py-4">
-                <ul class="space-y-1">
-                    <li><a href="/" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-home w-6 text-center mr-2 text-slate-500 group-hover:text-blue-500"></i><span class="font-medium">Início</span></a></li>
-                    
-                    {% if current_user.role == 'Master' %}
-                    <li><a href="/admin/usuarios" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-users w-6 text-center mr-2 text-slate-500 group-hover:text-blue-500"></i><span class="font-medium">Funcionários</span></a></li>
-                    {% endif %}
-                    
-                    <li><a href="/logout" class="flex items-center px-6 py-3 hover:bg-red-900/20 hover:text-red-400 transition group mt-8"><i class="fas fa-sign-out-alt w-6 text-center mr-2 text-slate-500 group-hover:text-red-400"></i><span class="font-medium">Sair</span></a></li>
-                </ul>
-            </nav>
-        </aside>
-        {% endif %}
-
-        <!-- Conteúdo Principal (Dentro do Flex, ocupa o resto) -->
-        <div class="flex-1 h-full overflow-y-auto bg-slate-50 relative w-full">
+    <div class="{% if current_user.is_authenticated and not current_user.is_first_access %}md:flex md:flex-row h-screen overflow-hidden{% endif %}">
+        <div class="flex-1 h-full overflow-y-auto bg-slate-50">
             <div class="max-w-5xl mx-auto p-4 md:p-8 pb-20">
                 {% with messages = get_flashed_messages() %}
                     {% if messages %}
@@ -76,7 +67,6 @@
                 {% endwith %}
                 {% block content %}{% endblock %}
             </div>
-            
             {% if current_user.is_authenticated and not current_user.is_first_access %}
             <footer class="py-6 text-center text-xs text-slate-400">&copy; 2026 TdS Gestão de RH</footer>
             {% endif %}
