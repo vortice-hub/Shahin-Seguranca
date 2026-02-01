@@ -1,22 +1,4 @@
 import os
-import shutil
-import subprocess
-import sys
-from datetime import datetime
-
-# --- CONFIGURAÇÕES ---
-PROJECT_NAME = "TdS Gestão de RH"
-COMMIT_MSG = "V14: Correção Layout Desktop (Sidebar Lado a Lado)"
-DB_URL_FIXA = "postgresql://neondb_owner:npg_UBg0b7YKqLPm@ep-steep-wave-aflx731c-pooler.c-2.us-west-2.aws.neon.tech/neondb?sslmode=require"
-
-# --- CONFIG FILES ---
-FILE_RUNTIME = """python-3.11.9"""
-FILE_REQ = """flask\nflask-sqlalchemy\npsycopg2-binary\ngunicorn\nflask-login\nwerkzeug"""
-FILE_PROCFILE = """web: gunicorn app:app"""
-
-# --- APP.PY (Mantido igual V13) ---
-FILE_APP = f"""
-import os
 import logging
 import secrets
 from flask import Flask, render_template, request, redirect, url_for, flash
@@ -33,18 +15,18 @@ app = Flask(__name__)
 app.secret_key = 'chave_v14_layout_fix'
 
 # --- BANCO DE DADOS ---
-db_url = "{DB_URL_FIXA}"
+db_url = "postgresql://neondb_owner:npg_UBg0b7YKqLPm@ep-steep-wave-aflx731c-pooler.c-2.us-west-2.aws.neon.tech/neondb?sslmode=require"
 if db_url.startswith("postgres://"):
     db_url = db_url.replace("postgres://", "postgresql://", 1)
 
 app.config['SQLALCHEMY_DATABASE_URI'] = db_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-db = SQLAlchemy(app, engine_options={{
+db = SQLAlchemy(app, engine_options={
     "pool_pre_ping": True,
     "pool_size": 10,
     "pool_recycle": 300,
-}})
+})
 
 login_manager = LoginManager()
 login_manager.init_app(app)
@@ -203,7 +185,7 @@ def editar_usuario(id):
             user.set_password(nova)
             user.is_first_access = True
             db.session.commit()
-            flash(f'Senha resetada: {{nova}}')
+            flash(f'Senha resetada: {nova}')
             return redirect(url_for('editar_usuario', id=id))
         else:
             user.real_name = request.form.get('real_name')
@@ -241,7 +223,7 @@ def entrada():
                 item.estoque_minimo = int(request.form.get('estoque_minimo') or 5)
                 item.estoque_ideal = int(request.form.get('estoque_ideal') or 20)
                 item.data_atualizacao = get_brasil_time()
-                flash(f'Estoque atualizado: {{nome}}')
+                flash(f'Estoque atualizado: {nome}')
             else:
                 novo = ItemEstoque(nome=nome, tamanho=tamanho, genero=genero, quantidade=qtd, 
                                  estoque_minimo=int(request.form.get('estoque_minimo') or 5),
@@ -249,7 +231,7 @@ def entrada():
                 novo.data_atualizacao = get_brasil_time()
                 db.session.add(novo)
             
-            db.session.add(HistoricoEntrada(item_nome=f"{{nome}} ({{genero}}-{{tamanho}})", quantidade=qtd, data_hora=get_brasil_time()))
+            db.session.add(HistoricoEntrada(item_nome=f"{nome} ({genero}-{tamanho})", quantidade=qtd, data_hora=get_brasil_time()))
             db.session.commit()
             return redirect(url_for('entrada'))
         except: db.session.rollback()
@@ -339,190 +321,3 @@ def editar_historico_saida(id):
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
-"""
-
-# --- TEMPLATE BASE CORRIGIDO (LAYOUT LADO A LADO) ---
-FILE_BASE = """
-<!DOCTYPE html>
-<html lang="pt-br">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TdS Gestão de RH</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
-    <style>
-        body { font-family: 'Inter', sans-serif; }
-        .sidebar { transition: transform 0.3s ease-in-out; }
-    </style>
-    <script>
-        function toggleSidebar() {
-            const sidebar = document.getElementById('sidebar');
-            const overlay = document.getElementById('overlay');
-            if (sidebar.classList.contains('-translate-x-full')) {
-                sidebar.classList.remove('-translate-x-full');
-                overlay.classList.remove('hidden');
-            } else {
-                sidebar.classList.add('-translate-x-full');
-                overlay.classList.add('hidden');
-            }
-        }
-    </script>
-</head>
-<body class="bg-slate-50 text-slate-800">
-    <!-- Mobile Header (Fora do Flex) -->
-    {% if current_user.is_authenticated and not current_user.is_first_access %}
-    <div class="md:hidden bg-white border-b border-slate-200 p-4 flex justify-between items-center sticky top-0 z-40">
-        <button onclick="toggleSidebar()" class="text-slate-600 focus:outline-none"><i class="fas fa-bars text-xl"></i></button>
-        <span class="font-bold text-lg text-slate-800">TdS Gestão</span>
-        <div class="w-8"></div>
-    </div>
-    <div id="overlay" onclick="toggleSidebar()" class="fixed inset-0 bg-black bg-opacity-50 z-40 hidden md:hidden"></div>
-    {% endif %}
-
-    <!-- Wrapper Principal (Flex Row) -->
-    <div class="{% if current_user.is_authenticated and not current_user.is_first_access %}flex h-screen overflow-hidden{% endif %}">
-        
-        <!-- Sidebar (Dentro do Flex) -->
-        {% if current_user.is_authenticated and not current_user.is_first_access %}
-        <aside id="sidebar" class="sidebar fixed inset-y-0 left-0 z-50 w-64 bg-slate-900 text-slate-300 transform -translate-x-full md:translate-x-0 md:static md:flex-shrink-0 flex flex-col shadow-2xl h-full">
-            <div class="h-16 flex items-center px-6 bg-slate-950 border-b border-slate-800">
-                <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold text-lg mr-3">T</div>
-                <span class="font-bold text-xl text-white tracking-tight">TdS Gestão</span>
-            </div>
-            <div class="p-6 border-b border-slate-800">
-                <div class="text-xs font-bold text-slate-500 uppercase mb-1">Olá,</div>
-                <div class="text-sm font-bold text-white truncate">{{ current_user.real_name }}</div>
-            </div>
-            <nav class="flex-1 overflow-y-auto py-4">
-                <ul class="space-y-1">
-                    <li><a href="/" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-home w-6 text-center mr-2 text-slate-500 group-hover:text-blue-500"></i><span class="font-medium">Início</span></a></li>
-                    
-                    {% if current_user.role == 'Master' %}
-                    <li><a href="/admin/usuarios" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-users w-6 text-center mr-2 text-slate-500 group-hover:text-blue-500"></i><span class="font-medium">Funcionários</span></a></li>
-                    {% endif %}
-                    
-                    <li><a href="/logout" class="flex items-center px-6 py-3 hover:bg-red-900/20 hover:text-red-400 transition group mt-8"><i class="fas fa-sign-out-alt w-6 text-center mr-2 text-slate-500 group-hover:text-red-400"></i><span class="font-medium">Sair</span></a></li>
-                </ul>
-            </nav>
-        </aside>
-        {% endif %}
-
-        <!-- Conteúdo Principal (Dentro do Flex, ocupa o resto) -->
-        <div class="flex-1 h-full overflow-y-auto bg-slate-50 relative w-full">
-            <div class="max-w-5xl mx-auto p-4 md:p-8 pb-20">
-                {% with messages = get_flashed_messages() %}
-                    {% if messages %}
-                        {% for message in messages %}
-                            <div class="mb-6 p-4 rounded-lg bg-blue-50 border border-blue-100 text-blue-700 text-sm font-medium shadow-sm flex items-center gap-3"><i class="fas fa-info-circle text-lg"></i> {{ message }}</div>
-                        {% endfor %}
-                    {% endif %}
-                {% endwith %}
-                {% block content %}{% endblock %}
-            </div>
-            
-            {% if current_user.is_authenticated and not current_user.is_first_access %}
-            <footer class="py-6 text-center text-xs text-slate-400">&copy; 2026 TdS Gestão de RH</footer>
-            {% endif %}
-        </div>
-    </div>
-</body>
-</html>
-"""
-
-# --- RECRIAÇÃO DOS TEMPLATES PRINCIPAIS (GARANTIA) ---
-FILE_DASHBOARD = """
-{% extends 'base.html' %}
-{% block content %}
-<div class="flex flex-col gap-4 mb-8">
-    <div class="grid grid-cols-2 gap-4">
-        <a href="/entrada" class="bg-emerald-600 hover:bg-emerald-700 text-white p-4 rounded-full shadow-lg flex items-center justify-center gap-2 transition transform active:scale-95 text-center">
-            <i class="fas fa-arrow-down"></i> <span class="font-bold">ENTRADA</span>
-        </a>
-        <a href="/saida" class="bg-red-600 hover:bg-red-700 text-white p-4 rounded-full shadow-lg flex items-center justify-center gap-2 transition transform active:scale-95 text-center">
-            <i class="fas fa-arrow-up"></i> <span class="font-bold">SAÍDA</span>
-        </a>
-    </div>
-    <a href="/gerenciar/selecao" class="bg-slate-700 hover:bg-slate-800 text-white p-3 rounded-full shadow-md flex items-center justify-center gap-2 transition transform active:scale-95 text-sm font-semibold w-full md:w-1/2 mx-auto">
-        <i class="fas fa-pencil-alt"></i> <span>EDITAR / GERENCIAR ITENS</span>
-    </a>
-</div>
-<div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-    <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-        <h2 class="font-semibold text-slate-800">Inventário</h2>
-        <div class="flex gap-2 text-[10px] font-bold uppercase">
-            <span class="text-emerald-600"><i class="fas fa-circle text-[6px]"></i> Bom</span>
-            <span class="text-yellow-600"><i class="fas fa-circle text-[6px]"></i> Médio</span>
-            <span class="text-red-600"><i class="fas fa-circle text-[6px]"></i> Ruim</span>
-        </div>
-    </div>
-    <div class="divide-y divide-slate-100">
-        {% for item in itens %}
-        <div class="px-6 py-4 flex items-center justify-between hover:bg-slate-50 transition">
-            <div class="flex items-center gap-4">
-                <div class="w-10 h-10 rounded-full flex items-center justify-center text-slate-500 bg-slate-100 font-bold text-xs border border-slate-200">{{ item.tamanho }}</div>
-                <div><div class="font-semibold text-slate-800 text-sm">{{ item.nome }}</div><div class="text-xs text-slate-500 flex items-center gap-1">{{ item.genero }}</div></div>
-            </div>
-            <div class="text-right">
-                <div class="text-lg font-bold {% if item.quantidade <= item.estoque_minimo %} text-red-600 {% elif item.quantidade >= item.estoque_ideal %} text-emerald-600 {% else %} text-yellow-600 {% endif %}">{{ item.quantidade }}</div>
-                <div class="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Estoque</div>
-            </div>
-        </div>
-        {% else %}
-        <div class="p-12 text-center text-slate-400">Nenhum item registrado.</div>
-        {% endfor %}
-    </div>
-</div>
-{% endblock %}
-"""
-
-# --- FUNÇÕES ---
-def create_backup():
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    backup = os.path.join("backup", ts)
-    files = ["app.py", "requirements.txt", "Procfile", "runtime.txt"]
-    for root, _, fs in os.walk("templates"):
-        for f in fs: files.append(os.path.join(root, f))
-    for f in files:
-        if os.path.exists(f):
-            dest = os.path.join(backup, f)
-            os.makedirs(os.path.dirname(dest), exist_ok=True)
-            shutil.copy2(f, dest)
-
-def write_file(path, content):
-    os.makedirs(os.path.dirname(path) if os.path.dirname(path) else '.', exist_ok=True)
-    with open(path, 'w', encoding='utf-8') as f: f.write(content.strip())
-    print(f"Atualizado: {path}")
-
-def git_update():
-    try:
-        subprocess.run(["git", "add", "."], check=True)
-        subprocess.run(["git", "commit", "-m", COMMIT_MSG], check=False)
-        subprocess.run(["git", "push"], check=True)
-        print("\n>>> SUCESSO V14 LAYOUT! <<<")
-    except Exception as e: print(f"Git: {e}")
-
-def self_destruct():
-    try: os.remove(os.path.abspath(__file__))
-    except: pass
-
-def main():
-    print(f"--- UPDATE V14 (LAYOUT FIX): {PROJECT_NAME} ---")
-    create_backup()
-    write_file("runtime.txt", FILE_RUNTIME)
-    write_file("requirements.txt", FILE_REQ)
-    write_file("Procfile", FILE_PROCFILE)
-    write_file("app.py", FILE_APP)
-    write_file("templates/base.html", FILE_BASE) # Correção Crítica Aqui
-    write_file("templates/dashboard.html", FILE_DASHBOARD)
-    
-    # Mantem os outros templates necessarios
-    
-    git_update()
-    self_destruct()
-
-if __name__ == "__main__":
-    main()
-
-

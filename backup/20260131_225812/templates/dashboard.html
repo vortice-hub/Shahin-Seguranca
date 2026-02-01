@@ -1,24 +1,5 @@
 {% extends 'base.html' %}
 {% block content %}
-
-<!-- Widget de Ponto -->
-<div class="bg-gradient-to-r from-blue-900 to-slate-900 rounded-2xl p-6 text-white shadow-xl mb-8 flex justify-between items-center relative overflow-hidden">
-    <!-- Efeito de fundo -->
-    <div class="absolute top-0 right-0 -mr-4 -mt-4 w-24 h-24 bg-white opacity-10 rounded-full blur-xl"></div>
-    
-    <div>
-        <p class="text-xs font-bold text-blue-300 uppercase tracking-widest mb-1">Status do Ponto</p>
-        <h2 class="text-2xl font-bold mb-1">{{ status_ponto }}</h2>
-        <p class="text-xs opacity-70">{{ current_user.real_name }}</p>
-    </div>
-    
-    <a href="/ponto/registrar" class="bg-white text-blue-900 hover:bg-blue-50 font-bold py-3 px-6 rounded-full shadow-lg transition transform hover:scale-105 flex items-center gap-2 z-10">
-        <i class="fas fa-fingerprint"></i>
-        <span>REGISTRAR</span>
-    </a>
-</div>
-
-<!-- Botões de Ação Estoque -->
 <div class="flex flex-col gap-4 mb-8">
     <div class="grid grid-cols-2 gap-4">
         <a href="/entrada" class="bg-emerald-600 hover:bg-emerald-700 text-white p-4 rounded-full shadow-lg flex items-center justify-center gap-2 transition transform active:scale-95 text-center">
@@ -32,8 +13,6 @@
         <i class="fas fa-pencil-alt"></i> <span>EDITAR / GERENCIAR ITENS</span>
     </a>
 </div>
-
-<!-- Lista de Inventário -->
 <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
     <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
         <h2 class="font-semibold text-slate-800">Inventário</h2>
