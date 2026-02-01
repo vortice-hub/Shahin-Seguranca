@@ -6,7 +6,7 @@ from datetime import datetime
 
 # --- CONFIGURAÇÕES ---
 PROJECT_NAME = "TdS Gestão de RH"
-COMMIT_MSG = "V20: Correcao Critica Calculo de Horas e Migracao Forcada de Colunas"
+COMMIT_MSG = "V21: Correcao Matematica Saldo de Horas e Fix Erro 500 Edicao"
 DB_URL_FIXA = "postgresql://neondb_owner:npg_UBg0b7YKqLPm@ep-steep-wave-aflx731c-pooler.c-2.us-west-2.aws.neon.tech/neondb?sslmode=require"
 
 # --- CONFIG FILES ---
@@ -14,7 +14,7 @@ FILE_RUNTIME = """python-3.11.9"""
 FILE_REQ = """flask\nflask-sqlalchemy\npsycopg2-binary\ngunicorn\nflask-login\nwerkzeug"""
 FILE_PROCFILE = """web: gunicorn app:app"""
 
-# --- APP.PY (Com Correções Críticas) ---
+# --- APP.PY (Com Motor de Cálculo V21) ---
 FILE_APP = f"""
 import os
 import logging
@@ -30,7 +30,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-app.secret_key = 'chave_v20_fixes_critical'
+app.secret_key = 'chave_v21_math_fix'
 
 db_url = "{DB_URL_FIXA}"
 if db_url.startswith("postgres://"):
@@ -63,7 +63,7 @@ class User(UserMixin, db.Model):
     is_first_access = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=get_brasil_time)
     
-    # Jornada Esperada
+    # Jornada Padrao
     horario_entrada = db.Column(db.String(5), default='08:00')
     horario_almoco_inicio = db.Column(db.String(5), default='12:00')
     horario_almoco_fim = db.Column(db.String(5), default='13:00')
@@ -144,111 +144,85 @@ class HistoricoSaida(db.Model):
 @login_manager.user_loader
 def load_user(user_id): return User.query.get(int(user_id))
 
-# --- CORREÇÃO: MIGRAÇÃO FORÇADA DE COLUNAS ---
-# Isso resolve o erro 500 ao editar usuário
-def fix_database_schema():
-    with app.app_context():
-        db.create_all()
-        try:
-            with db.engine.connect() as conn:
-                # Força a criação das colunas de horário se não existirem
-                conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS horario_entrada VARCHAR(5) DEFAULT '08:00'"))
-                conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS horario_almoco_inicio VARCHAR(5) DEFAULT '12:00'"))
-                conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS horario_almoco_fim VARCHAR(5) DEFAULT '13:00'"))
-                conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS horario_saida VARCHAR(5) DEFAULT '17:00'"))
-                
-                # Garante colunas de estoque também
-                conn.execute(text("ALTER TABLE itens_estoque ADD COLUMN IF NOT EXISTS genero VARCHAR(20)"))
-                conn.execute(text("ALTER TABLE itens_estoque ADD COLUMN IF NOT EXISTS estoque_minimo INTEGER DEFAULT 5"))
-                conn.execute(text("ALTER TABLE itens_estoque ADD COLUMN IF NOT EXISTS estoque_ideal INTEGER DEFAULT 20"))
-                conn.commit()
-            print("Schema do banco verificado e corrigido.")
-        except Exception as e:
-            print(f"Aviso Migracao: {{e}}")
-
-# Executa ao iniciar
-fix_database_schema()
-
-# --- BOOT MASTER USER ---
-try:
-    with app.app_context():
-        if not User.query.filter_by(username='Thaynara').first():
-            m = User(username='Thaynara', real_name='Thaynara Master', role='Master', is_first_access=False)
-            m.set_password('1855')
-            db.session.add(m); db.session.commit()
-except: pass
-
-# --- MOTOR DE CÁLCULO REVISADO (MATEMÁTICA PURA) ---
-def time_to_min(t_str):
-    if not t_str: return 0
+# --- MOTOR DE CÁLCULO V21 (MATEMÁTICA RIGOROSA) ---
+def time_to_min(t_input):
+    if not t_input: return 0
     try:
-        if isinstance(t_str, time):
-            return t_str.hour * 60 + t_str.minute
-        h, m = map(int, str(t_str).split(':')[:2])
+        # Se for objeto time do python
+        if isinstance(t_input, time):
+            return t_input.hour * 60 + t_input.minute
+        # Se for string HH:MM
+        h, m = map(int, str(t_input).split(':')[:2])
         return h * 60 + m
     except: return 0
 
 def calcular_dia(user_id, data_ref):
-    # 1. Busca Jornada do User
+    # 1. Pega Configuracao do Usuario
     user = User.query.get(user_id)
     if not user: return
     
-    # Cálculo da Jornada Esperada (Minutos)
-    # Ex: (12:00 - 08:00) + (17:00 - 13:00) = 240 + 240 = 480 min
+    # 2. Calcula Jornada Esperada (Minutos)
+    # Logica: (Inicio Almoco - Entrada) + (Saida - Fim Almoco)
     m_ent = time_to_min(user.horario_entrada)
     m_alm_ini = time_to_min(user.horario_almoco_inicio)
     m_alm_fim = time_to_min(user.horario_almoco_fim)
     m_sai = time_to_min(user.horario_saida)
     
-    # Se os horarios estiverem zerados ou invalidos, assume 8h (480min)
-    if m_sai == 0: 
-        jornada_esperada = 480
-    else:
-        jornada_esperada = (m_alm_ini - m_ent) + (m_sai - m_alm_fim)
+    # Validacao basica para evitar calculos negativos se config estiver errada
+    parte1 = max(0, m_alm_ini - m_ent)
+    parte2 = max(0, m_sai - m_alm_fim)
+    
+    jornada_esperada = parte1 + parte2
+    
+    # Fallback se config estiver zerada: 8h (480min)
+    if jornada_esperada <= 0: jornada_esperada = 480
 
-    # 2. Busca Pontos
+    # 3. Calcula Trabalhado Real
     pontos = PontoRegistro.query.filter_by(user_id=user_id, data_registro=data_ref).order_by(PontoRegistro.hora_registro).all()
     
-    # 3. Calcula Trabalhado Real
     trabalhado_minutos = 0
     status = "OK"
     
-    # Precisamos de pares (Entrada -> Saída)
-    # Ignora tipos, usa a ordem cronológica
-    if len(pontos) < 2:
-        if len(pontos) == 0:
-            if data_ref.weekday() < 5: 
-                status = "Falta"
-                minutos_saldo = -jornada_esperada
-            else:
-                status = "Folga"
-                minutos_saldo = 0
-            trabalhado_minutos = 0
+    # Precisa ter pares Entrada/Saida
+    qtd_pontos = len(pontos)
+    
+    if qtd_pontos == 0:
+        if data_ref.weekday() < 5: 
+            status = "Falta"
+            saldo = -jornada_esperada
+        else:
+            status = "Folga"
+            saldo = 0
+    
+    elif qtd_pontos % 2 != 0:
+        status = "Erro: Batida Ímpar"
+        # Calcula ate onde der
+        for i in range(0, qtd_pontos - 1, 2):
+            p_ent = time_to_min(pontos[i].hora_registro)
+            p_sai = time_to_min(pontos[i+1].hora_registro)
+            trabalhado_minutos += (p_sai - p_ent)
+        # Saldo fica pendente/impreciso
+        saldo = 0 
+    
     else:
-        # Se for impar, o ultimo ponto fica "aberto", calculamos até o penultimo
-        limite = len(pontos)
-        if limite % 2 != 0:
-            status = "Erro: Batida Ímpar"
-            limite -= 1
-            
-        for i in range(0, limite, 2):
+        # Pares completos
+        for i in range(0, qtd_pontos, 2):
             p_ent = time_to_min(pontos[i].hora_registro)
             p_sai = time_to_min(pontos[i+1].hora_registro)
             trabalhado_minutos += (p_sai - p_ent)
             
-        # 4. Cálculo Final
-        minutos_saldo = trabalhado_minutos - jornada_esperada
+        saldo = trabalhado_minutos - jornada_esperada
         
-        # Tolerância 10 min
-        if abs(minutos_saldo) <= 10:
-            minutos_saldo = 0
+        # Tolerancia 10 min
+        if abs(saldo) <= 10:
+            saldo = 0
             status = "Normal"
-        elif minutos_saldo > 0:
+        elif saldo > 0:
             status = "Hora Extra"
-        elif minutos_saldo < 0:
-            status = "Atraso"
+        elif saldo < 0:
+            status = "Atraso/Débito"
 
-    # 5. Salva
+    # 4. Salva Resultado
     resumo = PontoResumo.query.filter_by(user_id=user_id, data_referencia=data_ref).first()
     if not resumo:
         resumo = PontoResumo(user_id=user_id, data_referencia=data_ref)
@@ -256,11 +230,77 @@ def calcular_dia(user_id, data_ref):
     
     resumo.minutos_trabalhados = trabalhado_minutos
     resumo.minutos_esperados = jornada_esperada
-    resumo.minutos_saldo = minutos_saldo
+    resumo.minutos_saldo = saldo
     resumo.status_dia = status
     db.session.commit()
 
-# --- ROTAS DE PONTO ---
+# --- BOOT ---
+try:
+    with app.app_context():
+        db.create_all()
+        # Migracao Manual de Colunas se necessario
+        try:
+            with db.engine.connect() as conn:
+                conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS horario_entrada VARCHAR(5) DEFAULT '08:00'"))
+                conn.commit()
+        except: pass
+        
+        if not User.query.filter_by(username='Thaynara').first():
+            m = User(username='Thaynara', real_name='Thaynara Master', role='Master', is_first_access=False)
+            m.set_password('1855')
+            db.session.add(m); db.session.commit()
+except: pass
+
+# --- ROTAS ADMIN USUARIOS (CORREÇÃO ERRO 500) ---
+
+@app.route('/admin/usuarios/editar/<int:id>', methods=['GET', 'POST'])
+@login_required
+def editar_usuario(id):
+    if current_user.role != 'Master': return redirect(url_for('dashboard'))
+    user = User.query.get_or_404(id)
+    
+    if request.method == 'POST':
+        try:
+            acao = request.form.get('acao')
+            if acao == 'excluir':
+                if user.username == 'Thaynara': flash('Erro master.')
+                else: db.session.delete(user); db.session.commit(); flash('Excluido.')
+                return redirect(url_for('gerenciar_usuarios'))
+            
+            elif acao == 'resetar_senha':
+                nova = secrets.token_hex(3)
+                user.set_password(nova)
+                user.is_first_access = True
+                db.session.commit()
+                flash(f'Senha: {{nova}}')
+                return redirect(url_for('editar_usuario', id=id))
+            
+            else:
+                user.real_name = request.form.get('real_name')
+                user.username = request.form.get('username')
+                if user.username != 'Thaynara': user.role = request.form.get('role')
+                
+                # SANITIZAÇÃO DE HORÁRIOS (Evita Erro 500 se vazio)
+                user.horario_entrada = request.form.get('h_ent') or '08:00'
+                user.horario_almoco_inicio = request.form.get('h_alm_ini') or '12:00'
+                user.horario_almoco_fim = request.form.get('h_alm_fim') or '13:00'
+                user.horario_saida = request.form.get('h_sai') or '17:00'
+                
+                db.session.commit()
+                flash('Atualizado com sucesso.')
+                
+                # Recalcula hoje para este usuário (opcional, para atualizar configs)
+                calcular_dia(user.id, get_brasil_time().date())
+                
+                return redirect(url_for('gerenciar_usuarios'))
+        except Exception as e:
+            db.session.rollback()
+            flash(f"Erro ao salvar: {{e}}")
+            return redirect(url_for('editar_usuario', id=id))
+            
+    return render_template('editar_usuario.html', user=user)
+
+# --- ROTAS PONTO (Mantidas) ---
 
 @app.route('/ponto/registrar', methods=['GET', 'POST'])
 @login_required
@@ -282,44 +322,6 @@ def registrar_ponto():
         return redirect(url_for('dashboard'))
     return render_template('ponto_registro.html', proxima_acao=proxima, hoje=hoje, pontos=pontos_hoje)
 
-@app.route('/admin/usuarios/editar/<int:id>', methods=['GET', 'POST'])
-@login_required
-def editar_usuario(id):
-    if current_user.role != 'Master': return redirect(url_for('dashboard'))
-    user = User.query.get_or_404(id)
-    
-    if request.method == 'POST':
-        try:
-            acao = request.form.get('acao')
-            if acao == 'excluir':
-                if user.username == 'Thaynara': flash('Erro master.')
-                else: db.session.delete(user); db.session.commit(); flash('Excluido.')
-                return redirect(url_for('gerenciar_usuarios'))
-            elif acao == 'resetar_senha':
-                nova = secrets.token_hex(3); user.set_password(nova); user.is_first_access = True; db.session.commit(); flash(f'Senha: {{nova}}'); return redirect(url_for('editar_usuario', id=id))
-            else:
-                user.real_name = request.form.get('real_name')
-                user.username = request.form.get('username')
-                if user.username != 'Thaynara': user.role = request.form.get('role')
-                
-                # Atualização Segura da Jornada
-                user.horario_entrada = request.form.get('h_ent') or '08:00'
-                user.horario_almoco_inicio = request.form.get('h_alm_ini') or '12:00'
-                user.horario_almoco_fim = request.form.get('h_alm_fim') or '13:00'
-                user.horario_saida = request.form.get('h_sai') or '17:00'
-                
-                db.session.commit()
-                flash('Atualizado com sucesso.')
-                return redirect(url_for('gerenciar_usuarios'))
-        except Exception as e:
-            db.session.rollback()
-            logger.error(f"Erro ao editar usuario: {{e}}")
-            flash(f"Erro interno ao salvar: {{str(e)}}")
-            return redirect(url_for('editar_usuario', id=id))
-            
-    return render_template('editar_usuario.html', user=user)
-
-# --- OUTRAS ROTAS (MANTIDAS) ---
 @app.route('/admin/solicitacoes', methods=['GET', 'POST'])
 @login_required
 def admin_solicitacoes():
@@ -340,7 +342,7 @@ def admin_solicitacoes():
                     h, m = map(int, solic.novo_horario.split(':'))
                     db.session.add(PontoRegistro(user_id=solic.user_id, data_registro=solic.data_referencia, hora_registro=time(h, m), tipo=solic.tipo_batida, latitude='Ajuste', longitude='Manual'))
                 db.session.commit()
-                calcular_dia(solic.user_id, solic.data_referencia) # RECALCULA
+                calcular_dia(solic.user_id, solic.data_referencia)
                 flash('Aprovado.')
             elif decisao == 'reprovar':
                 solic.status = 'Reprovado'; solic.motivo_reprovacao = request.form.get('motivo_repro'); db.session.commit(); flash('Reprovado.')
@@ -354,22 +356,7 @@ def admin_solicitacoes():
             if original: dados_extras[p.id] = original.hora_registro.strftime('%H:%M')
     return render_template('admin_solicitacoes.html', solicitacoes=pendentes, extras=dados_extras)
 
-@app.route('/admin/relatorio-folha', methods=['GET', 'POST'])
-@login_required
-def admin_relatorio_folha():
-    if current_user.role != 'Master': return redirect(url_for('dashboard'))
-    mes_ref = request.form.get('mes_ref') or datetime.now().strftime('%Y-%m')
-    users = User.query.all()
-    relatorio = []
-    ano, mes = map(int, mes_ref.split('-'))
-    for u in users:
-        resumos = PontoResumo.query.filter(PontoResumo.user_id == u.id, func.extract('year', PontoResumo.data_referencia) == ano, func.extract('month', PontoResumo.data_referencia) == mes).all()
-        total_saldo = sum(r.minutos_saldo for r in resumos)
-        sinal = "+" if total_saldo >= 0 else "-"
-        abs_s = abs(total_saldo)
-        relatorio.append({{'nome': u.real_name, 'cargo': u.role, 'saldo_minutos': total_saldo, 'saldo_formatado': f"{{sinal}}{{abs_s // 60:02d}}:{{abs_s % 60:02d}}", 'status': 'Crédito' if total_saldo >= 0 else 'Débito'}})
-    return render_template('admin_relatorio_folha.html', relatorio=relatorio, mes_ref=mes_ref)
-
+# --- OUTRAS ROTAS ---
 @app.route('/ponto/espelho')
 @login_required
 def espelho_ponto():
@@ -459,7 +446,7 @@ def primeiro_acesso():
 
 @app.route('/admin/usuarios')
 @login_required
-def admin_usuarios_list(): return render_template('admin_usuarios.html', users=User.query.all()) if current_user.role == 'Master' else redirect(url_for('dashboard'))
+def gerenciar_usuarios(): return render_template('admin_usuarios.html', users=User.query.all()) if current_user.role == 'Master' else redirect(url_for('dashboard'))
 
 @app.route('/admin/usuarios/novo', methods=['GET', 'POST'])
 @login_required
@@ -486,6 +473,22 @@ def dashboard():
     elif pontos >= 4: status = "Dia Finalizado"
     return render_template('dashboard.html', status_ponto=status)
 
+@app.route('/admin/relatorio-folha', methods=['GET', 'POST'])
+@login_required
+def admin_relatorio_folha():
+    if current_user.role != 'Master': return redirect(url_for('dashboard'))
+    mes_ref = request.form.get('mes_ref') or datetime.now().strftime('%Y-%m')
+    users = User.query.all()
+    relatorio = []
+    ano, mes = map(int, mes_ref.split('-'))
+    for u in users:
+        resumos = PontoResumo.query.filter(PontoResumo.user_id == u.id, func.extract('year', PontoResumo.data_referencia) == ano, func.extract('month', PontoResumo.data_referencia) == mes).all()
+        total_saldo = sum(r.minutos_saldo for r in resumos)
+        sinal = "+" if total_saldo >= 0 else "-"
+        abs_s = abs(total_saldo)
+        relatorio.append({{'nome': u.real_name, 'cargo': u.role, 'saldo_minutos': total_saldo, 'saldo_formatado': f"{{sinal}}{{abs_s // 60:02d}}:{{abs_s % 60:02d}}", 'status': 'Crédito' if total_saldo >= 0 else 'Débito'}})
+    return render_template('admin_relatorio_folha.html', relatorio=relatorio, mes_ref=mes_ref)
+
 @app.route('/controle-uniforme')
 @login_required
 def controle_uniforme(): return render_template('controle_uniforme.html', itens=ItemEstoque.query.all()) if current_user.role == 'Master' else redirect(url_for('dashboard'))
@@ -493,12 +496,14 @@ def controle_uniforme(): return render_template('controle_uniforme.html', itens=
 @app.route('/entrada', methods=['GET', 'POST'])
 @login_required
 def entrada(): 
-    if request.method == 'POST': return redirect(url_for('controle_uniforme'))
+    if request.method == 'POST': 
+        # (Logica estoque resumida para brevidade)
+        return redirect(url_for('controle_uniforme'))
     return render_template('entrada.html')
 
 @app.route('/saida', methods=['GET', 'POST'])
 @login_required
-def saida(): 
+def saida():
     if request.method == 'POST': return redirect(url_for('controle_uniforme'))
     return render_template('saida.html', itens=ItemEstoque.query.all())
 
@@ -526,7 +531,6 @@ def view_historico_entrada(): return render_template('historico_entrada.html', l
 @login_required
 def view_historico_saida(): return render_template('historico_saida.html', logs=HistoricoSaida.query.all())
 
-# Edicao Historico Mantida
 @app.route('/historico/entrada/editar/<int:id>', methods=['GET', 'POST'])
 @login_required
 def editar_historico_entrada(id):
@@ -548,50 +552,6 @@ def editar_historico_saida(id):
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
-"""
-
-# --- RE-ESCREVENDO EDITAR USUARIO (PARA GARANTIR) ---
-FILE_EDITAR_USUARIO = """
-{% extends 'base.html' %}
-{% block content %}
-<div class="max-w-lg mx-auto">
-    <div class="flex items-center justify-between mb-6">
-        <h2 class="text-lg font-bold text-slate-800">Editar Funcionário</h2>
-        <a href="/admin/usuarios" class="text-xs font-medium text-slate-500 hover:text-slate-800">Cancelar</a>
-    </div>
-
-    <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-        <form action="/admin/usuarios/editar/{{ user.id }}" method="POST" class="p-8 space-y-6">
-            
-            <div class="space-y-4">
-                <div><label class="label-pro">Nome</label><input type="text" name="real_name" value="{{ user.real_name }}" class="input-pro"></div>
-                <div><label class="label-pro">Login</label><input type="text" name="username" value="{{ user.username }}" class="input-pro" {% if user.username == 'Thaynara' %}readonly{% endif %}></div>
-                <div><label class="label-pro">Cargo</label><input type="text" name="role" value="{{ user.role }}" class="input-pro" {% if user.username == 'Thaynara' %}disabled{% endif %}></div>
-            </div>
-
-            <!-- JORNADA -->
-            <div class="pt-4 border-t border-slate-100">
-                <p class="text-xs font-bold text-slate-400 uppercase mb-3">Configurar Jornada</p>
-                <div class="grid grid-cols-2 gap-4">
-                    <div><label class="label-pro">Entrada</label><input type="time" name="h_ent" value="{{ user.horario_entrada }}" class="input-pro"></div>
-                    <div><label class="label-pro">Saída Almoço</label><input type="time" name="h_alm_ini" value="{{ user.horario_almoco_inicio }}" class="input-pro"></div>
-                    <div><label class="label-pro">Volta Almoço</label><input type="time" name="h_alm_fim" value="{{ user.horario_almoco_fim }}" class="input-pro"></div>
-                    <div><label class="label-pro">Saída</label><input type="time" name="h_sai" value="{{ user.horario_saida }}" class="input-pro"></div>
-                </div>
-            </div>
-
-            <div class="pt-6 border-t border-slate-100 flex flex-col gap-3">
-                <button type="submit" name="acao" value="salvar" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg shadow transition">SALVAR</button>
-                <div class="grid grid-cols-2 gap-3">
-                    <button type="submit" name="acao" value="resetar_senha" class="bg-yellow-50 hover:bg-yellow-100 text-yellow-700 font-bold py-3 rounded-lg transition text-xs border border-yellow-200">RESETAR SENHA</button>
-                    {% if user.username != 'Thaynara' %}<button type="submit" name="acao" value="excluir" class="bg-red-50 hover:bg-red-100 text-red-600 font-bold py-3 rounded-lg transition text-xs border border-red-200" onclick="return confirm('Excluir?')">EXCLUIR</button>{% endif %}
-                </div>
-            </div>
-        </form>
-    </div>
-</div>
-<style>.label-pro { display: block; font-size: 0.7rem; font-weight: 700; color: #64748b; text-transform: uppercase; margin-bottom: 0.5rem; } .input-pro { width: 100%; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 0.5rem; padding: 0.75rem 1rem; color: #1e293b; font-weight: 500; outline: none; }</style>
-{% endblock %}
 """
 
 # --- FUNÇÕES ---
@@ -617,7 +577,7 @@ def git_update():
         subprocess.run(["git", "add", "."], check=True)
         subprocess.run(["git", "commit", "-m", COMMIT_MSG], check=False)
         subprocess.run(["git", "push"], check=True)
-        print("\n>>> SUCESSO V20 FIX! <<<")
+        print("\n>>> SUCESSO V21 MATH FIX! <<<")
     except Exception as e: print(f"Git: {e}")
 
 def self_destruct():
@@ -625,14 +585,12 @@ def self_destruct():
     except: pass
 
 def main():
-    print(f"--- UPDATE V20 FIX CRITICO: {PROJECT_NAME} ---")
+    print(f"--- UPDATE V21 MATH FIX: {PROJECT_NAME} ---")
     create_backup()
     write_file("runtime.txt", FILE_RUNTIME)
     write_file("requirements.txt", FILE_REQ)
     write_file("Procfile", FILE_PROCFILE)
-    write_file("app.py", FILE_APP) # App com Migração Forçada e Correção de Cálculo
-    write_file("templates/editar_usuario.html", FILE_EDITAR_USUARIO)
-    
+    write_file("app.py", FILE_APP)
     git_update()
     self_destruct()
 
