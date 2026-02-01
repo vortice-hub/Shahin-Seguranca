@@ -1,4 +1,22 @@
 import os
+import shutil
+import subprocess
+import sys
+from datetime import datetime
+
+# --- CONFIGURAÇÕES ---
+PROJECT_NAME = "TdS Gestão de RH"
+COMMIT_MSG = "V20: Correcao Critica Calculo de Horas e Migracao Forcada de Colunas"
+DB_URL_FIXA = "postgresql://neondb_owner:npg_UBg0b7YKqLPm@ep-steep-wave-aflx731c-pooler.c-2.us-west-2.aws.neon.tech/neondb?sslmode=require"
+
+# --- CONFIG FILES ---
+FILE_RUNTIME = """python-3.11.9"""
+FILE_REQ = """flask\nflask-sqlalchemy\npsycopg2-binary\ngunicorn\nflask-login\nwerkzeug"""
+FILE_PROCFILE = """web: gunicorn app:app"""
+
+# --- APP.PY (Com Correções Críticas) ---
+FILE_APP = f"""
+import os
 import logging
 import secrets
 from flask import Flask, render_template, request, redirect, url_for, flash
@@ -14,18 +32,18 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 app.secret_key = 'chave_v20_fixes_critical'
 
-db_url = "postgresql://neondb_owner:npg_UBg0b7YKqLPm@ep-steep-wave-aflx731c-pooler.c-2.us-west-2.aws.neon.tech/neondb?sslmode=require"
+db_url = "{DB_URL_FIXA}"
 if db_url.startswith("postgres://"):
     db_url = db_url.replace("postgres://", "postgresql://", 1)
 
 app.config['SQLALCHEMY_DATABASE_URI'] = db_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-db = SQLAlchemy(app, engine_options={
+db = SQLAlchemy(app, engine_options={{
     "pool_pre_ping": True,
     "pool_size": 10,
     "pool_recycle": 300,
-})
+}})
 
 login_manager = LoginManager()
 login_manager.init_app(app)
@@ -146,7 +164,7 @@ def fix_database_schema():
                 conn.commit()
             print("Schema do banco verificado e corrigido.")
         except Exception as e:
-            print(f"Aviso Migracao: {e}")
+            print(f"Aviso Migracao: {{e}}")
 
 # Executa ao iniciar
 fix_database_schema()
@@ -278,7 +296,7 @@ def editar_usuario(id):
                 else: db.session.delete(user); db.session.commit(); flash('Excluido.')
                 return redirect(url_for('gerenciar_usuarios'))
             elif acao == 'resetar_senha':
-                nova = secrets.token_hex(3); user.set_password(nova); user.is_first_access = True; db.session.commit(); flash(f'Senha: {nova}'); return redirect(url_for('editar_usuario', id=id))
+                nova = secrets.token_hex(3); user.set_password(nova); user.is_first_access = True; db.session.commit(); flash(f'Senha: {{nova}}'); return redirect(url_for('editar_usuario', id=id))
             else:
                 user.real_name = request.form.get('real_name')
                 user.username = request.form.get('username')
@@ -295,8 +313,8 @@ def editar_usuario(id):
                 return redirect(url_for('gerenciar_usuarios'))
         except Exception as e:
             db.session.rollback()
-            logger.error(f"Erro ao editar usuario: {e}")
-            flash(f"Erro interno ao salvar: {str(e)}")
+            logger.error(f"Erro ao editar usuario: {{e}}")
+            flash(f"Erro interno ao salvar: {{str(e)}}")
             return redirect(url_for('editar_usuario', id=id))
             
     return render_template('editar_usuario.html', user=user)
@@ -326,10 +344,10 @@ def admin_solicitacoes():
                 flash('Aprovado.')
             elif decisao == 'reprovar':
                 solic.status = 'Reprovado'; solic.motivo_reprovacao = request.form.get('motivo_repro'); db.session.commit(); flash('Reprovado.')
-        except Exception as e: db.session.rollback(); flash(f'Erro: {e}')
+        except Exception as e: db.session.rollback(); flash(f'Erro: {{e}}')
         return redirect(url_for('admin_solicitacoes'))
     pendentes = PontoAjuste.query.filter_by(status='Pendente').order_by(PontoAjuste.created_at).all()
-    dados_extras = {}
+    dados_extras = {{}}
     for p in pendentes:
         if p.ponto_original_id:
             original = PontoRegistro.query.get(p.ponto_original_id)
@@ -349,7 +367,7 @@ def admin_relatorio_folha():
         total_saldo = sum(r.minutos_saldo for r in resumos)
         sinal = "+" if total_saldo >= 0 else "-"
         abs_s = abs(total_saldo)
-        relatorio.append({'nome': u.real_name, 'cargo': u.role, 'saldo_minutos': total_saldo, 'saldo_formatado': f"{sinal}{abs_s // 60:02d}:{abs_s % 60:02d}", 'status': 'Crédito' if total_saldo >= 0 else 'Débito'})
+        relatorio.append({{'nome': u.real_name, 'cargo': u.role, 'saldo_minutos': total_saldo, 'saldo_formatado': f"{{sinal}}{{abs_s // 60:02d}}:{{abs_s % 60:02d}}", 'status': 'Crédito' if total_saldo >= 0 else 'Débito'}})
     return render_template('admin_relatorio_folha.html', relatorio=relatorio, mes_ref=mes_ref)
 
 @app.route('/ponto/espelho')
@@ -363,9 +381,9 @@ def espelho_ponto():
         except: pass
     if current_user.role == 'Master':
         registros_raw = query.join(User).order_by(PontoRegistro.data_registro.desc(), User.real_name, PontoRegistro.hora_registro).limit(1000).all()
-        espelho_agrupado = {} 
+        espelho_agrupado = {{}} 
         for r in registros_raw:
-            chave = f"{r.data_registro}_{r.user_id}"
+            chave = f"{{r.data_registro}}_{{r.user_id}}"
             if chave not in espelho_agrupado:
                 resumo = PontoResumo.query.filter_by(user_id=r.user_id, data_referencia=r.data_registro).first()
                 saldo_fmt = "--:--"
@@ -373,14 +391,14 @@ def espelho_ponto():
                 if resumo:
                     abs_s = abs(resumo.minutos_saldo)
                     sinal = "+" if resumo.minutos_saldo >= 0 else "-"
-                    saldo_fmt = f"{sinal}{abs_s // 60:02d}:{abs_s % 60:02d}"
+                    saldo_fmt = f"{{sinal}}{{abs_s // 60:02d}}:{{abs_s % 60:02d}}"
                     status_dia = resumo.status_dia
-                espelho_agrupado[chave] = {'user': r.user, 'data': r.data_registro, 'pontos': [], 'saldo': saldo_fmt, 'status': status_dia}
+                espelho_agrupado[chave] = {{'user': r.user, 'data': r.data_registro, 'pontos': [], 'saldo': saldo_fmt, 'status': status_dia}}
             espelho_agrupado[chave]['pontos'].append(r)
         return render_template('ponto_espelho_master.html', grupos=espelho_agrupado.values(), filtro_data=data_filtro)
     else:
         registros = query.order_by(PontoRegistro.data_registro.desc(), PontoRegistro.hora_registro.desc()).limit(100).all()
-        dias_agrupados = {}
+        dias_agrupados = {{}}
         for r in registros:
             d = r.data_registro
             if d not in dias_agrupados:
@@ -389,8 +407,8 @@ def espelho_ponto():
                 if resumo:
                     abs_s = abs(resumo.minutos_saldo)
                     sinal = "+" if resumo.minutos_saldo >= 0 else "-"
-                    saldo_fmt = f"{sinal}{abs_s // 60:02d}:{abs_s % 60:02d}"
-                dias_agrupados[d] = {'data': d, 'pontos': [], 'saldo': saldo_fmt}
+                    saldo_fmt = f"{{sinal}}{{abs_s // 60:02d}}:{{abs_s % 60:02d}}"
+                dias_agrupados[d] = {{'data': d, 'pontos': [], 'saldo': saldo_fmt}}
             dias_agrupados[d]['pontos'].append(r)
         return render_template('ponto_espelho.html', dias=dias_agrupados.values(), filtro_data=data_filtro)
 
@@ -412,7 +430,7 @@ def solicitar_ajuste():
                 db.session.add(solic); db.session.commit(); flash('Enviado!')
                 return redirect(url_for('solicitar_ajuste'))
             except: pass
-    dados_extras = {}
+    dados_extras = {{}}
     for p in meus_ajustes:
         if p.ponto_original_id:
             original = PontoRegistro.query.get(p.ponto_original_id)
@@ -530,3 +548,95 @@ def editar_historico_saida(id):
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
+"""
+
+# --- RE-ESCREVENDO EDITAR USUARIO (PARA GARANTIR) ---
+FILE_EDITAR_USUARIO = """
+{% extends 'base.html' %}
+{% block content %}
+<div class="max-w-lg mx-auto">
+    <div class="flex items-center justify-between mb-6">
+        <h2 class="text-lg font-bold text-slate-800">Editar Funcionário</h2>
+        <a href="/admin/usuarios" class="text-xs font-medium text-slate-500 hover:text-slate-800">Cancelar</a>
+    </div>
+
+    <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <form action="/admin/usuarios/editar/{{ user.id }}" method="POST" class="p-8 space-y-6">
+            
+            <div class="space-y-4">
+                <div><label class="label-pro">Nome</label><input type="text" name="real_name" value="{{ user.real_name }}" class="input-pro"></div>
+                <div><label class="label-pro">Login</label><input type="text" name="username" value="{{ user.username }}" class="input-pro" {% if user.username == 'Thaynara' %}readonly{% endif %}></div>
+                <div><label class="label-pro">Cargo</label><input type="text" name="role" value="{{ user.role }}" class="input-pro" {% if user.username == 'Thaynara' %}disabled{% endif %}></div>
+            </div>
+
+            <!-- JORNADA -->
+            <div class="pt-4 border-t border-slate-100">
+                <p class="text-xs font-bold text-slate-400 uppercase mb-3">Configurar Jornada</p>
+                <div class="grid grid-cols-2 gap-4">
+                    <div><label class="label-pro">Entrada</label><input type="time" name="h_ent" value="{{ user.horario_entrada }}" class="input-pro"></div>
+                    <div><label class="label-pro">Saída Almoço</label><input type="time" name="h_alm_ini" value="{{ user.horario_almoco_inicio }}" class="input-pro"></div>
+                    <div><label class="label-pro">Volta Almoço</label><input type="time" name="h_alm_fim" value="{{ user.horario_almoco_fim }}" class="input-pro"></div>
+                    <div><label class="label-pro">Saída</label><input type="time" name="h_sai" value="{{ user.horario_saida }}" class="input-pro"></div>
+                </div>
+            </div>
+
+            <div class="pt-6 border-t border-slate-100 flex flex-col gap-3">
+                <button type="submit" name="acao" value="salvar" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg shadow transition">SALVAR</button>
+                <div class="grid grid-cols-2 gap-3">
+                    <button type="submit" name="acao" value="resetar_senha" class="bg-yellow-50 hover:bg-yellow-100 text-yellow-700 font-bold py-3 rounded-lg transition text-xs border border-yellow-200">RESETAR SENHA</button>
+                    {% if user.username != 'Thaynara' %}<button type="submit" name="acao" value="excluir" class="bg-red-50 hover:bg-red-100 text-red-600 font-bold py-3 rounded-lg transition text-xs border border-red-200" onclick="return confirm('Excluir?')">EXCLUIR</button>{% endif %}
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+<style>.label-pro { display: block; font-size: 0.7rem; font-weight: 700; color: #64748b; text-transform: uppercase; margin-bottom: 0.5rem; } .input-pro { width: 100%; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 0.5rem; padding: 0.75rem 1rem; color: #1e293b; font-weight: 500; outline: none; }</style>
+{% endblock %}
+"""
+
+# --- FUNÇÕES ---
+def create_backup():
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    backup = os.path.join("backup", ts)
+    files = ["app.py", "requirements.txt", "Procfile", "runtime.txt"]
+    for root, _, fs in os.walk("templates"):
+        for f in fs: files.append(os.path.join(root, f))
+    for f in files:
+        if os.path.exists(f):
+            dest = os.path.join(backup, f)
+            os.makedirs(os.path.dirname(dest), exist_ok=True)
+            shutil.copy2(f, dest)
+
+def write_file(path, content):
+    os.makedirs(os.path.dirname(path) if os.path.dirname(path) else '.', exist_ok=True)
+    with open(path, 'w', encoding='utf-8') as f: f.write(content.strip())
+    print(f"Atualizado: {path}")
+
+def git_update():
+    try:
+        subprocess.run(["git", "add", "."], check=True)
+        subprocess.run(["git", "commit", "-m", COMMIT_MSG], check=False)
+        subprocess.run(["git", "push"], check=True)
+        print("\n>>> SUCESSO V20 FIX! <<<")
+    except Exception as e: print(f"Git: {e}")
+
+def self_destruct():
+    try: os.remove(os.path.abspath(__file__))
+    except: pass
+
+def main():
+    print(f"--- UPDATE V20 FIX CRITICO: {PROJECT_NAME} ---")
+    create_backup()
+    write_file("runtime.txt", FILE_RUNTIME)
+    write_file("requirements.txt", FILE_REQ)
+    write_file("Procfile", FILE_PROCFILE)
+    write_file("app.py", FILE_APP) # App com Migração Forçada e Correção de Cálculo
+    write_file("templates/editar_usuario.html", FILE_EDITAR_USUARIO)
+    
+    git_update()
+    self_destruct()
+
+if __name__ == "__main__":
+    main()
+
+
