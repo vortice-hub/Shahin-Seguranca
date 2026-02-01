@@ -1,0 +1,79 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="flex items-center justify-between mb-6">
+    <h2 class="text-lg font-bold text-slate-800">Editar Detalhes</h2>
+    <a href="/gerenciar/selecao" class="text-xs font-medium text-slate-500 hover:text-slate-800">Voltar</a>
+</div>
+
+<div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+    <form action="/gerenciar/item/{{ item.id }}" method="POST" class="p-6 space-y-6">
+        
+        <!-- Dados Básicos -->
+        <div class="space-y-4">
+            <div>
+                <label class="label-pro">Nome do Item</label>
+                <input type="text" name="nome" value="{{ item.nome }}" class="input-pro" required>
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="label-pro">Tamanho</label>
+                    <select name="tamanho" class="input-pro">
+                        <option value="P" {% if item.tamanho == 'P' %}selected{% endif %}>P</option>
+                        <option value="M" {% if item.tamanho == 'M' %}selected{% endif %}>M</option>
+                        <option value="G" {% if item.tamanho == 'G' %}selected{% endif %}>G</option>
+                        <option value="GG" {% if item.tamanho == 'GG' %}selected{% endif %}>GG</option>
+                        <option value="XG" {% if item.tamanho == 'XG' %}selected{% endif %}>XG</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="label-pro">Gênero</label>
+                    <select name="genero" class="input-pro">
+                        <option value="Masculino" {% if item.genero == 'Masculino' %}selected{% endif %}>Masculino</option>
+                        <option value="Feminino" {% if item.genero == 'Feminino' %}selected{% endif %}>Feminino</option>
+                        <option value="Unissex" {% if item.genero == 'Unissex' %}selected{% endif %}>Unissex</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <hr class="border-slate-100">
+
+        <!-- Quantidade e Níveis -->
+        <div class="space-y-4">
+            <div>
+                <label class="label-pro text-blue-600">Quantidade Atual (Ajuste Manual)</label>
+                <input type="number" name="quantidade" value="{{ item.quantidade }}" class="input-pro font-bold text-blue-700" required>
+            </div>
+            
+            <div class="grid grid-cols-2 gap-4 bg-slate-50 p-4 rounded-lg border border-slate-100">
+                <div>
+                    <label class="label-pro text-red-500">Estoque Ruim (Mínimo)</label>
+                    <input type="number" name="estoque_minimo" value="{{ item.estoque_minimo }}" class="input-pro border-red-200 text-red-600" required>
+                </div>
+                <div>
+                    <label class="label-pro text-emerald-500">Estoque Bom (Ideal)</label>
+                    <input type="number" name="estoque_ideal" value="{{ item.estoque_ideal }}" class="input-pro border-emerald-200 text-emerald-600" required>
+                </div>
+                <div class="col-span-2 text-[10px] text-center text-slate-400">
+                    * Entre o Mínimo e o Ideal será considerado "Médio" (Amarelo).
+                </div>
+            </div>
+        </div>
+
+        <div class="flex gap-3 pt-4">
+            <button type="submit" name="acao" value="salvar" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg shadow transition">
+                SALVAR ALTERAÇÕES
+            </button>
+            <button type="submit" name="acao" value="excluir" class="flex-none bg-red-100 hover:bg-red-200 text-red-600 font-bold py-3 px-6 rounded-lg transition" onclick="return confirm('Tem certeza? Isso apagará o item permanentemente.')">
+                <i class="fas fa-trash"></i>
+            </button>
+        </div>
+    </form>
+</div>
+
+<style>
+    .label-pro { display: block; font-size: 0.7rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem; }
+    .input-pro { width: 100%; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 0.5rem; padding: 0.75rem 1rem; color: #1e293b; font-weight: 500; outline: none; transition: all; }
+    .input-pro:focus { background-color: #fff; border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59,130,246,0.1); }
+</style>
+{% endblock %}

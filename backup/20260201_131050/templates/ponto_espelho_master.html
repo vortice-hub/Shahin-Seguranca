@@ -17,41 +17,19 @@
         <button onclick="toggleDetails('detalhe-{{ loop.index }}')" class="w-full flex justify-between items-center p-4 bg-slate-50 hover:bg-slate-100 transition text-left focus:outline-none">
             <div class="flex items-center gap-4">
                 <div class="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold">{{ grupo.user.real_name[:2].upper() }}</div>
-                <div>
-                    <h3 class="font-bold text-slate-800 text-sm nome-func">{{ grupo.user.real_name }}</h3>
-                    <p class="text-xs text-slate-500 font-mono">{{ grupo.data.strftime('%d/%m/%Y') }}</p>
-                </div>
+                <div><h3 class="font-bold text-slate-800 text-sm nome-func">{{ grupo.user.real_name }}</h3><p class="text-xs text-slate-500 font-mono">{{ grupo.data.strftime('%d/%m/%Y') }}</p></div>
             </div>
-            <div class="flex items-center gap-4">
-                <!-- Mostrador de Saldo no Card -->
-                {% if grupo.saldo %}
-                <div class="text-right">
-                    <span class="block text-[10px] font-bold uppercase text-slate-400">Saldo</span>
-                    <span class="text-sm font-mono font-bold 
-                        {% if '-' in grupo.saldo %} text-red-600 {% else %} text-emerald-600 {% endif %}">
-                        {{ grupo.saldo }}
-                    </span>
-                </div>
-                {% endif %}
-                <i class="fas fa-chevron-down text-slate-400"></i>
-            </div>
+            <div class="flex items-center gap-3"><span class="text-xs font-bold uppercase tracking-wider text-slate-400">{{ grupo.pontos|length }} Batidas</span><i class="fas fa-chevron-down text-slate-400"></i></div>
         </button>
-        
         <div id="detalhe-{{ loop.index }}" class="hidden border-t border-slate-100">
             <div class="p-4 bg-white grid grid-cols-2 gap-2">
                 {% for p in grupo.pontos %}
-                <div class="flex justify-between items-center p-2 rounded bg-slate-50 border border-slate-100">
-                    <span class="text-xs font-bold text-slate-600">{{ p.tipo }}</span>
-                    <span class="text-sm font-mono font-bold text-blue-600">{{ p.hora_registro.strftime('%H:%M') }}</span>
-                </div>
+                <div class="flex justify-between items-center p-2 rounded bg-slate-50 border border-slate-100"><span class="text-xs font-bold text-slate-600">{{ p.tipo }}</span><span class="text-sm font-mono font-bold text-blue-600">{{ p.hora_registro.strftime('%H:%M') }}</span></div>
                 {% endfor %}
-                <div class="col-span-2 text-center text-xs text-slate-400 mt-2 bg-slate-50 p-1 rounded">Status: {{ grupo.status }}</div>
             </div>
         </div>
     </div>
-    {% else %}
-    <div class="text-center py-10 text-slate-400">Nenhum registro encontrado.</div>
-    {% endfor %}
+    {% else %}<div class="text-center py-10 text-slate-400">Nenhum registro encontrado.</div>{% endfor %}
 </div>
 <script>
 function filtrarEspelho(inputId, listaId) {
