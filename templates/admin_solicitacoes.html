@@ -1,0 +1,46 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="mb-6"><h2 class="text-2xl font-bold text-slate-800">Solicitações Pendentes</h2></div>
+
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+    {% for s in solicitacoes %}
+    <div class="bg-white border border-slate-200 rounded-xl p-6 shadow-sm relative">
+        <span class="absolute top-4 right-4 bg-yellow-100 text-yellow-700 text-[10px] font-bold px-2 py-1 rounded uppercase">Pendente</span>
+        
+        <div class="flex items-center gap-3 mb-4">
+            <div class="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center font-bold text-blue-600">{{ s.user.real_name[:2].upper() }}</div>
+            <div><h3 class="font-bold text-slate-800 text-sm">{{ s.user.real_name }}</h3><p class="text-xs text-slate-500">Em {{ s.data_referencia.strftime('%d/%m/%Y') }}</p></div>
+        </div>
+
+        <div class="bg-slate-50 p-3 rounded-lg mb-4 text-sm">
+            <div class="flex justify-between mb-1"><span class="text-slate-500">Ação:</span> <span class="font-bold">{% if s.ponto_original_id %}Editar Ponto{% else %}Incluir Ponto{% endif %}</span></div>
+            <div class="flex justify-between mb-1"><span class="text-slate-500">Novo Horário:</span> <span class="font-bold font-mono text-blue-600">{{ s.novo_horario }} ({{ s.tipo_batida }})</span></div>
+            <div class="mt-2 text-xs text-slate-600 italic">"{{ s.justificativa }}"</div>
+        </div>
+
+        <form action="/admin/solicitacoes" method="POST" class="flex flex-col gap-2">
+            <input type="hidden" name="solic_id" value="{{ s.id }}">
+            
+            <div class="flex gap-2">
+                <button type="submit" name="decisao" value="aprovar" class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 rounded text-xs transition">APROVAR</button>
+                <button type="button" onclick="mostrarReprova('repro-{{ s.id }}')" class="flex-1 bg-red-100 hover:bg-red-200 text-red-600 font-bold py-2 rounded text-xs transition">REPROVAR</button>
+            </div>
+            
+            <!-- Campo Oculto Reprovacao -->
+            <div id="repro-{{ s.id }}" class="hidden mt-2">
+                <input type="text" name="motivo_repro" class="w-full border border-red-200 rounded p-2 text-xs mb-2" placeholder="Motivo da reprovação...">
+                <button type="submit" name="decisao" value="reprovar" class="w-full bg-red-600 text-white font-bold py-2 rounded text-xs">CONFIRMAR REPROVAÇÃO</button>
+            </div>
+        </form>
+    </div>
+    {% else %}
+    <div class="col-span-2 text-center py-12 text-slate-400 bg-white rounded-xl border border-slate-200 border-dashed">
+        <i class="fas fa-check-circle text-4xl mb-2 text-slate-200"></i>
+        <p>Tudo limpo! Nenhuma solicitação pendente.</p>
+    </div>
+    {% endfor %}
+</div>
+<script>
+    function mostrarReprova(id) { document.getElementById(id).classList.remove('hidden'); }
+</script>
+{% endblock %}
