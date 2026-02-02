@@ -1,22 +1,4 @@
 import os
-import shutil
-import subprocess
-import sys
-from datetime import datetime
-
-# --- CONFIGURAÇÕES ---
-PROJECT_NAME = "TdS Gestão de RH"
-COMMIT_MSG = "V22: Modulo de Simulacao de Massa (180 Funcionarios) e Salarios"
-DB_URL_FIXA = "postgresql://neondb_owner:npg_UBg0b7YKqLPm@ep-steep-wave-aflx731c-pooler.c-2.us-west-2.aws.neon.tech/neondb?sslmode=require"
-
-# --- CONFIG FILES ---
-FILE_RUNTIME = """python-3.11.9"""
-FILE_REQ = """flask\nflask-sqlalchemy\npsycopg2-binary\ngunicorn\nflask-login\nwerkzeug"""
-FILE_PROCFILE = """web: gunicorn app:app"""
-
-# --- APP.PY (Com rotas de Geração de Massa) ---
-FILE_APP = f"""
-import os
 import logging
 import secrets
 import random
@@ -34,18 +16,18 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 app.secret_key = 'chave_v22_simulation_secret'
 
-db_url = "{DB_URL_FIXA}"
+db_url = "postgresql://neondb_owner:npg_UBg0b7YKqLPm@ep-steep-wave-aflx731c-pooler.c-2.us-west-2.aws.neon.tech/neondb?sslmode=require"
 if db_url.startswith("postgres://"):
     db_url = db_url.replace("postgres://", "postgresql://", 1)
 
 app.config['SQLALCHEMY_DATABASE_URI'] = db_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-db = SQLAlchemy(app, engine_options={{
+db = SQLAlchemy(app, engine_options={
     "pool_pre_ping": True,
     "pool_size": 20, # Aumentado para aguentar a geracao em massa
     "pool_recycle": 300,
-}})
+})
 
 login_manager = LoginManager()
 login_manager.init_app(app)
@@ -238,11 +220,11 @@ def gerar_massa():
         # Pega o master para não deletar
         master = User.query.filter_by(username='Thaynara').first()
         
-        logger.info(f"Gerando {{users_to_create}} novos usuarios...")
+        logger.info(f"Gerando {users_to_create} novos usuarios...")
         
         for i in range(total_users, 180):
-            nome = f"Colaborador {{i+1:03d}}"
-            login = f"colab{{i+1}}"
+            nome = f"Colaborador {i+1:03d}"
+            login = f"colab{i+1}"
             salario = random.choice([2000, 2200, 2500, 2800, 3000, 3200, 3500])
             
             if not User.query.filter_by(username=login).first():
@@ -339,12 +321,12 @@ def gerar_massa():
             for u in todos_users:
                 calcular_dia(u.id, data_atual)
                 
-        flash(f'Simulação Concluída! 180 Usuários e Pontos de {{mes}}/{{ano}} gerados.')
+        flash(f'Simulação Concluída! 180 Usuários e Pontos de {mes}/{ano} gerados.')
         
     except Exception as e:
         db.session.rollback()
-        logger.error(f"Erro simulacao: {{e}}")
-        flash(f'Erro na simulação: {{e}}')
+        logger.error(f"Erro simulacao: {e}")
+        flash(f'Erro na simulação: {e}')
         
     return redirect(url_for('admin_relatorio_folha'))
 
@@ -377,7 +359,7 @@ def limpar_massa():
             
     except Exception as e:
         db.session.rollback()
-        flash(f'Erro ao limpar: {{e}}')
+        flash(f'Erro ao limpar: {e}')
         
     return redirect(url_for('admin_relatorio_folha'))
 
@@ -401,7 +383,7 @@ def admin_relatorio_folha():
         total_saldo = sum(r.minutos_saldo for r in resumos)
         sinal = "+" if total_saldo >= 0 else "-"
         abs_s = abs(total_saldo)
-        relatorio.append({{'nome': u.real_name, 'cargo': u.role, 'salario': u.salario, 'saldo_minutos': total_saldo, 'saldo_formatado': f"{{sinal}}{{abs_s // 60:02d}}:{{abs_s % 60:02d}}", 'status': 'Crédito' if total_saldo >= 0 else 'Débito'}})
+        relatorio.append({'nome': u.real_name, 'cargo': u.role, 'salario': u.salario, 'saldo_minutos': total_saldo, 'saldo_formatado': f"{sinal}{abs_s // 60:02d}:{abs_s % 60:02d}", 'status': 'Crédito' if total_saldo >= 0 else 'Débito'})
     return render_template('admin_relatorio_folha.html', relatorio=relatorio, mes_ref=mes_ref)
 
 @app.route('/admin/solicitacoes', methods=['GET', 'POST'])
@@ -426,10 +408,10 @@ def admin_solicitacoes():
                 db.session.commit(); calcular_dia(solic.user_id, solic.data_referencia); flash('Aprovado.')
             elif decisao == 'reprovar':
                 solic.status = 'Reprovado'; solic.motivo_reprovacao = request.form.get('motivo_repro'); db.session.commit(); flash('Reprovado.')
-        except Exception as e: db.session.rollback(); flash(f'Erro: {{e}}')
+        except Exception as e: db.session.rollback(); flash(f'Erro: {e}')
         return redirect(url_for('admin_solicitacoes'))
     pendentes = PontoAjuste.query.filter_by(status='Pendente').order_by(PontoAjuste.created_at).all()
-    dados_extras = {{}}
+    dados_extras = {}
     for p in pendentes:
         if p.ponto_original_id:
             original = PontoRegistro.query.get(p.ponto_original_id)
@@ -458,7 +440,7 @@ def registrar_ponto():
 def editar_usuario(id):
     user = User.query.get_or_404(id)
     if request.method == 'POST':
-        if request.form.get('acao') == 'resetar_senha': nova = secrets.token_hex(3); user.set_password(nova); user.is_first_access = True; db.session.commit(); flash(f'Senha: {{nova}}'); return redirect(url_for('editar_usuario', id=id))
+        if request.form.get('acao') == 'resetar_senha': nova = secrets.token_hex(3); user.set_password(nova); user.is_first_access = True; db.session.commit(); flash(f'Senha: {nova}'); return redirect(url_for('editar_usuario', id=id))
         elif request.form.get('acao') == 'excluir': 
             if user.username != 'Thaynara': db.session.delete(user); db.session.commit()
             return redirect(url_for('gerenciar_usuarios'))
@@ -579,7 +561,7 @@ def solicitar_ajuste():
                 db.session.add(solic); db.session.commit(); flash('Enviado!')
                 return redirect(url_for('solicitar_ajuste'))
             except: pass
-    dados_extras = {{}}
+    dados_extras = {}
     for p in meus_ajustes:
         if p.ponto_original_id:
             original = PontoRegistro.query.get(p.ponto_original_id)
@@ -597,9 +579,9 @@ def espelho_ponto():
         except: pass
     if current_user.role == 'Master':
         registros_raw = query.join(User).order_by(PontoRegistro.data_registro.desc(), User.real_name, PontoRegistro.hora_registro).limit(1000).all()
-        espelho_agrupado = {{}} 
+        espelho_agrupado = {} 
         for r in registros_raw:
-            chave = f"{{r.data_registro}}_{{r.user_id}}"
+            chave = f"{r.data_registro}_{r.user_id}"
             if chave not in espelho_agrupado:
                 resumo = PontoResumo.query.filter_by(user_id=r.user_id, data_referencia=r.data_registro).first()
                 saldo_fmt = "--:--"
@@ -607,14 +589,14 @@ def espelho_ponto():
                 if resumo:
                     abs_s = abs(resumo.minutos_saldo)
                     sinal = "+" if resumo.minutos_saldo >= 0 else "-"
-                    saldo_fmt = f"{{sinal}}{{abs_s // 60:02d}}:{{abs_s % 60:02d}}"
+                    saldo_fmt = f"{sinal}{abs_s // 60:02d}:{abs_s % 60:02d}"
                     status_dia = resumo.status_dia
-                espelho_agrupado[chave] = {{'user': r.user, 'data': r.data_registro, 'pontos': [], 'saldo': saldo_fmt, 'status': status_dia}}
+                espelho_agrupado[chave] = {'user': r.user, 'data': r.data_registro, 'pontos': [], 'saldo': saldo_fmt, 'status': status_dia}
             espelho_agrupado[chave]['pontos'].append(r)
         return render_template('ponto_espelho_master.html', grupos=espelho_agrupado.values(), filtro_data=data_filtro)
     else:
         registros = query.order_by(PontoRegistro.data_registro.desc(), PontoRegistro.hora_registro.desc()).limit(100).all()
-        dias_agrupados = {{}}
+        dias_agrupados = {}
         for r in registros:
             d = r.data_registro
             if d not in dias_agrupados:
@@ -623,8 +605,8 @@ def espelho_ponto():
                 if resumo:
                     abs_s = abs(resumo.minutos_saldo)
                     sinal = "+" if resumo.minutos_saldo >= 0 else "-"
-                    saldo_fmt = f"{{sinal}}{{abs_s // 60:02d}}:{{abs_s % 60:02d}}"
-                dias_agrupados[d] = {{'data': d, 'pontos': [], 'saldo': saldo_fmt}}
+                    saldo_fmt = f"{sinal}{abs_s // 60:02d}:{abs_s % 60:02d}"
+                dias_agrupados[d] = {'data': d, 'pontos': [], 'saldo': saldo_fmt}
             dias_agrupados[d]['pontos'].append(r)
         return render_template('ponto_espelho.html', dias=dias_agrupados.values(), filtro_data=data_filtro)
 
@@ -648,117 +630,3 @@ def novo_usuario():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
-"""
-
-# --- RELATORIO FOLHA (COM BOTÕES DE SIMULAÇÃO) ---
-FILE_RELATORIO = """
-{% extends 'base.html' %}
-{% block content %}
-<div class="mb-6 flex flex-col md:flex-row justify-between items-center gap-4">
-    <h2 class="text-2xl font-bold text-slate-800">Relatório de Folha</h2>
-    <form action="/admin/relatorio-folha" method="POST" class="flex gap-2">
-        <input type="month" name="mes_ref" value="{{ mes_ref }}" class="border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-600 bg-white">
-        <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded-lg font-bold text-sm hover:bg-blue-700 transition">GERAR RELATÓRIO</button>
-    </form>
-</div>
-
-<!-- PAINEL DE SIMULAÇÃO (MASTER ONLY) -->
-<div class="bg-indigo-50 border border-indigo-200 rounded-xl p-6 mb-8">
-    <h3 class="text-indigo-800 font-bold mb-2 flex items-center gap-2"><i class="fas fa-flask"></i> Laboratório de Testes</h3>
-    <p class="text-xs text-indigo-600 mb-4">Ferramentas para gerar dados fictícios em massa. Use com cuidado.</p>
-    <div class="flex gap-4">
-        <form action="/admin/gerar-massa" method="POST">
-            <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-6 rounded-lg text-sm shadow-md transition" onclick="return confirm('Isso criará até 180 usuários e milhares de pontos. Pode levar alguns segundos. Continuar?')">
-                <i class="fas fa-magic mr-2"></i> GERAR MASSA DE DADOS
-            </button>
-        </form>
-        <form action="/admin/limpar-massa" method="POST">
-            <button type="submit" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-6 rounded-lg text-sm shadow-md transition" onclick="return confirm('ATENÇÃO: Isso apagará TODOS os dados gerados (exceto o Master). Tem certeza absoluta?')">
-                <i class="fas fa-trash mr-2"></i> LIMPAR TUDO
-            </button>
-        </form>
-    </div>
-</div>
-
-<div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-    <table class="w-full text-left text-sm text-slate-600">
-        <thead class="bg-slate-50 text-xs uppercase text-slate-400 font-bold border-b border-slate-100">
-            <tr>
-                <th class="px-6 py-4">Funcionário</th>
-                <th class="px-6 py-4">Salário Base</th>
-                <th class="px-6 py-4 text-center">Status Ponto</th>
-                <th class="px-6 py-4 text-right">Saldo Horas</th>
-            </tr>
-        </thead>
-        <tbody class="divide-y divide-slate-100">
-            {% for item in relatorio %}
-            <tr class="hover:bg-slate-50 transition">
-                <td class="px-6 py-4 font-bold text-slate-800">{{ item.nome }} <span class="text-xs font-normal text-slate-400 block">{{ item.cargo }}</span></td>
-                <td class="px-6 py-4">R$ {{ "%.2f"|format(item.salario) }}</td>
-                <td class="px-6 py-4 text-center">
-                    <span class="px-2 py-1 rounded text-[10px] font-bold uppercase
-                        {% if item.saldo_minutos >= 0 %} bg-emerald-100 text-emerald-700
-                        {% else %} bg-red-100 text-red-700 {% endif %}">
-                        {{ item.status }}
-                    </span>
-                </td>
-                <td class="px-6 py-4 text-right font-mono font-bold 
-                    {% if item.saldo_minutos >= 0 %} text-emerald-600 {% else %} text-red-600 {% endif %}">
-                    {{ item.saldo_formatado }}
-                </td>
-            </tr>
-            {% else %}
-            <tr><td colspan="4" class="px-6 py-8 text-center text-slate-400">Nenhum dado para o período selecionado.</td></tr>
-            {% endfor %}
-        </tbody>
-    </table>
-</div>
-{% endblock %}
-"""
-
-# --- FUNÇÕES ---
-def create_backup():
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    backup = os.path.join("backup", ts)
-    files = ["app.py", "requirements.txt", "Procfile", "runtime.txt"]
-    for root, _, fs in os.walk("templates"):
-        for f in fs: files.append(os.path.join(root, f))
-    for f in files:
-        if os.path.exists(f):
-            dest = os.path.join(backup, f)
-            os.makedirs(os.path.dirname(dest), exist_ok=True)
-            shutil.copy2(f, dest)
-
-def write_file(path, content):
-    os.makedirs(os.path.dirname(path) if os.path.dirname(path) else '.', exist_ok=True)
-    with open(path, 'w', encoding='utf-8') as f: f.write(content.strip())
-    print(f"Atualizado: {path}")
-
-def git_update():
-    try:
-        subprocess.run(["git", "add", "."], check=True)
-        subprocess.run(["git", "commit", "-m", COMMIT_MSG], check=False)
-        subprocess.run(["git", "push"], check=True)
-        print("\n>>> SUCESSO V22 SIMULATION! <<<")
-    except Exception as e: print(f"Git: {e}")
-
-def self_destruct():
-    try: os.remove(os.path.abspath(__file__))
-    except: pass
-
-def main():
-    print(f"--- UPDATE V22 SIMULATION: {PROJECT_NAME} ---")
-    create_backup()
-    write_file("runtime.txt", FILE_RUNTIME)
-    write_file("requirements.txt", FILE_REQ)
-    write_file("Procfile", FILE_PROCFILE)
-    write_file("app.py", FILE_APP)
-    write_file("templates/admin_relatorio_folha.html", FILE_RELATORIO) # Com botoes de massa
-    
-    git_update()
-    self_destruct()
-
-if __name__ == "__main__":
-    main()
-
-
