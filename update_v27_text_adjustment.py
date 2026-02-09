@@ -1,4 +1,22 @@
 import os
+import shutil
+import subprocess
+import sys
+from datetime import datetime
+
+# --- CONFIGURAÇÕES ---
+PROJECT_NAME = "TdS Gestão de RH"
+COMMIT_MSG = "V27: Ajuste de Texto no Bloqueio de Ponto (12x36)"
+DB_URL_FIXA = "postgresql://neondb_owner:npg_UBg0b7YKqLPm@ep-steep-wave-aflx731c-pooler.c-2.us-west-2.aws.neon.tech/neondb?sslmode=require"
+
+# --- CONFIG FILES ---
+FILE_RUNTIME = """python-3.11.9"""
+FILE_REQ = """flask\nflask-sqlalchemy\npsycopg2-binary\ngunicorn\nflask-login\nwerkzeug"""
+FILE_PROCFILE = """web: gunicorn app:app"""
+
+# --- APP.PY (Alteração na String de Bloqueio) ---
+FILE_APP = f"""
+import os
 import logging
 import secrets
 from flask import Flask, render_template, request, redirect, url_for, flash
@@ -14,18 +32,18 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 app.secret_key = 'chave_v27_text_secret'
 
-db_url = "postgresql://neondb_owner:npg_UBg0b7YKqLPm@ep-steep-wave-aflx731c-pooler.c-2.us-west-2.aws.neon.tech/neondb?sslmode=require"
+db_url = "{DB_URL_FIXA}"
 if db_url.startswith("postgres://"):
     db_url = db_url.replace("postgres://", "postgresql://", 1)
 
 app.config['SQLALCHEMY_DATABASE_URI'] = db_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-db = SQLAlchemy(app, engine_options={
+db = SQLAlchemy(app, engine_options={{
     "pool_pre_ping": True,
     "pool_size": 10,
     "pool_recycle": 300,
-})
+}})
 
 login_manager = LoginManager()
 login_manager.init_app(app)
@@ -221,7 +239,7 @@ def registrar_ponto():
 
     if request.method == 'POST':
         if bloqueado:
-            flash(f'BLOQUEADO: {motivo_bloqueio}', 'error')
+            flash(f'BLOQUEADO: {{motivo_bloqueio}}', 'error')
             return redirect(url_for('dashboard'))
         lat, lon = request.form.get('latitude'), request.form.get('longitude')
         novo = PontoRegistro(user_id=current_user.id, data_registro=hoje, hora_registro=get_brasil_time().time(), tipo=proxima, latitude=lat, longitude=lon)
@@ -252,7 +270,7 @@ def novo_usuario():
 def editar_usuario(id):
     user = User.query.get_or_404(id)
     if request.method == 'POST':
-        if request.form.get('acao') == 'resetar_senha': nova = secrets.token_hex(3); user.set_password(nova); user.is_first_access = True; db.session.commit(); flash(f'Senha: {nova}'); return redirect(url_for('editar_usuario', id=id))
+        if request.form.get('acao') == 'resetar_senha': nova = secrets.token_hex(3); user.set_password(nova); user.is_first_access = True; db.session.commit(); flash(f'Senha: {{nova}}'); return redirect(url_for('editar_usuario', id=id))
         elif request.form.get('acao') == 'excluir': 
             if user.username != 'Thaynara': db.session.delete(user); db.session.commit()
             return redirect(url_for('gerenciar_usuarios'))
@@ -321,10 +339,10 @@ def admin_solicitacoes():
                 db.session.commit(); calcular_dia(solic.user_id, solic.data_referencia); flash('Aprovado.')
             elif decisao == 'reprovar':
                 solic.status = 'Reprovado'; solic.motivo_reprovacao = request.form.get('motivo_repro'); db.session.commit(); flash('Reprovado.')
-        except Exception as e: db.session.rollback(); flash(f'Erro: {e}')
+        except Exception as e: db.session.rollback(); flash(f'Erro: {{e}}')
         return redirect(url_for('admin_solicitacoes'))
     pendentes = PontoAjuste.query.filter_by(status='Pendente').order_by(PontoAjuste.created_at).all()
-    dados_extras = {}
+    dados_extras = {{}}
     for p in pendentes:
         if p.ponto_original_id:
             original = PontoRegistro.query.get(p.ponto_original_id)
@@ -344,7 +362,7 @@ def admin_relatorio_folha():
         total_saldo = sum(r.minutos_saldo for r in resumos)
         sinal = "+" if total_saldo >= 0 else "-"
         abs_s = abs(total_saldo)
-        relatorio.append({'nome': u.real_name, 'cargo': u.role, 'saldo_minutos': total_saldo, 'saldo_formatado': f"{sinal}{abs_s // 60:02d}:{abs_s % 60:02d}", 'status': 'Crédito' if total_saldo >= 0 else 'Débito'})
+        relatorio.append({{'nome': u.real_name, 'cargo': u.role, 'saldo_minutos': total_saldo, 'saldo_formatado': f"{{sinal}}{{abs_s // 60:02d}}:{{abs_s % 60:02d}}", 'status': 'Crédito' if total_saldo >= 0 else 'Débito'}})
     return render_template('admin_relatorio_folha.html', relatorio=relatorio, mes_ref=mes_ref)
 
 @app.route('/controle-uniforme')
@@ -423,7 +441,7 @@ def solicitar_ajuste():
                 db.session.add(solic); db.session.commit(); flash('Enviado!')
                 return redirect(url_for('solicitar_ajuste'))
             except: pass
-    dados_extras = {}
+    dados_extras = {{}}
     for p in meus_ajustes:
         if p.ponto_original_id:
             original = PontoRegistro.query.get(p.ponto_original_id)
@@ -441,9 +459,9 @@ def espelho_ponto():
         except: pass
     if current_user.role == 'Master':
         registros_raw = query.join(User).order_by(PontoRegistro.data_registro.desc(), User.real_name, PontoRegistro.hora_registro).limit(1000).all()
-        espelho_agrupado = {} 
+        espelho_agrupado = {{}} 
         for r in registros_raw:
-            chave = f"{r.data_registro}_{r.user_id}"
+            chave = f"{{r.data_registro}}_{{r.user_id}}"
             if chave not in espelho_agrupado:
                 resumo = PontoResumo.query.filter_by(user_id=r.user_id, data_referencia=r.data_registro).first()
                 saldo_fmt = "--:--"
@@ -451,14 +469,14 @@ def espelho_ponto():
                 if resumo:
                     abs_s = abs(resumo.minutos_saldo)
                     sinal = "+" if resumo.minutos_saldo >= 0 else "-"
-                    saldo_fmt = f"{sinal}{abs_s // 60:02d}:{abs_s % 60:02d}"
+                    saldo_fmt = f"{{sinal}}{{abs_s // 60:02d}}:{{abs_s % 60:02d}}"
                     status_dia = resumo.status_dia
-                espelho_agrupado[chave] = {'user': r.user, 'data': r.data_registro, 'pontos': [], 'saldo': saldo_fmt, 'status': status_dia}
+                espelho_agrupado[chave] = {{'user': r.user, 'data': r.data_registro, 'pontos': [], 'saldo': saldo_fmt, 'status': status_dia}}
             espelho_agrupado[chave]['pontos'].append(r)
         return render_template('ponto_espelho_master.html', grupos=espelho_agrupado.values(), filtro_data=data_filtro)
     else:
         registros = query.order_by(PontoRegistro.data_registro.desc(), PontoRegistro.hora_registro.desc()).limit(100).all()
-        dias_agrupados = {}
+        dias_agrupados = {{}}
         for r in registros:
             d = r.data_registro
             if d not in dias_agrupados:
@@ -467,11 +485,111 @@ def espelho_ponto():
                 if resumo:
                     abs_s = abs(resumo.minutos_saldo)
                     sinal = "+" if resumo.minutos_saldo >= 0 else "-"
-                    saldo_fmt = f"{sinal}{abs_s // 60:02d}:{abs_s % 60:02d}"
-                dias_agrupados[d] = {'data': d, 'pontos': [], 'saldo': saldo_fmt}
+                    saldo_fmt = f"{{sinal}}{{abs_s // 60:02d}}:{{abs_s % 60:02d}}"
+                dias_agrupados[d] = {{'data': d, 'pontos': [], 'saldo': saldo_fmt}}
             dias_agrupados[d]['pontos'].append(r)
         return render_template('ponto_espelho.html', dias=dias_agrupados.values(), filtro_data=data_filtro)
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
+"""
+
+# --- REGISTRO PONTO (VISUAL LIMPO) ---
+FILE_PONTO_REGISTRO = """
+{% extends 'base.html' %}
+{% block content %}
+<div class="max-w-md mx-auto text-center">
+    <div class="mb-8"><h2 class="text-2xl font-bold text-slate-800">Registrar Ponto</h2><p class="text-sm text-slate-500">Confirme sua localização.</p></div>
+
+    {% if bloqueado %}
+    <div class="bg-red-50 border-l-4 border-red-500 p-6 rounded-r-xl shadow-md text-left mb-8">
+        <h3 class="text-lg font-bold text-red-700 flex items-center gap-2"><i class="fas fa-ban"></i> AÇÃO BLOQUEADA</h3>
+        <p class="text-sm text-red-600 mt-2">{{ motivo }}</p>
+    </div>
+    {% else %}
+    <div class="bg-slate-900 text-white rounded-2xl p-8 shadow-2xl mb-8 border border-slate-700 relative overflow-hidden">
+        <div class="text-5xl font-mono font-bold tracking-widest mb-2" id="relogio">--:--:--</div>
+        <div class="text-sm text-slate-400 uppercase tracking-widest">{{ hoje.strftime('%d de %B de %Y') }}</div>
+        <div class="mt-6 inline-block bg-blue-600 text-xs font-bold px-4 py-1 rounded-full uppercase tracking-wide shadow-lg">Próximo: {{ proxima_acao }}</div>
+    </div>
+    <form action="/ponto/registrar" method="POST" id="formPonto">
+        <input type="hidden" name="latitude" id="lat"><input type="hidden" name="longitude" id="lon">
+        <button type="button" onclick="getLocationAndSubmit()" id="btnRegistrar" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-5 rounded-xl shadow-xl transition transform active:scale-95 flex items-center justify-center gap-3 text-lg"><i class="fas fa-fingerprint text-2xl"></i> REGISTRAR</button>
+        <p id="geoStatus" class="text-xs text-slate-400 mt-4 h-4"></p>
+    </form>
+    {% endif %}
+
+    <div class="mt-8 text-left">
+        <h3 class="text-xs font-bold text-slate-400 uppercase mb-3 ml-1">Histórico de Hoje</h3>
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden divide-y divide-slate-100">
+            {% for p in pontos %}
+            <div class="px-4 py-3 flex justify-between items-center"><span class="text-sm font-bold text-slate-700">{{ p.tipo }}</span><span class="text-sm font-mono text-slate-500">{{ p.hora_registro.strftime('%H:%M') }}</span></div>
+            {% else %}<div class="p-4 text-center text-xs text-slate-400">Nenhum registro hoje.</div>{% endfor %}
+        </div>
+    </div>
+</div>
+<script>
+    function updateTime() { document.getElementById('relogio').innerText = new Date().toLocaleTimeString('pt-BR'); }
+    setInterval(updateTime, 1000); updateTime();
+    function getLocationAndSubmit() {
+        const btn = document.getElementById('btnRegistrar');
+        const st = document.getElementById('geoStatus');
+        btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Obtendo...';
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                (p) => { document.getElementById('lat').value = p.coords.latitude; document.getElementById('lon').value = p.coords.longitude; document.getElementById('formPonto').submit(); },
+                (e) => { alert("Erro GPS."); btn.disabled = false; btn.innerHTML = 'TENTAR NOVAMENTE'; }
+            );
+        } else alert("Sem suporte GPS.");
+    }
+</script>
+{% endblock %}
+"""
+
+# --- FUNÇÕES ---
+def create_backup():
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    backup = os.path.join("backup", ts)
+    files = ["app.py", "requirements.txt", "Procfile", "runtime.txt"]
+    for root, _, fs in os.walk("templates"):
+        for f in fs: files.append(os.path.join(root, f))
+    for f in files:
+        if os.path.exists(f):
+            dest = os.path.join(backup, f)
+            os.makedirs(os.path.dirname(dest), exist_ok=True)
+            shutil.copy2(f, dest)
+
+def write_file(path, content):
+    os.makedirs(os.path.dirname(path) if os.path.dirname(path) else '.', exist_ok=True)
+    with open(path, 'w', encoding='utf-8') as f: f.write(content.strip())
+    print(f"Atualizado: {path}")
+
+def git_update():
+    try:
+        subprocess.run(["git", "add", "."], check=True)
+        subprocess.run(["git", "commit", "-m", COMMIT_MSG], check=False)
+        subprocess.run(["git", "push"], check=True)
+        print("\n>>> SUCESSO V27 TEXT FIX! <<<")
+    except Exception as e: print(f"Git: {e}")
+
+def self_destruct():
+    try: os.remove(os.path.abspath(__file__))
+    except: pass
+
+def main():
+    print(f"--- UPDATE V27: {PROJECT_NAME} ---")
+    create_backup()
+    write_file("runtime.txt", FILE_RUNTIME)
+    write_file("requirements.txt", FILE_REQ)
+    write_file("Procfile", FILE_PROCFILE)
+    write_file("app.py", FILE_APP)
+    write_file("templates/ponto_registro.html", FILE_PONTO_REGISTRO)
+    
+    git_update()
+    self_destruct()
+
+if __name__ == "__main__":
+    main()
+
+
