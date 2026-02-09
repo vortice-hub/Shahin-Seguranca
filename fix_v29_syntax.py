@@ -6,7 +6,7 @@ from datetime import datetime
 
 # --- CONFIGURAÇÕES ---
 PROJECT_NAME = "TdS Gestão de RH"
-COMMIT_MSG = "V28: Fix Erro 500 (Exclusao e Relatorio) e Traducao Data"
+COMMIT_MSG = "V29 Fix: Correcao de Sintaxe no Dicionario de Meses"
 DB_URL_FIXA = "postgresql://neondb_owner:npg_UBg0b7YKqLPm@ep-steep-wave-aflx731c-pooler.c-2.us-west-2.aws.neon.tech/neondb?sslmode=require"
 
 # --- CONFIG FILES ---
@@ -14,11 +14,14 @@ FILE_RUNTIME = """python-3.11.9"""
 FILE_REQ = """flask\nflask-sqlalchemy\npsycopg2-binary\ngunicorn\nflask-login\nwerkzeug"""
 FILE_PROCFILE = """web: gunicorn app:app"""
 
-# --- APP.PY (Com correções de lógica) ---
+# --- APP.PY (Sintaxe Corrigida) ---
+# Usamos raw string (r) ou escape duplo {{ }} para evitar o erro anterior
 FILE_APP = f"""
 import os
 import logging
 import secrets
+import random
+import unicodedata
 from flask import Flask, render_template, request, redirect, url_for, flash
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
@@ -30,7 +33,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-app.secret_key = 'chave_v28_fixes_secret'
+app.secret_key = 'chave_v29_fix_syntax'
 
 db_url = "{DB_URL_FIXA}"
 if db_url.startswith("postgres://"):
@@ -52,14 +55,23 @@ login_manager.login_view = 'login'
 def get_brasil_time():
     return datetime.utcnow() - timedelta(hours=3)
 
-# --- HELPER: DATA EM PORTUGUÊS ---
-def data_por_extenso(data_obj):
-    meses = {{
-        1: 'Janeiro', 2: 'Fevereiro', 3: 'Março', 4: 'Abril',
-        5: 'Maio', 6: 'Junho', 7: 'Julho', 8: 'Agosto',
-        9: 'Setembro', 10: 'Outubro', 11: 'Novembro', 12: 'Dezembro'
-    }}
-    return f"{{data_obj.day}} de {{meses[data_obj.month]}} de {{data_obj.year}}"
+def remove_accents(input_str):
+    if not input_str: return ""
+    nfkd_form = unicodedata.normalize('NFKD', input_str)
+    return "".join([c for c in nfkd_form if not unicodedata.combining(c)])
+
+def gerar_login_automatico(nome_completo):
+    clean_name = remove_accents(nome_completo).lower().strip()
+    parts = clean_name.split()
+    if not parts: return f"user.{{random.randint(10,99)}}"
+    primeiro = parts[0]
+    ultimo = parts[-1] if len(parts) > 1 else "colab"
+    for _ in range(10): 
+        num = random.randint(10, 99)
+        login_candidato = f"{{primeiro}}.{{ultimo}}.{{num}}"
+        if not User.query.filter_by(username=login_candidato).first():
+            return login_candidato
+    return f"{{primeiro}}.{{random.randint(1000,9999)}}"
 
 # --- MODELOS ---
 class User(UserMixin, db.Model):
@@ -154,7 +166,6 @@ class HistoricoSaida(db.Model):
 @login_manager.user_loader
 def load_user(user_id): return User.query.get(int(user_id))
 
-# --- MOTOR DE CÁLCULO ---
 def time_to_min(t_input):
     if not t_input: return 0
     try:
@@ -192,12 +203,10 @@ def calcular_dia(user_id, data_ref):
     else:
         loops = len(pontos)
         if loops % 2 != 0: status = "Erro: Ímpar"; loops -= 1
-        
         for i in range(0, loops, 2):
             p_ent = time_to_min(pontos[i].hora_registro)
             p_sai = time_to_min(pontos[i+1].hora_registro)
             trabalhado_minutos += (p_sai - p_ent)
-            
         saldo = trabalhado_minutos - jornada_esperada
         if not dia_trabalho and trabalhado_minutos > 0: status = "Hora Extra (Folga)"; saldo = trabalhado_minutos
         else:
@@ -207,11 +216,9 @@ def calcular_dia(user_id, data_ref):
 
     resumo = PontoResumo.query.filter_by(user_id=user_id, data_referencia=data_ref).first()
     if not resumo: resumo = PontoResumo(user_id=user_id, data_referencia=data_ref); db.session.add(resumo)
-    
     resumo.minutos_trabalhados = trabalhado_minutos; resumo.minutos_esperados = jornada_esperada; resumo.minutos_saldo = saldo; resumo.status_dia = status
     db.session.commit()
 
-# --- BOOT ---
 try:
     with app.app_context():
         db.create_all()
@@ -219,143 +226,76 @@ try:
             m = User(username='Thaynara', real_name='Thaynara Master', role='Master', is_first_access=False); m.set_password('1855'); db.session.add(m); db.session.commit()
 except: pass
 
-# --- ROTA PONTO (COM DATA PT-BR) ---
+@app.route('/admin/usuarios/novo', methods=['GET', 'POST'])
+@login_required
+def novo_usuario():
+    if current_user.role != 'Master': return redirect(url_for('dashboard'))
+    if request.method == 'POST':
+        real_name = request.form.get('real_name')
+        username = gerar_login_automatico(real_name)
+        senha_temp = secrets.token_hex(3)
+        dt_escala = None
+        if request.form.get('dt_escala'): dt_escala = datetime.strptime(request.form.get('dt_escala'), '%Y-%m-%d').date()
+        
+        novo = User(username=username, real_name=real_name, role=request.form.get('role'), salario=float(request.form.get('salario') or 0), is_first_access=True, horario_entrada=request.form.get('h_ent') or '07:12', horario_almoco_inicio=request.form.get('h_alm_ini') or '12:00', horario_almoco_fim=request.form.get('h_alm_fim') or '13:00', horario_saida=request.form.get('h_sai') or '17:00', escala=request.form.get('escala'), data_inicio_escala=dt_escala)
+        novo.set_password(senha_temp)
+        db.session.add(novo)
+        db.session.commit()
+        return render_template('sucesso_usuario.html', novo_user=username, senha_gerada=senha_temp, nome_real=real_name)
+    return render_template('novo_usuario.html')
+
 @app.route('/ponto/registrar', methods=['GET', 'POST'])
 @login_required
 def registrar_ponto():
     hoje = get_brasil_time().date()
-    hoje_extenso = data_por_extenso(hoje) # Tradução aqui
+    # CORRECAO: Dicionario escapado corretamente
+    meses = {{1:'Janeiro', 2:'Fevereiro', 3:'Março', 4:'Abril', 5:'Maio', 6:'Junho', 7:'Julho', 8:'Agosto', 9:'Setembro', 10:'Outubro', 11:'Novembro', 12:'Dezembro'}}
+    hoje_extenso = f"{{hoje.day}} de {{meses[hoje.month]}} de {{hoje.year}}"
     
     bloqueado = False
-    motivo_bloqueio = ""
-    
-    if current_user.escala == '5x2' and hoje.weekday() >= 5:
-        bloqueado = True; motivo_bloqueio = "Não é possível realizar a marcação de ponto."
+    motivo = ""
+    if current_user.escala == '5x2' and hoje.weekday() >= 5: bloqueado = True; motivo = "Não é possível realizar a marcação de ponto."
     elif current_user.escala == '12x36' and current_user.data_inicio_escala:
-        if (hoje - current_user.data_inicio_escala).days % 2 != 0:
-            bloqueado = True; motivo_bloqueio = "Não é possível realizar a marcação de ponto."
+        if (hoje - current_user.data_inicio_escala).days % 2 != 0: bloqueado = True; motivo = "Não é possível realizar a marcação de ponto."
 
-    pontos_hoje = PontoRegistro.query.filter_by(user_id=current_user.id, data_registro=hoje).order_by(PontoRegistro.hora_registro).all()
-    proxima = "Entrada"
-    if len(pontos_hoje) == 1: proxima = "Ida Almoço"
-    elif len(pontos_hoje) == 2: proxima = "Volta Almoço"
-    elif len(pontos_hoje) == 3: proxima = "Saída"
-    elif len(pontos_hoje) >= 4: proxima = "Extra"
-
+    pontos = PontoRegistro.query.filter_by(user_id=current_user.id, data_registro=hoje).order_by(PontoRegistro.hora_registro).all()
+    prox = "Entrada"
+    if len(pontos) == 1: prox = "Ida Almoço"
+    elif len(pontos) == 2: prox = "Volta Almoço"
+    elif len(pontos) == 3: prox = "Saída"
+    elif len(pontos) >= 4: prox = "Extra"
     if request.method == 'POST':
-        if bloqueado: flash(f'BLOQUEADO: {{motivo_bloqueio}}', 'error'); return redirect(url_for('dashboard'))
-        lat, lon = request.form.get('latitude'), request.form.get('longitude')
-        novo = PontoRegistro(user_id=current_user.id, data_registro=hoje, hora_registro=get_brasil_time().time(), tipo=proxima, latitude=lat, longitude=lon)
-        db.session.add(novo); db.session.commit(); calcular_dia(current_user.id, hoje)
+        if bloqueado: flash('Bloqueado'); return redirect(url_for('dashboard'))
+        db.session.add(PontoRegistro(user_id=current_user.id, data_registro=hoje, hora_registro=get_brasil_time().time(), tipo=prox, latitude=request.form.get('latitude'), longitude=request.form.get('longitude')))
+        db.session.commit(); calcular_dia(current_user.id, hoje)
         return redirect(url_for('dashboard'))
-        
-    return render_template('ponto_registro.html', proxima_acao=proxima, hoje_extenso=hoje_extenso, pontos=pontos_hoje, bloqueado=bloqueado, motivo=motivo_bloqueio)
+    
+    return render_template('ponto_registro.html', proxima_acao=prox, hoje_extenso=hoje_extenso, pontos=pontos, bloqueado=bloqueado, motivo=motivo)
 
-# --- ROTA EDITAR (COM EXCLUSÃO SEGURA / CASCADE) ---
+# --- ROTAS PADRAO MANTIDAS ---
 @app.route('/admin/usuarios/editar/<int:id>', methods=['GET', 'POST'])
 @login_required
 def editar_usuario(id):
     if current_user.role != 'Master': return redirect(url_for('dashboard'))
     user = User.query.get_or_404(id)
-    
     if request.method == 'POST':
-        acao = request.form.get('acao')
-        
-        if acao == 'excluir':
-            if user.username == 'Thaynara':
-                flash('Não é possível excluir o Master Principal.')
+        try:
+            acao = request.form.get('acao')
+            if acao == 'excluir':
+                if user.username == 'Thaynara': flash('Erro master.')
+                else: 
+                    PontoRegistro.query.filter_by(user_id=user.id).delete(); PontoResumo.query.filter_by(user_id=user.id).delete(); PontoAjuste.query.filter_by(user_id=user.id).delete(); db.session.delete(user); db.session.commit(); flash('Excluido.')
                 return redirect(url_for('gerenciar_usuarios'))
-            
-            try:
-                # CASCADE DELETE MANUAL: Remove dependencias primeiro
-                PontoRegistro.query.filter_by(user_id=user.id).delete()
-                PontoResumo.query.filter_by(user_id=user.id).delete()
-                PontoAjuste.query.filter_by(user_id=user.id).delete()
-                
-                # Agora deleta o usuario
-                db.session.delete(user)
-                db.session.commit()
-                flash('Funcionário e dados vinculados excluídos com sucesso.')
-                return redirect(url_for('gerenciar_usuarios'))
-            except Exception as e:
-                db.session.rollback()
-                flash(f'Erro ao excluir: {{e}}')
-                return redirect(url_for('editar_usuario', id=id))
-
-        elif acao == 'resetar_senha':
-            nova = secrets.token_hex(3); user.set_password(nova); user.is_first_access = True; db.session.commit(); flash(f'Senha: {{nova}}'); return redirect(url_for('editar_usuario', id=id))
-        else:
-            try:
+            elif acao == 'resetar_senha': nova = secrets.token_hex(3); user.set_password(nova); user.is_first_access = True; db.session.commit(); flash(f'Senha: {{nova}}'); return redirect(url_for('editar_usuario', id=id))
+            else:
                 user.real_name = request.form.get('real_name'); user.username = request.form.get('username')
                 if user.username != 'Thaynara': user.role = request.form.get('role')
-                user.horario_entrada = request.form.get('h_ent') or '07:12'; user.horario_almoco_inicio = request.form.get('h_alm_ini') or '12:00'
-                user.horario_almoco_fim = request.form.get('h_alm_fim') or '13:00'; user.horario_saida = request.form.get('h_sai') or '17:00'
-                user.salario = float(request.form.get('salario') or 0.0)
-                user.escala = request.form.get('escala')
+                user.salario = float(request.form.get('salario') or 0); user.horario_entrada = request.form.get('h_ent'); user.horario_almoco_inicio = request.form.get('h_alm_ini'); user.horario_almoco_fim = request.form.get('h_alm_fim'); user.horario_saida = request.form.get('h_sai'); user.escala = request.form.get('escala')
                 if request.form.get('dt_escala'): user.data_inicio_escala = datetime.strptime(request.form.get('dt_escala'), '%Y-%m-%d').date()
-                db.session.commit(); calcular_dia(user.id, get_brasil_time().date()); return redirect(url_for('gerenciar_usuarios'))
-            except Exception as e:
-                db.session.rollback(); flash(f'Erro ao salvar: {{e}}'); return redirect(url_for('editar_usuario', id=id))
-                
+                db.session.commit(); flash('Atualizado.')
+                return redirect(url_for('gerenciar_usuarios'))
+        except Exception as e: db.session.rollback(); flash(f'Erro: {{e}}'); return redirect(url_for('editar_usuario', id=id))
     return render_template('editar_usuario.html', user=user)
-
-# --- ROTA RELATORIO (COM PROTEÇÃO CONTRA NULL) ---
-@app.route('/admin/relatorio-folha', methods=['GET', 'POST'])
-@login_required
-def admin_relatorio_folha():
-    if current_user.role != 'Master': return redirect(url_for('dashboard'))
-    
-    mes_ref = request.form.get('mes_ref') or datetime.now().strftime('%Y-%m')
-    try: ano, mes = map(int, mes_ref.split('-'))
-    except: hoje = datetime.now(); ano, mes = hoje.year, hoje.month; mes_ref = hoje.strftime('%Y-%m')
-
-    users = User.query.order_by(User.real_name).all()
-    relatorio = []
-    
-    for u in users:
-        try:
-            resumos = PontoResumo.query.filter(PontoResumo.user_id == u.id, func.extract('year', PontoResumo.data_referencia) == ano, func.extract('month', PontoResumo.data_referencia) == mes).all()
-            total_saldo = sum(r.minutos_saldo for r in resumos)
-            sinal = "+" if total_saldo >= 0 else "-"
-            abs_s = abs(total_saldo)
-            
-            # Protecao para salario None
-            sal_val = u.salario if u.salario is not None else 0.0
-            
-            relatorio.append({{
-                'nome': u.real_name, 
-                'cargo': u.role, 
-                'salario': sal_val, 
-                'saldo_minutos': total_saldo, 
-                'saldo_formatado': f"{{sinal}}{{abs_s // 60:02d}}:{{abs_s % 60:02d}}", 
-                'status': 'Crédito' if total_saldo >= 0 else 'Débito'
-            }})
-        except Exception as e:
-            # Se der erro num user, nao quebra o relatorio todo
-            print(f"Erro relatorio user {{u.id}}: {{e}}")
-            continue
-        
-    return render_template('admin_relatorio_folha.html', relatorio=relatorio, mes_ref=mes_ref)
-
-# --- DEMAIS ROTAS ---
-@app.route('/admin/usuarios')
-@login_required
-def gerenciar_usuarios(): return render_template('admin_usuarios.html', users=User.query.all()) if current_user.role == 'Master' else redirect(url_for('dashboard'))
-
-@app.route('/admin/usuarios/novo', methods=['GET', 'POST'])
-@login_required
-def novo_usuario(): 
-    if request.method == 'POST':
-        uname = request.form.get('username')
-        if User.query.filter_by(username=uname).first(): flash('Existe.')
-        else:
-            senha = secrets.token_hex(3)
-            dt_escala = None
-            if request.form.get('dt_escala'): dt_escala = datetime.strptime(request.form.get('dt_escala'), '%Y-%m-%d').date()
-            novo = User(username=uname, real_name=request.form.get('real_name'), role=request.form.get('role'), is_first_access=True, horario_entrada=request.form.get('h_ent'), horario_almoco_inicio=request.form.get('h_alm_ini'), horario_almoco_fim=request.form.get('h_alm_fim'), horario_saida=request.form.get('h_sai'), escala=request.form.get('escala'), data_inicio_escala=dt_escala)
-            novo.set_password(senha); db.session.add(novo); db.session.commit()
-            return render_template('sucesso_usuario.html', novo_user=uname, senha_gerada=senha)
-    return render_template('novo_usuario.html')
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -376,6 +316,10 @@ def primeiro_acesso():
     if request.method == 'POST':
         if request.form.get('nova_senha') == request.form.get('confirmacao'): current_user.set_password(request.form.get('nova_senha')); current_user.is_first_access = False; db.session.commit(); return redirect(url_for('dashboard'))
     return render_template('primeiro_acesso.html')
+
+@app.route('/admin/usuarios')
+@login_required
+def gerenciar_usuarios(): return render_template('admin_usuarios.html', users=User.query.all()) if current_user.role == 'Master' else redirect(url_for('dashboard'))
 
 @app.route('/')
 @login_required
@@ -421,6 +365,97 @@ def admin_solicitacoes():
             if original: dados_extras[p.id] = original.hora_registro.strftime('%H:%M')
     return render_template('admin_solicitacoes.html', solicitacoes=pendentes, extras=dados_extras)
 
+@app.route('/admin/relatorio-folha', methods=['GET', 'POST'])
+@login_required
+def admin_relatorio_folha():
+    if current_user.role != 'Master': return redirect(url_for('dashboard'))
+    mes_ref = request.form.get('mes_ref') or datetime.now().strftime('%Y-%m')
+    try: ano, mes = map(int, mes_ref.split('-'))
+    except: hoje = datetime.now(); ano, mes = hoje.year, hoje.month
+    users = User.query.order_by(User.real_name).all()
+    relatorio = []
+    for u in users:
+        resumos = PontoResumo.query.filter(PontoResumo.user_id == u.id, func.extract('year', PontoResumo.data_referencia) == ano, func.extract('month', PontoResumo.data_referencia) == mes).all()
+        total_saldo = sum(r.minutos_saldo for r in resumos)
+        sinal = "+" if total_saldo >= 0 else "-"
+        abs_s = abs(total_saldo)
+        sal = u.salario if u.salario else 0.0
+        relatorio.append({{'nome': u.real_name, 'cargo': u.role, 'salario': sal, 'saldo_minutos': total_saldo, 'saldo_formatado': f"{{sinal}}{{abs_s // 60:02d}}:{{abs_s % 60:02d}}", 'status': 'Crédito' if total_saldo >= 0 else 'Débito'}})
+    return render_template('admin_relatorio_folha.html', relatorio=relatorio, mes_ref=mes_ref)
+
+@app.route('/controle-uniforme')
+@login_required
+def controle_uniforme(): return render_template('controle_uniforme.html', itens=ItemEstoque.query.all()) if current_user.role == 'Master' else redirect(url_for('dashboard'))
+@app.route('/entrada', methods=['GET', 'POST'])
+@login_required
+def entrada(): 
+    if request.method == 'POST': return redirect(url_for('controle_uniforme'))
+    return render_template('entrada.html')
+@app.route('/saida', methods=['GET', 'POST'])
+@login_required
+def saida(): 
+    if request.method == 'POST': return redirect(url_for('controle_uniforme'))
+    return render_template('saida.html', itens=ItemEstoque.query.all())
+@app.route('/gerenciar/selecao', methods=['GET', 'POST'])
+@login_required
+def selecionar_edicao():
+    if request.method == 'POST': return redirect(url_for('editar_item', id=request.form.get('item_id')))
+    return render_template('selecionar_edicao.html', itens=ItemEstoque.query.order_by(ItemEstoque.nome).all())
+@app.route('/gerenciar/item/<int:id>', methods=['GET', 'POST'])
+@login_required
+def editar_item(id):
+    item = ItemEstoque.query.get_or_404(id)
+    if request.method == 'POST':
+        if request.form.get('acao') == 'excluir': db.session.delete(item); db.session.commit()
+        else: item.nome = request.form.get('nome'); item.quantidade = int(request.form.get('quantidade')); db.session.commit()
+        return redirect(url_for('controle_uniforme'))
+    return render_template('editar_item.html', item=item)
+@app.route('/historico/entrada')
+@login_required
+def view_historico_entrada(): return render_template('historico_entrada.html', logs=HistoricoEntrada.query.all())
+@app.route('/historico/saida')
+@login_required
+def view_historico_saida(): return render_template('historico_saida.html', logs=HistoricoSaida.query.all())
+@app.route('/historico/entrada/editar/<int:id>', methods=['GET', 'POST'])
+@login_required
+def editar_historico_entrada(id):
+    log = HistoricoEntrada.query.get_or_404(id)
+    if request.method == 'POST':
+        if request.form.get('acao') == 'excluir': db.session.delete(log); db.session.commit(); return redirect(url_for('view_historico_entrada'))
+        log.item_nome = request.form.get('item_nome'); log.quantidade = int(request.form.get('quantidade')); db.session.commit(); return redirect(url_for('view_historico_entrada'))
+    return render_template('editar_log_entrada.html', log=log)
+@app.route('/historico/saida/editar/<int:id>', methods=['GET', 'POST'])
+@login_required
+def editar_historico_saida(id):
+    log = HistoricoSaida.query.get_or_404(id)
+    if request.method == 'POST':
+        if request.form.get('acao') == 'excluir': db.session.delete(log); db.session.commit(); return redirect(url_for('view_historico_saida'))
+        log.colaborador = request.form.get('colaborador'); log.quantidade = int(request.form.get('quantidade')); db.session.commit(); return redirect(url_for('view_historico_saida'))
+    return render_template('editar_log_saida.html', log=log)
+@app.route('/ponto/solicitar-ajuste', methods=['GET', 'POST'])
+@login_required
+def solicitar_ajuste():
+    pontos_dia = []
+    data_selecionada = None
+    meus_ajustes = PontoAjuste.query.filter_by(user_id=current_user.id).order_by(PontoAjuste.created_at.desc()).limit(20).all()
+    if request.method == 'POST':
+        if request.form.get('acao') == 'buscar':
+            try: data_selecionada = datetime.strptime(request.form.get('data_busca'), '%Y-%m-%d').date(); pontos_dia = PontoRegistro.query.filter_by(user_id=current_user.id, data_registro=data_selecionada).order_by(PontoRegistro.hora_registro).all()
+            except: flash('Data inválida')
+        elif request.form.get('acao') == 'enviar':
+            try:
+                dt_obj = datetime.strptime(request.form.get('data_ref'), '%Y-%m-%d').date()
+                p_id = int(request.form.get('ponto_id')) if request.form.get('ponto_id') else None
+                solic = PontoAjuste(user_id=current_user.id, data_referencia=dt_obj, ponto_original_id=p_id, novo_horario=request.form.get('novo_horario'), tipo_batida=request.form.get('tipo_batida'), tipo_solicitacao=request.form.get('tipo_solicitacao'), justificativa=request.form.get('justificativa'))
+                db.session.add(solic); db.session.commit(); flash('Enviado!')
+                return redirect(url_for('solicitar_ajuste'))
+            except: pass
+    dados_extras = {{}}
+    for p in meus_ajustes:
+        if p.ponto_original_id:
+            original = PontoRegistro.query.get(p.ponto_original_id)
+            if original: dados_extras[p.id] = original.hora_registro.strftime('%H:%M')
+    return render_template('solicitar_ajuste.html', pontos=pontos_dia, data_sel=data_selecionada, meus_ajustes=meus_ajustes, extras=dados_extras)
 @app.route('/ponto/espelho')
 @login_required
 def espelho_ponto():
@@ -463,147 +498,77 @@ def espelho_ponto():
             dias_agrupados[d]['pontos'].append(r)
         return render_template('ponto_espelho.html', dias=dias_agrupados.values(), filtro_data=data_filtro)
 
-@app.route('/controle-uniforme')
-@login_required
-def controle_uniforme(): return render_template('controle_uniforme.html', itens=ItemEstoque.query.all()) if current_user.role == 'Master' else redirect(url_for('dashboard'))
-
-@app.route('/entrada', methods=['GET', 'POST'])
-@login_required
-def entrada(): 
-    if request.method == 'POST': return redirect(url_for('controle_uniforme'))
-    return render_template('entrada.html')
-
-@app.route('/saida', methods=['GET', 'POST'])
-@login_required
-def saida(): 
-    if request.method == 'POST': return redirect(url_for('controle_uniforme'))
-    return render_template('saida.html', itens=ItemEstoque.query.all())
-
-@app.route('/gerenciar/selecao', methods=['GET', 'POST'])
-@login_required
-def selecionar_edicao():
-    if request.method == 'POST': return redirect(url_for('editar_item', id=request.form.get('item_id')))
-    return render_template('selecionar_edicao.html', itens=ItemEstoque.query.order_by(ItemEstoque.nome).all())
-
-@app.route('/gerenciar/item/<int:id>', methods=['GET', 'POST'])
-@login_required
-def editar_item(id):
-    item = ItemEstoque.query.get_or_404(id)
-    if request.method == 'POST':
-        if request.form.get('acao') == 'excluir': db.session.delete(item); db.session.commit()
-        else: item.nome = request.form.get('nome'); item.quantidade = int(request.form.get('quantidade')); db.session.commit()
-        return redirect(url_for('controle_uniforme'))
-    return render_template('editar_item.html', item=item)
-
-@app.route('/historico/entrada')
-@login_required
-def view_historico_entrada(): return render_template('historico_entrada.html', logs=HistoricoEntrada.query.all())
-
-@app.route('/historico/saida')
-@login_required
-def view_historico_saida(): return render_template('historico_saida.html', logs=HistoricoSaida.query.all())
-
-@app.route('/historico/entrada/editar/<int:id>', methods=['GET', 'POST'])
-@login_required
-def editar_historico_entrada(id):
-    log = HistoricoEntrada.query.get_or_404(id)
-    if request.method == 'POST':
-        if request.form.get('acao') == 'excluir': db.session.delete(log); db.session.commit(); return redirect(url_for('view_historico_entrada'))
-        log.item_nome = request.form.get('item_nome'); log.quantidade = int(request.form.get('quantidade')); db.session.commit(); return redirect(url_for('view_historico_entrada'))
-    return render_template('editar_log_entrada.html', log=log)
-
-@app.route('/historico/saida/editar/<int:id>', methods=['GET', 'POST'])
-@login_required
-def editar_historico_saida(id):
-    log = HistoricoSaida.query.get_or_404(id)
-    if request.method == 'POST':
-        if request.form.get('acao') == 'excluir': db.session.delete(log); db.session.commit(); return redirect(url_for('view_historico_saida'))
-        log.colaborador = request.form.get('colaborador'); log.quantidade = int(request.form.get('quantidade')); db.session.commit(); return redirect(url_for('view_historico_saida'))
-    return render_template('editar_log_saida.html', log=log)
-
-@app.route('/ponto/solicitar-ajuste', methods=['GET', 'POST'])
-@login_required
-def solicitar_ajuste():
-    pontos_dia = []
-    data_selecionada = None
-    meus_ajustes = PontoAjuste.query.filter_by(user_id=current_user.id).order_by(PontoAjuste.created_at.desc()).limit(20).all()
-    if request.method == 'POST':
-        if request.form.get('acao') == 'buscar':
-            try: data_selecionada = datetime.strptime(request.form.get('data_busca'), '%Y-%m-%d').date(); pontos_dia = PontoRegistro.query.filter_by(user_id=current_user.id, data_registro=data_selecionada).order_by(PontoRegistro.hora_registro).all()
-            except: flash('Data inválida')
-        elif request.form.get('acao') == 'enviar':
-            try:
-                dt_obj = datetime.strptime(request.form.get('data_ref'), '%Y-%m-%d').date()
-                p_id = int(request.form.get('ponto_id')) if request.form.get('ponto_id') else None
-                solic = PontoAjuste(user_id=current_user.id, data_referencia=dt_obj, ponto_original_id=p_id, novo_horario=request.form.get('novo_horario'), tipo_batida=request.form.get('tipo_batida'), tipo_solicitacao=request.form.get('tipo_solicitacao'), justificativa=request.form.get('justificativa'))
-                db.session.add(solic); db.session.commit(); flash('Enviado!')
-                return redirect(url_for('solicitar_ajuste'))
-            except: pass
-    dados_extras = {{}}
-    for p in meus_ajustes:
-        if p.ponto_original_id:
-            original = PontoRegistro.query.get(p.ponto_original_id)
-            if original: dados_extras[p.id] = original.hora_registro.strftime('%H:%M')
-    return render_template('solicitar_ajuste.html', pontos=pontos_dia, data_sel=data_selecionada, meus_ajustes=meus_ajustes, extras=dados_extras)
-
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
 """
 
-# --- REGISTRO PONTO (DATA PT-BR) ---
-FILE_PONTO_REGISTRO = """
+# --- NOVOS TEMPLATES (V29) ---
+FILE_NOVO_USUARIO = """
 {% extends 'base.html' %}
 {% block content %}
-<div class="max-w-md mx-auto text-center">
-    <div class="mb-8"><h2 class="text-2xl font-bold text-slate-800">Registrar Ponto</h2><p class="text-sm text-slate-500">Confirme sua localização.</p></div>
-
-    {% if bloqueado %}
-    <div class="bg-red-50 border-l-4 border-red-500 p-6 rounded-r-xl shadow-md text-left mb-8">
-        <h3 class="text-lg font-bold text-red-700 flex items-center gap-2"><i class="fas fa-ban"></i> AÇÃO BLOQUEADA</h3>
-        <p class="text-sm text-red-600 mt-2">{{ motivo }}</p>
-    </div>
-    {% else %}
-    <div class="bg-slate-900 text-white rounded-2xl p-8 shadow-2xl mb-8 border border-slate-700 relative overflow-hidden">
-        <div class="text-5xl font-mono font-bold tracking-widest mb-2" id="relogio">--:--:--</div>
-        <div class="text-sm text-slate-400 uppercase tracking-widest">{{ hoje_extenso }}</div>
-        <div class="mt-6 inline-block bg-blue-600 text-xs font-bold px-4 py-1 rounded-full uppercase tracking-wide shadow-lg">Próximo: {{ proxima_acao }}</div>
-    </div>
-    <form action="/ponto/registrar" method="POST" id="formPonto">
-        <input type="hidden" name="latitude" id="lat"><input type="hidden" name="longitude" id="lon">
-        <button type="button" onclick="getLocationAndSubmit()" id="btnRegistrar" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-5 rounded-xl shadow-xl transition transform active:scale-95 flex items-center justify-center gap-3 text-lg"><i class="fas fa-fingerprint text-2xl"></i> REGISTRAR</button>
-        <p id="geoStatus" class="text-xs text-slate-400 mt-4 h-4"></p>
-    </form>
-    {% endif %}
-
-    <div class="mt-8 text-left">
-        <h3 class="text-xs font-bold text-slate-400 uppercase mb-3 ml-1">Histórico de Hoje</h3>
-        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden divide-y divide-slate-100">
-            {% for p in pontos %}
-            <div class="px-4 py-3 flex justify-between items-center"><span class="text-sm font-bold text-slate-700">{{ p.tipo }}</span><span class="text-sm font-mono text-slate-500">{{ p.hora_registro.strftime('%H:%M') }}</span></div>
-            {% else %}<div class="p-4 text-center text-xs text-slate-400">Nenhum registro hoje.</div>{% endfor %}
-        </div>
+<div class="max-w-lg mx-auto">
+    <div class="flex items-center justify-between mb-6"><h2 class="text-lg font-bold text-slate-800">Novo Cadastro</h2><a href="/admin/usuarios" class="text-xs font-medium text-slate-500 hover:text-slate-800">Cancelar</a></div>
+    <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <form action="/admin/usuarios/novo" method="POST" class="p-8 space-y-6">
+            <div class="space-y-4">
+                <div><label class="label-pro">Nome Completo</label><input type="text" name="real_name" class="input-pro" placeholder="Ex: Maria da Silva" required></div>
+                <div><label class="label-pro">Cargo / Função</label><input type="text" name="role" class="input-pro" placeholder="Ex: Assistente" required></div>
+                <div><label class="label-pro text-emerald-600">Salário Base (R$)</label><input type="number" step="0.01" name="salario" class="input-pro border-emerald-200 text-emerald-700 font-bold" placeholder="2000.00"></div>
+            </div>
+            <div class="pt-4 border-t border-slate-100">
+                <p class="text-xs font-bold text-slate-400 uppercase mb-3">Escala e Jornada</p>
+                <div class="mb-4">
+                    <label class="label-pro">Tipo de Escala</label>
+                    <select name="escala" class="input-pro" onchange="toggleDtRef(this)">
+                        <option value="Livre">Livre (Sem Bloqueio)</option><option value="5x2">Normal 5x2 (Seg-Sex)</option><option value="12x36">Plantão 12x36</option>
+                    </select>
+                </div>
+                <div id="divDtRef" class="hidden mb-4 bg-blue-50 p-3 rounded border border-blue-100">
+                    <label class="label-pro text-blue-700">Data de Referência (Dia Trabalhado)</label><input type="date" name="dt_escala" class="input-pro">
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div><label class="label-pro">Entrada</label><input type="time" name="h_ent" value="07:12" class="input-pro"></div>
+                    <div><label class="label-pro">Saída Almoço</label><input type="time" name="h_alm_ini" value="12:00" class="input-pro"></div>
+                    <div><label class="label-pro">Volta Almoço</label><input type="time" name="h_alm_fim" value="13:00" class="input-pro"></div>
+                    <div><label class="label-pro">Saída</label><input type="time" name="h_sai" value="17:00" class="input-pro"></div>
+                </div>
+            </div>
+            <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-lg shadow-md transition transform active:scale-95">GERAR ACESSO AUTOMÁTICO</button>
+        </form>
     </div>
 </div>
 <script>
-    function updateTime() { document.getElementById('relogio').innerText = new Date().toLocaleTimeString('pt-BR'); }
-    setInterval(updateTime, 1000); updateTime();
-    function getLocationAndSubmit() {
-        const btn = document.getElementById('btnRegistrar');
-        const st = document.getElementById('geoStatus');
-        btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Obtendo...';
-        if (navigator.geolocation) {
-            navigator.geolocation.getCurrentPosition(
-                (p) => { document.getElementById('lat').value = p.coords.latitude; document.getElementById('lon').value = p.coords.longitude; document.getElementById('formPonto').submit(); },
-                (e) => { alert("Erro GPS."); btn.disabled = false; btn.innerHTML = 'TENTAR NOVAMENTE'; }
-            );
-        } else alert("Sem suporte GPS.");
-    }
+    function toggleDtRef(sel) { if (sel.value === '12x36') document.getElementById('divDtRef').classList.remove('hidden'); else document.getElementById('divDtRef').classList.add('hidden'); }
 </script>
+<style>.label-pro { display: block; font-size: 0.7rem; font-weight: 700; color: #64748b; text-transform: uppercase; margin-bottom: 0.5rem; } .input-pro { width: 100%; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 0.5rem; padding: 0.75rem 1rem; color: #1e293b; font-weight: 500; outline: none; }</style>
 {% endblock %}
 """
 
-# --- FUNÇÕES ---
+FILE_SUCESSO_USUARIO = """
+{% extends 'base.html' %}
+{% block content %}
+<div class="max-w-lg mx-auto flex flex-col items-center justify-center min-h-[50vh] text-center">
+    <div class="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-600 mb-6 shadow-sm animate-bounce"><i class="fas fa-id-badge text-3xl"></i></div>
+    <h2 class="text-2xl font-bold text-slate-800 mb-2">Crachá Digital Gerado!</h2>
+    <p class="text-slate-500 mb-8">Colaborador: <strong>{{ nome_real }}</strong></p>
+    <div class="bg-white border-2 border-dashed border-emerald-300 p-8 rounded-xl w-full mb-8 shadow-lg relative overflow-hidden">
+        <div class="absolute top-0 left-0 w-full h-2 bg-emerald-400"></div>
+        <div class="mb-6">
+            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">LOGIN DE ACESSO</p>
+            <div class="text-3xl font-mono font-bold text-slate-800 select-all">{{ novo_user }}</div>
+        </div>
+        <div>
+            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">SENHA TEMPORÁRIA</p>
+            <div class="text-3xl font-mono font-bold text-blue-600 select-all">{{ senha_gerada }}</div>
+        </div>
+    </div>
+    <div class="bg-blue-50 text-blue-800 text-xs p-4 rounded-lg mb-8 max-w-sm"><i class="fas fa-info-circle mr-1"></i> Tire um print ou anote agora. A senha desaparecerá ao sair desta tela.</div>
+    <a href="/admin/usuarios" class="bg-slate-800 hover:bg-slate-900 text-white font-bold py-3 px-8 rounded-full transition shadow-lg">CONCLUIR E VOLTAR</a>
+</div>
+{% endblock %}
+"""
+
 def create_backup():
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     backup = os.path.join("backup", ts)
@@ -626,7 +591,7 @@ def git_update():
         subprocess.run(["git", "add", "."], check=True)
         subprocess.run(["git", "commit", "-m", COMMIT_MSG], check=False)
         subprocess.run(["git", "push"], check=True)
-        print("\n>>> SUCESSO V28 FIXES! <<<")
+        print("\n>>> SUCESSO V29 FIXED! <<<")
     except Exception as e: print(f"Git: {e}")
 
 def self_destruct():
@@ -634,13 +599,14 @@ def self_destruct():
     except: pass
 
 def main():
-    print(f"--- UPDATE V28 CRÍTICO: {PROJECT_NAME} ---")
+    print(f"--- UPDATE V29 FIX SYNTAX: {PROJECT_NAME} ---")
     create_backup()
     write_file("runtime.txt", FILE_RUNTIME)
     write_file("requirements.txt", FILE_REQ)
     write_file("Procfile", FILE_PROCFILE)
     write_file("app.py", FILE_APP)
-    write_file("templates/ponto_registro.html", FILE_PONTO_REGISTRO)
+    write_file("templates/novo_usuario.html", FILE_NOVO_USUARIO)
+    write_file("templates/sucesso_usuario.html", FILE_SUCESSO_USUARIO)
     git_update()
     self_destruct()
 
