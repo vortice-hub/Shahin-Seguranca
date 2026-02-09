@@ -1,0 +1,18 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+    <h2 class="text-lg font-bold text-slate-800 mb-4">Editar Histórico (Entrada)</h2>
+    <form action="/historico/entrada/editar/{{ log.id }}" method="POST" class="space-y-4">
+        <div><label class="label-pro">Item (Texto)</label><input type="text" name="item_nome" value="{{ log.item_nome }}" class="input-pro"></div>
+        <div><label class="label-pro">Quantidade Original</label><input type="number" name="quantidade" value="{{ log.quantidade }}" class="input-pro"></div>
+        <div><label class="label-pro">Data/Hora</label><input type="datetime-local" name="data" value="{{ log.data_hora.strftime('%Y-%m-%dT%H:%M') }}" class="input-pro"></div>
+        
+        <div class="flex gap-3 pt-4">
+            <button type="submit" name="acao" value="salvar" class="flex-1 bg-blue-600 text-white font-bold py-3 rounded-lg">Salvar Correção</button>
+            <button type="submit" name="acao" value="excluir" class="flex-none bg-red-100 text-red-600 font-bold py-3 px-6 rounded-lg" onclick="return confirm('Excluir este registro? O estoque atual NÃO será alterado.')"><i class="fas fa-trash"></i></button>
+        </div>
+        <p class="text-[10px] text-slate-400 mt-2 text-center">Nota: Alterar este log não muda o estoque atual. Use o menu Gerenciar para ajustar quantidades atuais.</p>
+    </form>
+</div>
+<style>.label-pro { display: block; font-size: 0.7rem; font-weight: 700; color: #64748b; text-transform: uppercase; margin-bottom: 0.5rem; } .input-pro { width: 100%; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 0.5rem; padding: 0.75rem 1rem; }</style>
+{% endblock %}
