@@ -11,7 +11,7 @@
     {% else %}
     <div class="bg-slate-900 text-white rounded-2xl p-8 shadow-2xl mb-8 border border-slate-700 relative overflow-hidden">
         <div class="text-5xl font-mono font-bold tracking-widest mb-2" id="relogio">--:--:--</div>
-        <div class="text-sm text-slate-400 uppercase tracking-widest">{{ hoje_extenso }}</div>
+        <div class="text-sm text-slate-400 uppercase tracking-widest">{{ hoje.strftime('%d de %B de %Y') }}</div>
         <div class="mt-6 inline-block bg-blue-600 text-xs font-bold px-4 py-1 rounded-full uppercase tracking-wide shadow-lg">Próximo: {{ proxima_acao }}</div>
     </div>
     <form action="/ponto/registrar" method="POST" id="formPonto">
