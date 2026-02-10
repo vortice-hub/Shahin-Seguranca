@@ -3,30 +3,69 @@
 <div class="flex items-center justify-between mb-6">
     <h2 class="text-2xl font-bold text-slate-800">Funcionários</h2>
 </div>
-<a href="/admin/usuarios/novo" class="block w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl shadow-md text-center mb-8"><i class="fas fa-user-plus mr-2"></i> CADASTRAR NOVO</a>
 
-<!-- BARRA DE BUSCA -->
+<a href="/admin/usuarios/novo" class="block w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl shadow-md text-center mb-8 transition transform hover:-translate-y-1">
+    <i class="fas fa-user-plus mr-2"></i> CADASTRAR NOVO FUNCIONÁRIO
+</a>
+
 <div class="mb-6">
     <input type="text" id="buscaFunc" onkeyup="filtrarTabela('buscaFunc', 'listaFunc')" placeholder="Pesquisar funcionário..." class="w-full p-4 rounded-xl border border-slate-200 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
 </div>
 
+<!-- LISTA DE PENDENTES (AGUARDANDO CADASTRO) -->
+{% if pendentes %}
+<div class="bg-yellow-50 border border-yellow-200 rounded-xl overflow-hidden mb-8 shadow-sm">
+    <div class="px-6 py-4 border-b border-yellow-200 bg-yellow-100/50 flex justify-between items-center">
+        <h3 class="font-bold text-yellow-800"><i class="fas fa-clock mr-2"></i> Aguardando Cadastro ({{ pendentes|length }})</h3>
+    </div>
+    <div class="divide-y divide-yellow-200/50">
+        {% for p in pendentes %}
+        <div class="px-6 py-4 flex items-center justify-between hover:bg-yellow-100/30 transition">
+            <div>
+                <div class="font-bold text-slate-800">{{ p.nome_previsto }}</div>
+                <div class="text-xs font-mono text-slate-500">CPF: {{ p.cpf }}</div>
+                <div class="text-[10px] text-slate-400 mt-1">{{ p.cargo }}</div>
+            </div>
+            <a href="/admin/liberar-acesso/excluir/{{ p.id }}" class="text-red-400 hover:text-red-600 p-2" onclick="return confirm('Remover da lista de espera?')">
+                <i class="fas fa-trash"></i>
+            </a>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<!-- LISTA DE ATIVOS -->
 <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-    <div class="px-6 py-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center"><h3 class="font-bold text-slate-700">Equipe</h3><span class="text-xs bg-slate-200 text-slate-600 px-2 py-1 rounded-full font-bold">{{ users|length }}</span></div>
+    <div class="px-6 py-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
+        <h3 class="font-bold text-slate-700">Equipe Ativa</h3>
+        <span class="text-xs bg-slate-200 text-slate-600 px-2 py-1 rounded-full font-bold">{{ users|length }}</span>
+    </div>
     <div class="divide-y divide-slate-100" id="listaFunc">
         {% for u in users %}
         <div class="px-6 py-4 flex items-center justify-between hover:bg-slate-50 transition group item-lista">
             <div class="flex items-center gap-4">
-                <div class="w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm bg-slate-100 text-slate-600">{{ u.real_name[:2].upper() }}</div>
-                <div><div class="font-bold text-slate-800 nome-item">{{ u.real_name }}</div><div class="text-xs text-slate-500">{{ u.role }}</div></div>
+                <div class="w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm bg-slate-100 text-slate-600">
+                    {{ u.real_name[:2].upper() }}
+                </div>
+                <div>
+                    <div class="font-bold text-slate-800 nome-item">{{ u.real_name }}</div>
+                    <div class="text-xs text-slate-500">{{ u.role }}</div>
+                </div>
             </div>
+            
             <div class="flex items-center gap-3">
-                {% if u.is_first_access %}<span class="px-2 py-1 bg-yellow-100 text-yellow-700 text-[10px] font-bold uppercase rounded">Pendente</span>{% else %}<span class="px-2 py-1 bg-emerald-100 text-emerald-700 text-[10px] font-bold uppercase rounded">Ativo</span>{% endif %}
-                <a href="/admin/usuarios/editar/{{ u.id }}" class="w-8 h-8 flex items-center justify-center rounded-full text-slate-300 hover:bg-white hover:text-blue-600 border border-transparent hover:border-slate-200 transition"><i class="fas fa-pencil-alt text-xs"></i></a>
+                <span class="px-2 py-1 bg-emerald-100 text-emerald-700 text-[10px] font-bold uppercase rounded">Ativo</span>
+                
+                <a href="/admin/usuarios/editar/{{ u.id }}" class="w-8 h-8 flex items-center justify-center rounded-full text-slate-300 hover:bg-white hover:text-blue-600 hover:shadow border border-transparent hover:border-slate-200 transition">
+                    <i class="fas fa-pencil-alt text-xs"></i>
+                </a>
             </div>
         </div>
         {% endfor %}
     </div>
 </div>
+
 <script>
 function filtrarTabela(inputId, listaId) {
     let input = document.getElementById(inputId);

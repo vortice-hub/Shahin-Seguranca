@@ -6,7 +6,7 @@ from datetime import datetime
 
 # --- CONFIGURAÇÕES ---
 PROJECT_NAME = "TdS Gestão de RH"
-COMMIT_MSG = "V33: Ajuste Fluxo Cadastro - Master Libera CPF, Funcionario Cria Senha"
+COMMIT_MSG = "V34: Visualizacao de Pre-Cadastros Pendentes na Tela de Usuarios"
 DB_URL_FIXA = "postgresql://neondb_owner:npg_UBg0b7YKqLPm@ep-steep-wave-aflx731c-pooler.c-2.us-west-2.aws.neon.tech/neondb?sslmode=require"
 
 # --- CONFIG FILES ---
@@ -14,7 +14,7 @@ FILE_RUNTIME = """python-3.11.9"""
 FILE_REQ = """flask\nflask-sqlalchemy\npsycopg2-binary\ngunicorn\nflask-login\nwerkzeug"""
 FILE_PROCFILE = """web: gunicorn app:app"""
 
-# --- APP.PY (Logica Ajustada) ---
+# --- APP.PY (Atualizado para enviar pendentes para o template) ---
 FILE_APP = f"""
 import os
 import logging
@@ -32,7 +32,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-app.secret_key = 'chave_v33_cpf_flow'
+app.secret_key = 'chave_v34_pending_list'
 
 db_url = "{DB_URL_FIXA}"
 if db_url.startswith("postgres://"):
@@ -246,23 +246,46 @@ try:
             m = User(username='Thaynara', real_name='Thaynara Master', role='Master', is_first_access=False); m.set_password('1855'); db.session.add(m); db.session.commit()
 except: pass
 
-# --- ROTA DE LIBERAR ACESSO (MASTER) - NAO CRIA USER, SO PRE-CADASTRO ---
+# --- ROTA LISTAGEM DE USUARIOS (ATUALIZADA) ---
+@app.route('/admin/usuarios')
+@login_required
+def gerenciar_usuarios():
+    if current_user.role != 'Master': return redirect(url_for('dashboard'))
+    
+    # Busca usuarios ativos
+    users = User.query.all()
+    # Busca usuarios pendentes (PreCadastro)
+    pendentes = PreCadastro.query.all()
+    
+    return render_template('admin_usuarios.html', users=users, pendentes=pendentes)
+
+# --- ROTA EXCLUIR PRE-CADASTRO (NOVA PARA LISTA) ---
+@app.route('/admin/usuarios/excluir-pendente/<int:id>')
+@login_required
+def excluir_pendente(id):
+    if current_user.role != 'Master': return redirect(url_for('dashboard'))
+    pre = PreCadastro.query.get(id)
+    if pre:
+        db.session.delete(pre)
+        db.session.commit()
+        flash('Pré-cadastro removido da lista de espera.')
+    return redirect(url_for('gerenciar_usuarios'))
+
+# --- DEMAIS ROTAS ---
+
 @app.route('/admin/usuarios/novo', methods=['GET', 'POST'])
 @login_required
 def novo_usuario():
     if current_user.role != 'Master': return redirect(url_for('dashboard'))
-    
     if request.method == 'POST':
-        cpf = request.form.get('cpf').replace('.', '').replace('-', '').strip()
-        real_name = request.form.get('real_name')
-        
-        # Validacoes
-        if User.query.filter_by(cpf=cpf).first():
-            flash('Erro: Este CPF já tem conta ativa.')
-        elif PreCadastro.query.filter_by(cpf=cpf).first():
-            flash('Erro: Este CPF já está liberado aguardando cadastro.')
-        else:
-            # Salva na tabela temporaria PreCadastro
+        try:
+            real_name = request.form.get('real_name')
+            cpf = request.form.get('cpf').replace('.', '').replace('-', '').strip()
+            if User.query.filter_by(cpf=cpf).first():
+                flash('Erro: Este CPF já possui cadastro no sistema.')
+                return redirect(url_for('novo_usuario'))
+            
+            # CRIA PRE-CADASTRO
             dt_escala = None
             if request.form.get('dt_escala'):
                 dt_escala = datetime.strptime(request.form.get('dt_escala'), '%Y-%m-%d').date()
@@ -282,71 +305,33 @@ def novo_usuario():
             db.session.add(pre)
             db.session.commit()
             
-            # Master nao vê senha nem login, apenas sucesso
             return render_template('sucesso_usuario.html', nome_real=real_name, cpf=cpf)
             
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"Erro ao criar usuario: {{e}}")
+            flash(f"Erro interno: {{str(e)}}")
+            return redirect(url_for('novo_usuario'))
     return render_template('novo_usuario.html')
 
-# --- ROTA AUTO CADASTRO (FUNCIONARIO) ---
 @app.route('/cadastrar', methods=['GET', 'POST'])
 def auto_cadastro():
-    # FASE 1: DIGITAR CPF
     if request.method == 'GET':
         return render_template('auto_cadastro.html', step=1)
-        
-    # FASE 2: VALIDAR E CRIAR
     if request.method == 'POST':
         cpf = request.form.get('cpf').replace('.', '').replace('-', '').strip()
-        
-        # Verifica se esta liberado
         pre = PreCadastro.query.filter_by(cpf=cpf).first()
-        
         if not pre:
-            if User.query.filter_by(cpf=cpf).first():
-                flash('Você já tem cadastro. Faça login.')
-                return redirect(url_for('login'))
-            else:
-                flash('CPF não encontrado na lista de liberação. Fale com o RH.')
-                return redirect(url_for('auto_cadastro'))
-                
-        # Se achou o pré-cadastro e senha veio no post, cria.
+            if User.query.filter_by(cpf=cpf).first(): flash('Você já tem cadastro. Faça login.'); return redirect(url_for('login'))
+            flash('CPF não encontrado na lista de liberação.'); return redirect(url_for('auto_cadastro'))
         password = request.form.get('password')
         if password:
-            # GERA LOGIN AUTOMATICO
             username = gerar_login_automatico(pre.nome_previsto)
-            while User.query.filter_by(username=username).first():
-                username = gerar_login_automatico(pre.nome_previsto)
-                
-            novo_user = User(
-                username=username,
-                password_hash=generate_password_hash(password),
-                real_name=pre.nome_previsto,
-                role=pre.cargo,
-                cpf=cpf,
-                salario=pre.salario,
-                horario_entrada=pre.horario_entrada,
-                horario_almoco_inicio=pre.horario_almoco_inicio,
-                horario_almoco_fim=pre.horario_almoco_fim,
-                horario_saida=pre.horario_saida,
-                escala=pre.escala,
-                data_inicio_escala=pre.data_inicio_escala,
-                is_first_access=False 
-            )
-            db.session.add(novo_user)
-            db.session.delete(pre) # Remove da fila
-            db.session.commit()
-            
-            # Mostra o Login gerado para ele anotar
+            while User.query.filter_by(username=username).first(): username = gerar_login_automatico(pre.nome_previsto)
+            novo_user = User(username=username, password_hash=generate_password_hash(password), real_name=pre.nome_previsto, role=pre.cargo, cpf=cpf, salario=pre.salario, horario_entrada=pre.horario_entrada, horario_almoco_inicio=pre.horario_almoco_inicio, horario_almoco_fim=pre.horario_almoco_fim, horario_saida=pre.horario_saida, escala=pre.escala, data_inicio_escala=pre.data_inicio_escala, is_first_access=False)
+            db.session.add(novo_user); db.session.delete(pre); db.session.commit()
             return render_template('auto_cadastro_sucesso.html', username=username, nome=pre.nome_previsto)
-            
-        else:
-            # Mostra tela para criar senha
-            return render_template('auto_cadastro.html', step=2, cpf=cpf, nome=pre.nome_previsto)
-
-# --- DEMAIS ROTAS ---
-
-@app.route('/admin/liberar-acesso') # Redireciona antigo link se houver
-def liberar_acesso_redirect(): return redirect(url_for('novo_usuario'))
+        else: return render_template('auto_cadastro.html', step=2, cpf=cpf, nome=pre.nome_previsto)
 
 @app.route('/admin/usuarios/editar/<int:id>', methods=['GET', 'POST'])
 @login_required
@@ -389,10 +374,6 @@ def primeiro_acesso():
     if request.method == 'POST':
         if request.form.get('nova_senha') == request.form.get('confirmacao'): current_user.set_password(request.form.get('nova_senha')); current_user.is_first_access = False; db.session.commit(); return redirect(url_for('dashboard'))
     return render_template('primeiro_acesso.html')
-
-@app.route('/admin/usuarios')
-@login_required
-def gerenciar_usuarios(): return render_template('admin_usuarios.html', users=User.query.all()) if current_user.role == 'Master' else redirect(url_for('dashboard'))
 
 @app.route('/')
 @login_required
@@ -560,91 +541,88 @@ if __name__ == '__main__':
     app.run(host='0.0.0.0', port=port)
 """
 
-# --- SUCESSO MASTER (CPF LIBERADO) ---
-FILE_SUCESSO_MASTER = """
+# --- ADMIN USUARIOS (LISTA COM PENDENTES) ---
+FILE_ADMIN_USUARIOS = """
 {% extends 'base.html' %}
 {% block content %}
-<div class="max-w-lg mx-auto flex flex-col items-center justify-center min-h-[50vh] text-center">
-    <div class="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-600 mb-6 shadow-sm"><i class="fas fa-check text-3xl"></i></div>
-    <h2 class="text-2xl font-bold text-slate-800 mb-2">CPF Liberado!</h2>
-    <p class="text-slate-500 mb-8">O funcionário <strong>{{ nome_real }}</strong> (CPF: {{ cpf }}) já pode se cadastrar.</p>
-    <div class="bg-blue-50 text-blue-800 text-sm p-6 rounded-xl mb-8 max-w-sm">
-        <p class="font-bold mb-2">Próximo Passo:</p>
-        <p>Peça para o funcionário acessar o sistema, clicar em <strong>"Sou Funcionário"</strong> e criar a própria senha usando este CPF.</p>
-    </div>
-    <a href="/admin/usuarios" class="bg-slate-800 hover:bg-slate-900 text-white font-bold py-3 px-8 rounded-full transition shadow-lg">VOLTAR</a>
+<div class="flex items-center justify-between mb-6">
+    <h2 class="text-2xl font-bold text-slate-800">Funcionários</h2>
 </div>
-{% endblock %}
-"""
 
-# --- AUTO CADASTRO (FLUXO EM 2 ETAPAS) ---
-FILE_AUTO_CADASTRO = """
-{% extends 'base.html' %}
-{% block content %}
-<div class="flex flex-col items-center justify-center min-h-[60vh]">
-    <div class="bg-white p-8 rounded-2xl shadow-xl border border-slate-100 w-full max-w-md">
-        
-        <!-- ETAPA 1: DIGITAR CPF -->
-        {% if step == 1 %}
-        <h2 class="text-xl font-bold text-slate-800 mb-2">Primeiro Acesso</h2>
-        <p class="text-sm text-slate-500 mb-6">Digite seu CPF para localizar seu cadastro.</p>
-        <form action="/cadastrar" method="POST" class="space-y-4">
-            <input type="hidden" name="step" value="1">
+<a href="/admin/usuarios/novo" class="block w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl shadow-md text-center mb-8 transition transform hover:-translate-y-1">
+    <i class="fas fa-user-plus mr-2"></i> CADASTRAR NOVO FUNCIONÁRIO
+</a>
+
+<div class="mb-6">
+    <input type="text" id="buscaFunc" onkeyup="filtrarTabela('buscaFunc', 'listaFunc')" placeholder="Pesquisar funcionário..." class="w-full p-4 rounded-xl border border-slate-200 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+</div>
+
+<!-- LISTA DE PENDENTES (AGUARDANDO CADASTRO) -->
+{% if pendentes %}
+<div class="bg-yellow-50 border border-yellow-200 rounded-xl overflow-hidden mb-8 shadow-sm">
+    <div class="px-6 py-4 border-b border-yellow-200 bg-yellow-100/50 flex justify-between items-center">
+        <h3 class="font-bold text-yellow-800"><i class="fas fa-clock mr-2"></i> Aguardando Cadastro ({{ pendentes|length }})</h3>
+    </div>
+    <div class="divide-y divide-yellow-200/50">
+        {% for p in pendentes %}
+        <div class="px-6 py-4 flex items-center justify-between hover:bg-yellow-100/30 transition">
             <div>
-                <label class="block text-xs font-bold text-slate-400 uppercase mb-2">CPF (Somente Números)</label>
-                <input type="text" name="cpf" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 font-bold text-lg tracking-wide focus:outline-none focus:border-blue-500" placeholder="000.000.000-00" required>
+                <div class="font-bold text-slate-800">{{ p.nome_previsto }}</div>
+                <div class="text-xs font-mono text-slate-500">CPF: {{ p.cpf }}</div>
+                <div class="text-[10px] text-slate-400 mt-1">{{ p.cargo }}</div>
             </div>
-            <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-lg shadow-lg transition">CONTINUAR</button>
-        </form>
-        {% endif %}
-
-        <!-- ETAPA 2: CRIAR SENHA -->
-        {% if step == 2 %}
-        <h2 class="text-xl font-bold text-emerald-700 mb-2">Bem-vindo(a), {{ nome }}!</h2>
-        <p class="text-sm text-slate-500 mb-6">Confirme seus dados e crie uma senha segura.</p>
-        <form action="/cadastrar" method="POST" class="space-y-4">
-            <input type="hidden" name="step" value="2">
-            <input type="hidden" name="cpf" value="{{ cpf }}">
-            
-            <div class="bg-slate-50 p-4 rounded-lg border border-slate-100 mb-4">
-                <p class="text-xs text-slate-400 font-bold uppercase">CPF</p>
-                <p class="font-mono text-slate-800 font-bold">{{ cpf }}</p>
-            </div>
-
-            <div>
-                <label class="block text-xs font-bold text-slate-400 uppercase mb-2">Crie sua Senha</label>
-                <input type="password" name="password" class="w-full bg-white border border-slate-200 rounded-lg px-4 py-3 focus:outline-none focus:border-emerald-500" placeholder="Mínimo 6 caracteres" required>
-            </div>
-            
-            <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-4 rounded-lg shadow-lg transition">FINALIZAR CADASTRO</button>
-        </form>
-        {% endif %}
-
-        <div class="text-center mt-4">
-            <a href="/login" class="text-xs text-slate-400 hover:text-slate-600">Voltar para Login</a>
+            <a href="/admin/liberar-acesso/excluir/{{ p.id }}" class="text-red-400 hover:text-red-600 p-2" onclick="return confirm('Remover da lista de espera?')">
+                <i class="fas fa-trash"></i>
+            </a>
         </div>
+        {% endfor %}
     </div>
 </div>
-{% endblock %}
-"""
+{% endif %}
 
-# --- SUCESSO AUTO CADASTRO (EXIBE LOGIN) ---
-FILE_AUTO_SUCESSO = """
-{% extends 'base.html' %}
-{% block content %}
-<div class="max-w-lg mx-auto flex flex-col items-center justify-center min-h-[50vh] text-center">
-    <div class="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-600 mb-6 shadow-sm animate-bounce"><i class="fas fa-check text-3xl"></i></div>
-    <h2 class="text-2xl font-bold text-slate-800 mb-2">Tudo Pronto!</h2>
-    <p class="text-slate-500 mb-8">Seu usuário de acesso foi gerado automaticamente.</p>
-    
-    <div class="bg-white border-2 border-dashed border-emerald-300 p-8 rounded-xl w-full mb-8 shadow-lg relative overflow-hidden">
-        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">SEU USUÁRIO É</p>
-        <div class="text-4xl font-mono font-bold text-slate-800 select-all">{{ username }}</div>
-        <p class="text-xs text-emerald-600 mt-2 font-bold">Memorize este usuário para entrar.</p>
+<!-- LISTA DE ATIVOS -->
+<div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+    <div class="px-6 py-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
+        <h3 class="font-bold text-slate-700">Equipe Ativa</h3>
+        <span class="text-xs bg-slate-200 text-slate-600 px-2 py-1 rounded-full font-bold">{{ users|length }}</span>
     </div>
-    
-    <a href="/login" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-full transition shadow-lg">FAZER LOGIN AGORA</a>
+    <div class="divide-y divide-slate-100" id="listaFunc">
+        {% for u in users %}
+        <div class="px-6 py-4 flex items-center justify-between hover:bg-slate-50 transition group item-lista">
+            <div class="flex items-center gap-4">
+                <div class="w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm bg-slate-100 text-slate-600">
+                    {{ u.real_name[:2].upper() }}
+                </div>
+                <div>
+                    <div class="font-bold text-slate-800 nome-item">{{ u.real_name }}</div>
+                    <div class="text-xs text-slate-500">{{ u.role }}</div>
+                </div>
+            </div>
+            
+            <div class="flex items-center gap-3">
+                <span class="px-2 py-1 bg-emerald-100 text-emerald-700 text-[10px] font-bold uppercase rounded">Ativo</span>
+                
+                <a href="/admin/usuarios/editar/{{ u.id }}" class="w-8 h-8 flex items-center justify-center rounded-full text-slate-300 hover:bg-white hover:text-blue-600 hover:shadow border border-transparent hover:border-slate-200 transition">
+                    <i class="fas fa-pencil-alt text-xs"></i>
+                </a>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
 </div>
+
+<script>
+function filtrarTabela(inputId, listaId) {
+    let input = document.getElementById(inputId);
+    let filter = input.value.toUpperCase();
+    let lista = document.getElementById(listaId);
+    let itens = lista.getElementsByClassName('item-lista');
+    for (let i = 0; i < itens.length; i++) {
+        let nome = itens[i].getElementsByClassName('nome-item')[0];
+        if (nome.innerHTML.toUpperCase().indexOf(filter) > -1) { itens[i].style.display = ""; } else { itens[i].style.display = "none"; }
+    }
+}
+</script>
 {% endblock %}
 """
 
@@ -671,7 +649,7 @@ def git_update():
         subprocess.run(["git", "add", "."], check=True)
         subprocess.run(["git", "commit", "-m", COMMIT_MSG], check=False)
         subprocess.run(["git", "push"], check=True)
-        print("\n>>> SUCESSO V33 CPF FLOW! <<<")
+        print("\n>>> SUCESSO V34 PENDING LIST! <<<")
     except Exception as e: print(f"Git: {e}")
 
 def self_destruct():
@@ -679,16 +657,13 @@ def self_destruct():
     except: pass
 
 def main():
-    print(f"--- UPDATE V33 CPF FLOW: {PROJECT_NAME} ---")
+    print(f"--- UPDATE V34 PENDING LIST: {PROJECT_NAME} ---")
     create_backup()
     write_file("runtime.txt", FILE_RUNTIME)
     write_file("requirements.txt", FILE_REQ)
     write_file("Procfile", FILE_PROCFILE)
     write_file("app.py", FILE_APP)
-    
-    write_file("templates/sucesso_usuario.html", FILE_SUCESSO_MASTER) # Master ve isso
-    write_file("templates/auto_cadastro.html", FILE_AUTO_CADASTRO) # Funcionario ve isso
-    write_file("templates/auto_cadastro_sucesso.html", FILE_AUTO_SUCESSO) # Funcionario ve login no final
+    write_file("templates/admin_usuarios.html", FILE_ADMIN_USUARIOS)
     
     git_update()
     self_destruct()

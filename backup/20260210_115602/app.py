@@ -14,7 +14,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-app.secret_key = 'chave_v34_pending_list'
+app.secret_key = 'chave_v33_cpf_flow'
 
 db_url = "postgresql://neondb_owner:npg_UBg0b7YKqLPm@ep-steep-wave-aflx731c-pooler.c-2.us-west-2.aws.neon.tech/neondb?sslmode=require"
 if db_url.startswith("postgres://"):
@@ -228,46 +228,23 @@ try:
             m = User(username='Thaynara', real_name='Thaynara Master', role='Master', is_first_access=False); m.set_password('1855'); db.session.add(m); db.session.commit()
 except: pass
 
-# --- ROTA LISTAGEM DE USUARIOS (ATUALIZADA) ---
-@app.route('/admin/usuarios')
-@login_required
-def gerenciar_usuarios():
-    if current_user.role != 'Master': return redirect(url_for('dashboard'))
-    
-    # Busca usuarios ativos
-    users = User.query.all()
-    # Busca usuarios pendentes (PreCadastro)
-    pendentes = PreCadastro.query.all()
-    
-    return render_template('admin_usuarios.html', users=users, pendentes=pendentes)
-
-# --- ROTA EXCLUIR PRE-CADASTRO (NOVA PARA LISTA) ---
-@app.route('/admin/usuarios/excluir-pendente/<int:id>')
-@login_required
-def excluir_pendente(id):
-    if current_user.role != 'Master': return redirect(url_for('dashboard'))
-    pre = PreCadastro.query.get(id)
-    if pre:
-        db.session.delete(pre)
-        db.session.commit()
-        flash('Pré-cadastro removido da lista de espera.')
-    return redirect(url_for('gerenciar_usuarios'))
-
-# --- DEMAIS ROTAS ---
-
+# --- ROTA DE LIBERAR ACESSO (MASTER) - NAO CRIA USER, SO PRE-CADASTRO ---
 @app.route('/admin/usuarios/novo', methods=['GET', 'POST'])
 @login_required
 def novo_usuario():
     if current_user.role != 'Master': return redirect(url_for('dashboard'))
+    
     if request.method == 'POST':
-        try:
-            real_name = request.form.get('real_name')
-            cpf = request.form.get('cpf').replace('.', '').replace('-', '').strip()
-            if User.query.filter_by(cpf=cpf).first():
-                flash('Erro: Este CPF já possui cadastro no sistema.')
-                return redirect(url_for('novo_usuario'))
-            
-            # CRIA PRE-CADASTRO
+        cpf = request.form.get('cpf').replace('.', '').replace('-', '').strip()
+        real_name = request.form.get('real_name')
+        
+        # Validacoes
+        if User.query.filter_by(cpf=cpf).first():
+            flash('Erro: Este CPF já tem conta ativa.')
+        elif PreCadastro.query.filter_by(cpf=cpf).first():
+            flash('Erro: Este CPF já está liberado aguardando cadastro.')
+        else:
+            # Salva na tabela temporaria PreCadastro
             dt_escala = None
             if request.form.get('dt_escala'):
                 dt_escala = datetime.strptime(request.form.get('dt_escala'), '%Y-%m-%d').date()
@@ -287,33 +264,71 @@ def novo_usuario():
             db.session.add(pre)
             db.session.commit()
             
+            # Master nao vê senha nem login, apenas sucesso
             return render_template('sucesso_usuario.html', nome_real=real_name, cpf=cpf)
             
-        except Exception as e:
-            db.session.rollback()
-            logger.error(f"Erro ao criar usuario: {e}")
-            flash(f"Erro interno: {str(e)}")
-            return redirect(url_for('novo_usuario'))
     return render_template('novo_usuario.html')
 
+# --- ROTA AUTO CADASTRO (FUNCIONARIO) ---
 @app.route('/cadastrar', methods=['GET', 'POST'])
 def auto_cadastro():
+    # FASE 1: DIGITAR CPF
     if request.method == 'GET':
         return render_template('auto_cadastro.html', step=1)
+        
+    # FASE 2: VALIDAR E CRIAR
     if request.method == 'POST':
         cpf = request.form.get('cpf').replace('.', '').replace('-', '').strip()
+        
+        # Verifica se esta liberado
         pre = PreCadastro.query.filter_by(cpf=cpf).first()
+        
         if not pre:
-            if User.query.filter_by(cpf=cpf).first(): flash('Você já tem cadastro. Faça login.'); return redirect(url_for('login'))
-            flash('CPF não encontrado na lista de liberação.'); return redirect(url_for('auto_cadastro'))
+            if User.query.filter_by(cpf=cpf).first():
+                flash('Você já tem cadastro. Faça login.')
+                return redirect(url_for('login'))
+            else:
+                flash('CPF não encontrado na lista de liberação. Fale com o RH.')
+                return redirect(url_for('auto_cadastro'))
+                
+        # Se achou o pré-cadastro e senha veio no post, cria.
         password = request.form.get('password')
         if password:
+            # GERA LOGIN AUTOMATICO
             username = gerar_login_automatico(pre.nome_previsto)
-            while User.query.filter_by(username=username).first(): username = gerar_login_automatico(pre.nome_previsto)
-            novo_user = User(username=username, password_hash=generate_password_hash(password), real_name=pre.nome_previsto, role=pre.cargo, cpf=cpf, salario=pre.salario, horario_entrada=pre.horario_entrada, horario_almoco_inicio=pre.horario_almoco_inicio, horario_almoco_fim=pre.horario_almoco_fim, horario_saida=pre.horario_saida, escala=pre.escala, data_inicio_escala=pre.data_inicio_escala, is_first_access=False)
-            db.session.add(novo_user); db.session.delete(pre); db.session.commit()
+            while User.query.filter_by(username=username).first():
+                username = gerar_login_automatico(pre.nome_previsto)
+                
+            novo_user = User(
+                username=username,
+                password_hash=generate_password_hash(password),
+                real_name=pre.nome_previsto,
+                role=pre.cargo,
+                cpf=cpf,
+                salario=pre.salario,
+                horario_entrada=pre.horario_entrada,
+                horario_almoco_inicio=pre.horario_almoco_inicio,
+                horario_almoco_fim=pre.horario_almoco_fim,
+                horario_saida=pre.horario_saida,
+                escala=pre.escala,
+                data_inicio_escala=pre.data_inicio_escala,
+                is_first_access=False 
+            )
+            db.session.add(novo_user)
+            db.session.delete(pre) # Remove da fila
+            db.session.commit()
+            
+            # Mostra o Login gerado para ele anotar
             return render_template('auto_cadastro_sucesso.html', username=username, nome=pre.nome_previsto)
-        else: return render_template('auto_cadastro.html', step=2, cpf=cpf, nome=pre.nome_previsto)
+            
+        else:
+            # Mostra tela para criar senha
+            return render_template('auto_cadastro.html', step=2, cpf=cpf, nome=pre.nome_previsto)
+
+# --- DEMAIS ROTAS ---
+
+@app.route('/admin/liberar-acesso') # Redireciona antigo link se houver
+def liberar_acesso_redirect(): return redirect(url_for('novo_usuario'))
 
 @app.route('/admin/usuarios/editar/<int:id>', methods=['GET', 'POST'])
 @login_required
@@ -356,6 +371,10 @@ def primeiro_acesso():
     if request.method == 'POST':
         if request.form.get('nova_senha') == request.form.get('confirmacao'): current_user.set_password(request.form.get('nova_senha')); current_user.is_first_access = False; db.session.commit(); return redirect(url_for('dashboard'))
     return render_template('primeiro_acesso.html')
+
+@app.route('/admin/usuarios')
+@login_required
+def gerenciar_usuarios(): return render_template('admin_usuarios.html', users=User.query.all()) if current_user.role == 'Master' else redirect(url_for('dashboard'))
 
 @app.route('/')
 @login_required
