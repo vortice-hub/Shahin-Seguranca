@@ -15,7 +15,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-app.secret_key = 'chave_v37_espelho_fix'
+app.secret_key = 'chave_v36_reset_report'
 
 db_url = "postgresql://neondb_owner:npg_UBg0b7YKqLPm@ep-steep-wave-aflx731c-pooler.c-2.us-west-2.aws.neon.tech/neondb?sslmode=require"
 if db_url.startswith("postgres://"):
@@ -230,77 +230,34 @@ try:
             m = User(username='Thaynara', real_name='Thaynara Master', role='Master', is_first_access=False); m.set_password('1855'); db.session.add(m); db.session.commit()
 except: pass
 
-# --- ROTA ESPELHO (RESTAURADA) ---
-@app.route('/ponto/espelho')
-@login_required
-def espelho_ponto():
-    data_filtro = request.args.get('data_filtro')
-    query = PontoRegistro.query
-    
-    if current_user.role != 'Master':
-        query = query.filter_by(user_id=current_user.id)
-    
-    if data_filtro:
-        try:
-            dt_obj = datetime.strptime(data_filtro, '%Y-%m-%d').date()
-            query = query.filter_by(data_registro=dt_obj)
-        except: pass
-    
-    if current_user.role == 'Master':
-        registros_raw = query.join(User).order_by(PontoRegistro.data_registro.desc(), User.real_name, PontoRegistro.hora_registro).limit(1000).all()
-        espelho_agrupado = {} 
-        for r in registros_raw:
-            chave = f"{r.data_registro}_{r.user_id}"
-            if chave not in espelho_agrupado:
-                resumo = PontoResumo.query.filter_by(user_id=r.user_id, data_referencia=r.data_registro).first()
-                saldo_fmt = "--:--"
-                status_dia = ""
-                if resumo:
-                    abs_s = abs(resumo.minutos_saldo)
-                    sinal = "+" if resumo.minutos_saldo >= 0 else "-"
-                    saldo_fmt = f"{sinal}{abs_s // 60:02d}:{abs_s % 60:02d}"
-                    status_dia = resumo.status_dia
-                
-                espelho_agrupado[chave] = {
-                    'user': r.user,
-                    'data': r.data_registro,
-                    'pontos': [],
-                    'saldo': saldo_fmt,
-                    'status': status_dia
-                }
-            espelho_agrupado[chave]['pontos'].append(r)
-            
-        return render_template('ponto_espelho_master.html', grupos=espelho_agrupado.values(), filtro_data=data_filtro)
-    else:
-        registros = query.order_by(PontoRegistro.data_registro.desc(), PontoRegistro.hora_registro.desc()).limit(100).all()
-        # Agrupa por dia para mostrar saldo pro colaborador
-        dias_agrupados = {}
-        for r in registros:
-            d = r.data_registro
-            if d not in dias_agrupados:
-                resumo = PontoResumo.query.filter_by(user_id=current_user.id, data_referencia=d).first()
-                saldo_fmt = "--:--"
-                if resumo:
-                    abs_s = abs(resumo.minutos_saldo)
-                    sinal = "+" if resumo.minutos_saldo >= 0 else "-"
-                    saldo_fmt = f"{sinal}{abs_s // 60:02d}:{abs_s % 60:02d}"
-                dias_agrupados[d] = {'data': d, 'pontos': [], 'saldo': saldo_fmt}
-            dias_agrupados[d]['pontos'].append(r)
-            
-        return render_template('ponto_espelho.html', dias=dias_agrupados.values(), filtro_data=data_filtro)
-
-# --- ROTAS NOVAS (ADMIN) ---
+# --- NOVA ROTA: ZERAR RELATORIO ---
 @app.route('/admin/relatorio-folha/zerar', methods=['POST'])
 @login_required
 def zerar_relatorio():
     if current_user.role != 'Master': return redirect(url_for('dashboard'))
+    
     mes_ref = request.form.get('mes_ref')
-    if not mes_ref: return redirect(url_for('admin_relatorio_folha'))
+    if not mes_ref:
+        flash('Erro: Mês não identificado.')
+        return redirect(url_for('admin_relatorio_folha'))
+        
     try:
         ano, mes = map(int, mes_ref.split('-'))
-        PontoResumo.query.filter(func.extract('year', PontoResumo.data_referencia) == ano, func.extract('month', PontoResumo.data_referencia) == mes).delete(synchronize_session=False)
-        db.session.commit(); flash(f'Relatório de {mes_ref} zerado.')
-    except Exception as e: db.session.rollback(); flash(f'Erro: {e}')
+        
+        # Apaga SOMENTE os resumos calculados daquele mes
+        # Os pontos originais sao mantidos para seguranca
+        num_deleted = PontoResumo.query.filter(
+            func.extract('year', PontoResumo.data_referencia) == ano,
+            func.extract('month', PontoResumo.data_referencia) == mes
+        ).delete(synchronize_session=False)
+        
+        db.session.commit()
+        flash(f'Relatório de {mes_ref} zerado com sucesso! ({num_deleted} registros limpos)')
+        
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Erro ao zerar: {e}')
+        
     return redirect(url_for('admin_relatorio_folha'))
 
 @app.route('/admin/relatorio-folha', methods=['GET', 'POST'])

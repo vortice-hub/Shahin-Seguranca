@@ -6,7 +6,7 @@ from datetime import datetime
 
 # --- CONFIGURAÇÕES ---
 PROJECT_NAME = "TdS Gestão de RH"
-COMMIT_MSG = "V36: Botao Zerar Relatorio de Folha (Limpa Saldos do Mes)"
+COMMIT_MSG = "V37: Fix Critico - Restauracao da Rota Espelho de Ponto"
 DB_URL_FIXA = "postgresql://neondb_owner:npg_UBg0b7YKqLPm@ep-steep-wave-aflx731c-pooler.c-2.us-west-2.aws.neon.tech/neondb?sslmode=require"
 
 # --- CONFIG FILES ---
@@ -14,7 +14,7 @@ FILE_RUNTIME = """python-3.11.9"""
 FILE_REQ = """flask\nflask-sqlalchemy\npsycopg2-binary\ngunicorn\nflask-login\nwerkzeug"""
 FILE_PROCFILE = """web: gunicorn app:app"""
 
-# --- APP.PY (Nova Rota de Zerar) ---
+# --- APP.PY (Completo e Corrigido) ---
 FILE_APP = f"""
 import os
 import logging
@@ -33,7 +33,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-app.secret_key = 'chave_v36_reset_report'
+app.secret_key = 'chave_v37_espelho_fix'
 
 db_url = "{DB_URL_FIXA}"
 if db_url.startswith("postgres://"):
@@ -248,34 +248,77 @@ try:
             m = User(username='Thaynara', real_name='Thaynara Master', role='Master', is_first_access=False); m.set_password('1855'); db.session.add(m); db.session.commit()
 except: pass
 
-# --- NOVA ROTA: ZERAR RELATORIO ---
+# --- ROTA ESPELHO (RESTAURADA) ---
+@app.route('/ponto/espelho')
+@login_required
+def espelho_ponto():
+    data_filtro = request.args.get('data_filtro')
+    query = PontoRegistro.query
+    
+    if current_user.role != 'Master':
+        query = query.filter_by(user_id=current_user.id)
+    
+    if data_filtro:
+        try:
+            dt_obj = datetime.strptime(data_filtro, '%Y-%m-%d').date()
+            query = query.filter_by(data_registro=dt_obj)
+        except: pass
+    
+    if current_user.role == 'Master':
+        registros_raw = query.join(User).order_by(PontoRegistro.data_registro.desc(), User.real_name, PontoRegistro.hora_registro).limit(1000).all()
+        espelho_agrupado = {{}} 
+        for r in registros_raw:
+            chave = f"{{r.data_registro}}_{{r.user_id}}"
+            if chave not in espelho_agrupado:
+                resumo = PontoResumo.query.filter_by(user_id=r.user_id, data_referencia=r.data_registro).first()
+                saldo_fmt = "--:--"
+                status_dia = ""
+                if resumo:
+                    abs_s = abs(resumo.minutos_saldo)
+                    sinal = "+" if resumo.minutos_saldo >= 0 else "-"
+                    saldo_fmt = f"{{sinal}}{{abs_s // 60:02d}}:{{abs_s % 60:02d}}"
+                    status_dia = resumo.status_dia
+                
+                espelho_agrupado[chave] = {{
+                    'user': r.user,
+                    'data': r.data_registro,
+                    'pontos': [],
+                    'saldo': saldo_fmt,
+                    'status': status_dia
+                }}
+            espelho_agrupado[chave]['pontos'].append(r)
+            
+        return render_template('ponto_espelho_master.html', grupos=espelho_agrupado.values(), filtro_data=data_filtro)
+    else:
+        registros = query.order_by(PontoRegistro.data_registro.desc(), PontoRegistro.hora_registro.desc()).limit(100).all()
+        # Agrupa por dia para mostrar saldo pro colaborador
+        dias_agrupados = {{}}
+        for r in registros:
+            d = r.data_registro
+            if d not in dias_agrupados:
+                resumo = PontoResumo.query.filter_by(user_id=current_user.id, data_referencia=d).first()
+                saldo_fmt = "--:--"
+                if resumo:
+                    abs_s = abs(resumo.minutos_saldo)
+                    sinal = "+" if resumo.minutos_saldo >= 0 else "-"
+                    saldo_fmt = f"{{sinal}}{{abs_s // 60:02d}}:{{abs_s % 60:02d}}"
+                dias_agrupados[d] = {{'data': d, 'pontos': [], 'saldo': saldo_fmt}}
+            dias_agrupados[d]['pontos'].append(r)
+            
+        return render_template('ponto_espelho.html', dias=dias_agrupados.values(), filtro_data=data_filtro)
+
+# --- ROTAS NOVAS (ADMIN) ---
 @app.route('/admin/relatorio-folha/zerar', methods=['POST'])
 @login_required
 def zerar_relatorio():
     if current_user.role != 'Master': return redirect(url_for('dashboard'))
-    
     mes_ref = request.form.get('mes_ref')
-    if not mes_ref:
-        flash('Erro: Mês não identificado.')
-        return redirect(url_for('admin_relatorio_folha'))
-        
+    if not mes_ref: return redirect(url_for('admin_relatorio_folha'))
     try:
         ano, mes = map(int, mes_ref.split('-'))
-        
-        # Apaga SOMENTE os resumos calculados daquele mes
-        # Os pontos originais sao mantidos para seguranca
-        num_deleted = PontoResumo.query.filter(
-            func.extract('year', PontoResumo.data_referencia) == ano,
-            func.extract('month', PontoResumo.data_referencia) == mes
-        ).delete(synchronize_session=False)
-        
-        db.session.commit()
-        flash(f'Relatório de {{mes_ref}} zerado com sucesso! ({{num_deleted}} registros limpos)')
-        
-    except Exception as e:
-        db.session.rollback()
-        flash(f'Erro ao zerar: {{e}}')
-        
+        PontoResumo.query.filter(func.extract('year', PontoResumo.data_referencia) == ano, func.extract('month', PontoResumo.data_referencia) == mes).delete(synchronize_session=False)
+        db.session.commit(); flash(f'Relatório de {{mes_ref}} zerado.')
+    except Exception as e: db.session.rollback(); flash(f'Erro: {{e}}')
     return redirect(url_for('admin_relatorio_folha'))
 
 @app.route('/admin/relatorio-folha', methods=['GET', 'POST'])
@@ -535,69 +578,6 @@ if __name__ == '__main__':
     app.run(host='0.0.0.0', port=port)
 """
 
-# --- TEMPLATE RELATORIO COM BOTAO ZERAR ---
-FILE_RELATORIO = """
-{% extends 'base.html' %}
-{% block content %}
-<div class="mb-6 flex flex-col md:flex-row justify-between items-center gap-4">
-    <h2 class="text-2xl font-bold text-slate-800">Relatório de Folha</h2>
-    <form action="/admin/relatorio-folha" method="POST" class="flex gap-2">
-        <input type="month" name="mes_ref" value="{{ mes_ref }}" class="border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-600 bg-white">
-        <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded-lg font-bold text-sm hover:bg-blue-700 transition">GERAR RELATÓRIO</button>
-    </form>
-</div>
-
-<!-- BOTAO DE ZERAR FOLHA (PERIGO) -->
-<div class="bg-red-50 border border-red-200 rounded-xl p-4 mb-8 flex justify-between items-center">
-    <div>
-        <h3 class="text-red-800 font-bold text-sm"><i class="fas fa-exclamation-triangle mr-1"></i> Área de Fechamento</h3>
-        <p class="text-xs text-red-600">Deseja limpar os saldos calculados deste mês? Isso não apaga os pontos batidos, apenas os cálculos.</p>
-    </div>
-    <form action="/admin/relatorio-folha/zerar" method="POST">
-        <input type="hidden" name="mes_ref" value="{{ mes_ref }}">
-        <button type="submit" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg text-xs shadow-md transition" onclick="return confirm('ATENÇÃO: Você está prestes a ZERAR todos os saldos calculados de {{ mes_ref }}. Tem certeza?')">
-            ZERAR FOLHA DO MÊS
-        </button>
-    </form>
-</div>
-
-<div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-    <table class="w-full text-left text-sm text-slate-600">
-        <thead class="bg-slate-50 text-xs uppercase text-slate-400 font-bold border-b border-slate-100">
-            <tr>
-                <th class="px-6 py-4">Funcionário</th>
-                <th class="px-6 py-4">Salário Base</th>
-                <th class="px-6 py-4 text-center">Status Ponto</th>
-                <th class="px-6 py-4 text-right">Saldo Horas</th>
-            </tr>
-        </thead>
-        <tbody class="divide-y divide-slate-100">
-            {% for item in relatorio %}
-            <tr class="hover:bg-slate-50 transition">
-                <td class="px-6 py-4 font-bold text-slate-800">{{ item.nome }} <span class="text-xs font-normal text-slate-400 block">{{ item.cargo }}</span></td>
-                <td class="px-6 py-4">R$ {{ "%.2f"|format(item.salario) }}</td>
-                <td class="px-6 py-4 text-center">
-                    <span class="px-2 py-1 rounded text-[10px] font-bold uppercase
-                        {% if item.saldo_minutos >= 0 %} bg-emerald-100 text-emerald-700
-                        {% else %} bg-red-100 text-red-700 {% endif %}">
-                        {{ item.status }}
-                    </span>
-                </td>
-                <td class="px-6 py-4 text-right font-mono font-bold 
-                    {% if item.saldo_minutos >= 0 %} text-emerald-600 {% else %} text-red-600 {% endif %}">
-                    {{ item.saldo_formatado }}
-                </td>
-            </tr>
-            {% else %}
-            <tr><td colspan="4" class="px-6 py-8 text-center text-slate-400">Nenhum dado calculado para o período.</td></tr>
-            {% endfor %}
-        </tbody>
-    </table>
-</div>
-{% endblock %}
-"""
-
-# --- FUNÇÕES ---
 def create_backup():
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     backup = os.path.join("backup", ts)
@@ -620,7 +600,7 @@ def git_update():
         subprocess.run(["git", "add", "."], check=True)
         subprocess.run(["git", "commit", "-m", COMMIT_MSG], check=False)
         subprocess.run(["git", "push"], check=True)
-        print("\n>>> SUCESSO V36 ZERAR FOLHA! <<<")
+        print("\n>>> SUCESSO V37 FIX ROUTES! <<<")
     except Exception as e: print(f"Git: {e}")
 
 def self_destruct():
@@ -628,14 +608,12 @@ def self_destruct():
     except: pass
 
 def main():
-    print(f"--- UPDATE V36 RESET REPORT: {PROJECT_NAME} ---")
+    print(f"--- UPDATE V37 ESPELHO FIX: {PROJECT_NAME} ---")
     create_backup()
     write_file("runtime.txt", FILE_RUNTIME)
     write_file("requirements.txt", FILE_REQ)
     write_file("Procfile", FILE_PROCFILE)
     write_file("app.py", FILE_APP)
-    write_file("templates/admin_relatorio_folha.html", FILE_RELATORIO)
-    
     git_update()
     self_destruct()
 
