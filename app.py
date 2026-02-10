@@ -1,6 +1,8 @@
 import os
 import logging
 import secrets
+import random
+import unicodedata
 from flask import Flask, render_template, request, redirect, url_for, flash
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
@@ -12,7 +14,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-app.secret_key = 'chave_v30_auto_register'
+app.secret_key = 'chave_v31_whitelist_rules'
 
 db_url = "postgresql://neondb_owner:npg_UBg0b7YKqLPm@ep-steep-wave-aflx731c-pooler.c-2.us-west-2.aws.neon.tech/neondb?sslmode=require"
 if db_url.startswith("postgres://"):
@@ -34,22 +36,40 @@ login_manager.login_view = 'login'
 def get_brasil_time():
     return datetime.utcnow() - timedelta(hours=3)
 
-# --- MODELOS ---
+# --- HELPER ---
+def remove_accents(input_str):
+    if not input_str: return ""
+    nfkd_form = unicodedata.normalize('NFKD', input_str)
+    return "".join([c for c in nfkd_form if not unicodedata.combining(c)])
 
-# Tabela Provisoria para Autorizar CPFs
+def gerar_login_automatico(nome_completo):
+    clean_name = remove_accents(nome_completo).lower().strip()
+    parts = clean_name.split()
+    if not parts: return f"user.{random.randint(10,99)}"
+    primeiro = parts[0]
+    ultimo = parts[-1] if len(parts) > 1 else "colab"
+    for _ in range(10): 
+        num = random.randint(10, 99)
+        login_candidato = f"{primeiro}.{ultimo}.{num}"
+        if not User.query.filter_by(username=login_candidato).first():
+            return login_candidato
+    return f"{primeiro}.{random.randint(1000,9999)}"
+
+# --- MODELOS ---
 class PreCadastro(db.Model):
     __tablename__ = 'pre_cadastros'
     id = db.Column(db.Integer, primary_key=True)
-    cpf = db.Column(db.String(14), unique=True, nullable=False) # Formato 000.000.000-00
+    cpf = db.Column(db.String(14), unique=True, nullable=False)
     nome_previsto = db.Column(db.String(100))
-    # Dados padrao que serao herdados pelo usuario
     cargo = db.Column(db.String(50), default='Colaborador')
     salario = db.Column(db.Float, default=2000.00)
+    # Regras que serao herdadas
     horario_entrada = db.Column(db.String(5), default='07:12')
     horario_almoco_inicio = db.Column(db.String(5), default='12:00')
     horario_almoco_fim = db.Column(db.String(5), default='13:00')
     horario_saida = db.Column(db.String(5), default='17:00')
-    escala = db.Column(db.String(20), default='5x2')
+    escala = db.Column(db.String(20), default='Livre')
+    data_inicio_escala = db.Column(db.Date, nullable=True)
     criado_em = db.Column(db.DateTime, default=get_brasil_time)
 
 class User(UserMixin, db.Model):
@@ -59,7 +79,7 @@ class User(UserMixin, db.Model):
     password_hash = db.Column(db.String(256), nullable=False)
     real_name = db.Column(db.String(100))
     role = db.Column(db.String(50)) 
-    cpf = db.Column(db.String(14), unique=True, nullable=True) # Novo campo CPF
+    cpf = db.Column(db.String(14), unique=True, nullable=True)
     is_first_access = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=get_brasil_time)
     
@@ -76,7 +96,6 @@ class User(UserMixin, db.Model):
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
 
-# (Outros modelos mantidos: PontoRegistro, PontoResumo, PontoAjuste, ItemEstoque, Historicos...)
 class PontoRegistro(db.Model):
     __tablename__ = 'ponto_registros'
     id = db.Column(db.Integer, primary_key=True)
@@ -201,43 +220,77 @@ def calcular_dia(user_id, data_ref):
     resumo.minutos_trabalhados = trabalhado_minutos; resumo.minutos_esperados = jornada_esperada; resumo.minutos_saldo = saldo; resumo.status_dia = status
     db.session.commit()
 
-# --- BOOT COM MIGRAÇÃO ---
-def boot_db():
+# --- BOOT ---
+try:
     with app.app_context():
         db.create_all()
-        # Garante tabela e coluna CPF
+        # Garantir colunas novas na PreCadastro
         try:
             with db.engine.connect() as conn:
-                conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS cpf VARCHAR(14) UNIQUE"))
+                conn.execute(text("ALTER TABLE pre_cadastros ADD COLUMN IF NOT EXISTS horario_entrada VARCHAR(5) DEFAULT '07:12'"))
+                conn.execute(text("ALTER TABLE pre_cadastros ADD COLUMN IF NOT EXISTS escala VARCHAR(20) DEFAULT 'Livre'"))
+                conn.execute(text("ALTER TABLE pre_cadastros ADD COLUMN IF NOT EXISTS data_inicio_escala DATE"))
                 conn.commit()
         except: pass
         if not User.query.filter_by(username='Thaynara').first():
             m = User(username='Thaynara', real_name='Thaynara Master', role='Master', is_first_access=False); m.set_password('1855'); db.session.add(m); db.session.commit()
-boot_db()
+except: pass
 
-# --- ROTA DE AUTO-CADASTRO (PÚBLICA) ---
+# --- ROTA DE LIBERAR ACESSO (ATUALIZADA) ---
+@app.route('/admin/liberar-acesso', methods=['GET', 'POST'])
+@login_required
+def liberar_acesso():
+    if current_user.role != 'Master': return redirect(url_for('dashboard'))
+    
+    if request.method == 'POST':
+        cpf = request.form.get('cpf').replace('.', '').replace('-', '').strip()
+        nome = request.form.get('nome')
+        
+        if PreCadastro.query.filter_by(cpf=cpf).first():
+            flash('Este CPF já está na lista.')
+        elif User.query.filter_by(cpf=cpf).first():
+            flash('Este CPF já tem conta ativa.')
+        else:
+            # Captura os dados da tela para ja salvar
+            dt_escala = None
+            if request.form.get('dt_escala'):
+                dt_escala = datetime.strptime(request.form.get('dt_escala'), '%Y-%m-%d').date()
+                
+            pre = PreCadastro(
+                cpf=cpf, 
+                nome_previsto=nome,
+                cargo=request.form.get('cargo') or 'Colaborador',
+                salario=float(request.form.get('salario') or 2000.00),
+                horario_entrada=request.form.get('h_ent') or '07:12',
+                horario_almoco_inicio=request.form.get('h_alm_ini') or '12:00',
+                horario_almoco_fim=request.form.get('h_alm_fim') or '13:00',
+                horario_saida=request.form.get('h_sai') or '17:00',
+                escala=request.form.get('escala'),
+                data_inicio_escala=dt_escala
+            )
+            db.session.add(pre)
+            db.session.commit()
+            flash(f'Acesso liberado para CPF {cpf} com regras definidas.')
+            
+    pendentes = PreCadastro.query.all()
+    return render_template('admin_liberar_acesso.html', pendentes=pendentes)
+
 @app.route('/cadastrar', methods=['GET', 'POST'])
 def auto_cadastro():
     if request.method == 'POST':
         cpf = request.form.get('cpf').replace('.', '').replace('-', '').strip()
-        
-        # 1. Verifica se ja tem usuario com esse CPF
         if User.query.filter_by(cpf=cpf).first():
-            flash('Erro: Este CPF já possui um cadastro ativo. Faça login.')
-            return redirect(url_for('login'))
+            flash('Erro: CPF já cadastrado.'); return redirect(url_for('login'))
             
-        # 2. Verifica se esta na lista branca (PreCadastro)
         pre = PreCadastro.query.filter_by(cpf=cpf).first()
-        
         if pre:
-            # SUCESSO: Permite criar conta
-            username = request.form.get('username')
+            # Gera Login Automatico aqui tambem para facilitar
+            username = gerar_login_automatico(pre.nome_previsto)
             password = request.form.get('password')
             
-            # Verifica se username ja existe
-            if User.query.filter_by(username=username).first():
-                flash('Erro: Este nome de usuário já está em uso. Escolha outro.')
-                return render_template('auto_cadastro.html')
+            # Garante unicidade final
+            while User.query.filter_by(username=username).first():
+                username = gerar_login_automatico(pre.nome_previsto)
             
             novo_user = User(
                 username=username,
@@ -251,60 +304,29 @@ def auto_cadastro():
                 horario_almoco_fim=pre.horario_almoco_fim,
                 horario_saida=pre.horario_saida,
                 escala=pre.escala,
-                is_first_access=False # Ja criou a senha dele
+                data_inicio_escala=pre.data_inicio_escala,
+                is_first_access=False 
             )
             db.session.add(novo_user)
-            db.session.delete(pre) # Remove da lista branca pois ja usou
+            db.session.delete(pre)
             db.session.commit()
-            
-            flash('Conta criada com sucesso! Faça login.')
+            # Mostra o login gerado para a pessoa nao esquecer
+            flash(f'Conta criada! SEU LOGIN É: {username}')
             return redirect(url_for('login'))
         else:
-            flash('Erro: CPF não encontrado na lista de autorização do RH. Contate o administrador.')
+            flash('Erro: CPF não autorizado pelo RH.')
             
     return render_template('auto_cadastro.html')
 
-# --- ROTA ADMIN: LIBERAR ACESSOS (LISTA BRANCA) ---
-@app.route('/admin/liberar-acesso', methods=['GET', 'POST'])
-@login_required
-def liberar_acesso():
-    if current_user.role != 'Master': return redirect(url_for('dashboard'))
-    
-    if request.method == 'POST':
-        cpf = request.form.get('cpf').replace('.', '').replace('-', '').strip()
-        nome = request.form.get('nome')
-        
-        if PreCadastro.query.filter_by(cpf=cpf).first():
-            flash('Este CPF já está na lista de espera.')
-        elif User.query.filter_by(cpf=cpf).first():
-            flash('Este CPF já tem conta ativa.')
-        else:
-            pre = PreCadastro(
-                cpf=cpf, 
-                nome_previsto=nome,
-                # Herda padroes (Master pode editar depois no painel de funcionarios se precisar)
-                cargo='Colaborador',
-                salario=2000.00
-            )
-            db.session.add(pre)
-            db.session.commit()
-            flash(f'Acesso liberado para CPF {cpf}. O funcionário já pode se cadastrar.')
-            
-    pendentes = PreCadastro.query.all()
-    return render_template('admin_liberar_acesso.html', pendentes=pendentes)
-
+# (Demais rotas mantidas: Login, Dashboard, Ponto, Admin, etc...)
 @app.route('/admin/liberar-acesso/excluir/<int:id>')
 @login_required
 def excluir_pre_cadastro(id):
     if current_user.role != 'Master': return redirect(url_for('dashboard'))
     pre = PreCadastro.query.get(id)
-    if pre:
-        db.session.delete(pre)
-        db.session.commit()
-        flash('Pré-cadastro removido.')
+    if pre: db.session.delete(pre); db.session.commit(); flash('Removido.')
     return redirect(url_for('liberar_acesso'))
 
-# --- ROTAS MANTIDAS ---
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if current_user.is_authenticated: return redirect(url_for('dashboard'))
@@ -329,7 +351,6 @@ def primeiro_acesso():
 @login_required
 def gerenciar_usuarios(): return render_template('admin_usuarios.html', users=User.query.all()) if current_user.role == 'Master' else redirect(url_for('dashboard'))
 
-# (Rota de novo usuario manual mantida como backup)
 @app.route('/admin/usuarios/novo', methods=['GET', 'POST'])
 @login_required
 def novo_usuario(): 
