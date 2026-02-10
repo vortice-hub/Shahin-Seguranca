@@ -1,0 +1,21 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="max-w-lg mx-auto flex flex-col items-center justify-center min-h-[50vh] text-center">
+    <div class="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-600 mb-6 shadow-sm animate-bounce"><i class="fas fa-id-badge text-3xl"></i></div>
+    <h2 class="text-2xl font-bold text-slate-800 mb-2">Crachá Digital Gerado!</h2>
+    <p class="text-slate-500 mb-8">Colaborador: <strong>{{ nome_real }}</strong></p>
+    <div class="bg-white border-2 border-dashed border-emerald-300 p-8 rounded-xl w-full mb-8 shadow-lg relative overflow-hidden">
+        <div class="absolute top-0 left-0 w-full h-2 bg-emerald-400"></div>
+        <div class="mb-6">
+            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">LOGIN DE ACESSO</p>
+            <div class="text-3xl font-mono font-bold text-slate-800 select-all">{{ novo_user }}</div>
+        </div>
+        <div>
+            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">SENHA TEMPORÁRIA</p>
+            <div class="text-3xl font-mono font-bold text-blue-600 select-all">{{ senha_gerada }}</div>
+        </div>
+    </div>
+    <div class="bg-blue-50 text-blue-800 text-xs p-4 rounded-lg mb-8 max-w-sm"><i class="fas fa-info-circle mr-1"></i> Tire um print ou anote agora. A senha desaparecerá ao sair desta tela.</div>
+    <a href="/admin/usuarios" class="bg-slate-800 hover:bg-slate-900 text-white font-bold py-3 px-8 rounded-full transition shadow-lg">CONCLUIR E VOLTAR</a>
+</div>
+{% endblock %}

@@ -6,7 +6,7 @@ from datetime import datetime
 
 # --- CONFIGURAÇÕES ---
 PROJECT_NAME = "TdS Gestão de RH"
-COMMIT_MSG = "V29 Fix: Correcao de Sintaxe no Dicionario de Meses"
+COMMIT_MSG = "V30: Auto-Cadastro de Funcionarios via CPF (White List)"
 DB_URL_FIXA = "postgresql://neondb_owner:npg_UBg0b7YKqLPm@ep-steep-wave-aflx731c-pooler.c-2.us-west-2.aws.neon.tech/neondb?sslmode=require"
 
 # --- CONFIG FILES ---
@@ -14,14 +14,11 @@ FILE_RUNTIME = """python-3.11.9"""
 FILE_REQ = """flask\nflask-sqlalchemy\npsycopg2-binary\ngunicorn\nflask-login\nwerkzeug"""
 FILE_PROCFILE = """web: gunicorn app:app"""
 
-# --- APP.PY (Sintaxe Corrigida) ---
-# Usamos raw string (r) ou escape duplo {{ }} para evitar o erro anterior
+# --- APP.PY (Com Tabela de Pré-Cadastro e Rotas Públicas) ---
 FILE_APP = f"""
 import os
 import logging
 import secrets
-import random
-import unicodedata
 from flask import Flask, render_template, request, redirect, url_for, flash
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
@@ -33,7 +30,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-app.secret_key = 'chave_v29_fix_syntax'
+app.secret_key = 'chave_v30_auto_register'
 
 db_url = "{DB_URL_FIXA}"
 if db_url.startswith("postgres://"):
@@ -55,25 +52,24 @@ login_manager.login_view = 'login'
 def get_brasil_time():
     return datetime.utcnow() - timedelta(hours=3)
 
-def remove_accents(input_str):
-    if not input_str: return ""
-    nfkd_form = unicodedata.normalize('NFKD', input_str)
-    return "".join([c for c in nfkd_form if not unicodedata.combining(c)])
-
-def gerar_login_automatico(nome_completo):
-    clean_name = remove_accents(nome_completo).lower().strip()
-    parts = clean_name.split()
-    if not parts: return f"user.{{random.randint(10,99)}}"
-    primeiro = parts[0]
-    ultimo = parts[-1] if len(parts) > 1 else "colab"
-    for _ in range(10): 
-        num = random.randint(10, 99)
-        login_candidato = f"{{primeiro}}.{{ultimo}}.{{num}}"
-        if not User.query.filter_by(username=login_candidato).first():
-            return login_candidato
-    return f"{{primeiro}}.{{random.randint(1000,9999)}}"
-
 # --- MODELOS ---
+
+# Tabela Provisoria para Autorizar CPFs
+class PreCadastro(db.Model):
+    __tablename__ = 'pre_cadastros'
+    id = db.Column(db.Integer, primary_key=True)
+    cpf = db.Column(db.String(14), unique=True, nullable=False) # Formato 000.000.000-00
+    nome_previsto = db.Column(db.String(100))
+    # Dados padrao que serao herdados pelo usuario
+    cargo = db.Column(db.String(50), default='Colaborador')
+    salario = db.Column(db.Float, default=2000.00)
+    horario_entrada = db.Column(db.String(5), default='07:12')
+    horario_almoco_inicio = db.Column(db.String(5), default='12:00')
+    horario_almoco_fim = db.Column(db.String(5), default='13:00')
+    horario_saida = db.Column(db.String(5), default='17:00')
+    escala = db.Column(db.String(20), default='5x2')
+    criado_em = db.Column(db.DateTime, default=get_brasil_time)
+
 class User(UserMixin, db.Model):
     __tablename__ = 'users'
     id = db.Column(db.Integer, primary_key=True)
@@ -81,8 +77,10 @@ class User(UserMixin, db.Model):
     password_hash = db.Column(db.String(256), nullable=False)
     real_name = db.Column(db.String(100))
     role = db.Column(db.String(50)) 
+    cpf = db.Column(db.String(14), unique=True, nullable=True) # Novo campo CPF
     is_first_access = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=get_brasil_time)
+    
     horario_entrada = db.Column(db.String(5), default='07:12')
     horario_almoco_inicio = db.Column(db.String(5), default='12:00')
     horario_almoco_fim = db.Column(db.String(5), default='13:00')
@@ -96,6 +94,7 @@ class User(UserMixin, db.Model):
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
 
+# (Outros modelos mantidos: PontoRegistro, PontoResumo, PontoAjuste, ItemEstoque, Historicos...)
 class PontoRegistro(db.Model):
     __tablename__ = 'ponto_registros'
     id = db.Column(db.Integer, primary_key=True)
@@ -166,6 +165,7 @@ class HistoricoSaida(db.Model):
 @login_manager.user_loader
 def load_user(user_id): return User.query.get(int(user_id))
 
+# --- MOTOR DE CÁLCULO ---
 def time_to_min(t_input):
     if not t_input: return 0
     try:
@@ -219,84 +219,110 @@ def calcular_dia(user_id, data_ref):
     resumo.minutos_trabalhados = trabalhado_minutos; resumo.minutos_esperados = jornada_esperada; resumo.minutos_saldo = saldo; resumo.status_dia = status
     db.session.commit()
 
-try:
+# --- BOOT COM MIGRAÇÃO ---
+def boot_db():
     with app.app_context():
         db.create_all()
+        # Garante tabela e coluna CPF
+        try:
+            with db.engine.connect() as conn:
+                conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS cpf VARCHAR(14) UNIQUE"))
+                conn.commit()
+        except: pass
         if not User.query.filter_by(username='Thaynara').first():
             m = User(username='Thaynara', real_name='Thaynara Master', role='Master', is_first_access=False); m.set_password('1855'); db.session.add(m); db.session.commit()
-except: pass
+boot_db()
 
-@app.route('/admin/usuarios/novo', methods=['GET', 'POST'])
-@login_required
-def novo_usuario():
-    if current_user.role != 'Master': return redirect(url_for('dashboard'))
+# --- ROTA DE AUTO-CADASTRO (PÚBLICA) ---
+@app.route('/cadastrar', methods=['GET', 'POST'])
+def auto_cadastro():
     if request.method == 'POST':
-        real_name = request.form.get('real_name')
-        username = gerar_login_automatico(real_name)
-        senha_temp = secrets.token_hex(3)
-        dt_escala = None
-        if request.form.get('dt_escala'): dt_escala = datetime.strptime(request.form.get('dt_escala'), '%Y-%m-%d').date()
+        cpf = request.form.get('cpf').replace('.', '').replace('-', '').strip()
         
-        novo = User(username=username, real_name=real_name, role=request.form.get('role'), salario=float(request.form.get('salario') or 0), is_first_access=True, horario_entrada=request.form.get('h_ent') or '07:12', horario_almoco_inicio=request.form.get('h_alm_ini') or '12:00', horario_almoco_fim=request.form.get('h_alm_fim') or '13:00', horario_saida=request.form.get('h_sai') or '17:00', escala=request.form.get('escala'), data_inicio_escala=dt_escala)
-        novo.set_password(senha_temp)
-        db.session.add(novo)
-        db.session.commit()
-        return render_template('sucesso_usuario.html', novo_user=username, senha_gerada=senha_temp, nome_real=real_name)
-    return render_template('novo_usuario.html')
+        # 1. Verifica se ja tem usuario com esse CPF
+        if User.query.filter_by(cpf=cpf).first():
+            flash('Erro: Este CPF já possui um cadastro ativo. Faça login.')
+            return redirect(url_for('login'))
+            
+        # 2. Verifica se esta na lista branca (PreCadastro)
+        pre = PreCadastro.query.filter_by(cpf=cpf).first()
+        
+        if pre:
+            # SUCESSO: Permite criar conta
+            username = request.form.get('username')
+            password = request.form.get('password')
+            
+            # Verifica se username ja existe
+            if User.query.filter_by(username=username).first():
+                flash('Erro: Este nome de usuário já está em uso. Escolha outro.')
+                return render_template('auto_cadastro.html')
+            
+            novo_user = User(
+                username=username,
+                password_hash=generate_password_hash(password),
+                real_name=pre.nome_previsto,
+                role=pre.cargo,
+                cpf=cpf,
+                salario=pre.salario,
+                horario_entrada=pre.horario_entrada,
+                horario_almoco_inicio=pre.horario_almoco_inicio,
+                horario_almoco_fim=pre.horario_almoco_fim,
+                horario_saida=pre.horario_saida,
+                escala=pre.escala,
+                is_first_access=False # Ja criou a senha dele
+            )
+            db.session.add(novo_user)
+            db.session.delete(pre) # Remove da lista branca pois ja usou
+            db.session.commit()
+            
+            flash('Conta criada com sucesso! Faça login.')
+            return redirect(url_for('login'))
+        else:
+            flash('Erro: CPF não encontrado na lista de autorização do RH. Contate o administrador.')
+            
+    return render_template('auto_cadastro.html')
 
-@app.route('/ponto/registrar', methods=['GET', 'POST'])
+# --- ROTA ADMIN: LIBERAR ACESSOS (LISTA BRANCA) ---
+@app.route('/admin/liberar-acesso', methods=['GET', 'POST'])
 @login_required
-def registrar_ponto():
-    hoje = get_brasil_time().date()
-    # CORRECAO: Dicionario escapado corretamente
-    meses = {{1:'Janeiro', 2:'Fevereiro', 3:'Março', 4:'Abril', 5:'Maio', 6:'Junho', 7:'Julho', 8:'Agosto', 9:'Setembro', 10:'Outubro', 11:'Novembro', 12:'Dezembro'}}
-    hoje_extenso = f"{{hoje.day}} de {{meses[hoje.month]}} de {{hoje.year}}"
-    
-    bloqueado = False
-    motivo = ""
-    if current_user.escala == '5x2' and hoje.weekday() >= 5: bloqueado = True; motivo = "Não é possível realizar a marcação de ponto."
-    elif current_user.escala == '12x36' and current_user.data_inicio_escala:
-        if (hoje - current_user.data_inicio_escala).days % 2 != 0: bloqueado = True; motivo = "Não é possível realizar a marcação de ponto."
-
-    pontos = PontoRegistro.query.filter_by(user_id=current_user.id, data_registro=hoje).order_by(PontoRegistro.hora_registro).all()
-    prox = "Entrada"
-    if len(pontos) == 1: prox = "Ida Almoço"
-    elif len(pontos) == 2: prox = "Volta Almoço"
-    elif len(pontos) == 3: prox = "Saída"
-    elif len(pontos) >= 4: prox = "Extra"
-    if request.method == 'POST':
-        if bloqueado: flash('Bloqueado'); return redirect(url_for('dashboard'))
-        db.session.add(PontoRegistro(user_id=current_user.id, data_registro=hoje, hora_registro=get_brasil_time().time(), tipo=prox, latitude=request.form.get('latitude'), longitude=request.form.get('longitude')))
-        db.session.commit(); calcular_dia(current_user.id, hoje)
-        return redirect(url_for('dashboard'))
-    
-    return render_template('ponto_registro.html', proxima_acao=prox, hoje_extenso=hoje_extenso, pontos=pontos, bloqueado=bloqueado, motivo=motivo)
-
-# --- ROTAS PADRAO MANTIDAS ---
-@app.route('/admin/usuarios/editar/<int:id>', methods=['GET', 'POST'])
-@login_required
-def editar_usuario(id):
+def liberar_acesso():
     if current_user.role != 'Master': return redirect(url_for('dashboard'))
-    user = User.query.get_or_404(id)
+    
     if request.method == 'POST':
-        try:
-            acao = request.form.get('acao')
-            if acao == 'excluir':
-                if user.username == 'Thaynara': flash('Erro master.')
-                else: 
-                    PontoRegistro.query.filter_by(user_id=user.id).delete(); PontoResumo.query.filter_by(user_id=user.id).delete(); PontoAjuste.query.filter_by(user_id=user.id).delete(); db.session.delete(user); db.session.commit(); flash('Excluido.')
-                return redirect(url_for('gerenciar_usuarios'))
-            elif acao == 'resetar_senha': nova = secrets.token_hex(3); user.set_password(nova); user.is_first_access = True; db.session.commit(); flash(f'Senha: {{nova}}'); return redirect(url_for('editar_usuario', id=id))
-            else:
-                user.real_name = request.form.get('real_name'); user.username = request.form.get('username')
-                if user.username != 'Thaynara': user.role = request.form.get('role')
-                user.salario = float(request.form.get('salario') or 0); user.horario_entrada = request.form.get('h_ent'); user.horario_almoco_inicio = request.form.get('h_alm_ini'); user.horario_almoco_fim = request.form.get('h_alm_fim'); user.horario_saida = request.form.get('h_sai'); user.escala = request.form.get('escala')
-                if request.form.get('dt_escala'): user.data_inicio_escala = datetime.strptime(request.form.get('dt_escala'), '%Y-%m-%d').date()
-                db.session.commit(); flash('Atualizado.')
-                return redirect(url_for('gerenciar_usuarios'))
-        except Exception as e: db.session.rollback(); flash(f'Erro: {{e}}'); return redirect(url_for('editar_usuario', id=id))
-    return render_template('editar_usuario.html', user=user)
+        cpf = request.form.get('cpf').replace('.', '').replace('-', '').strip()
+        nome = request.form.get('nome')
+        
+        if PreCadastro.query.filter_by(cpf=cpf).first():
+            flash('Este CPF já está na lista de espera.')
+        elif User.query.filter_by(cpf=cpf).first():
+            flash('Este CPF já tem conta ativa.')
+        else:
+            pre = PreCadastro(
+                cpf=cpf, 
+                nome_previsto=nome,
+                # Herda padroes (Master pode editar depois no painel de funcionarios se precisar)
+                cargo='Colaborador',
+                salario=2000.00
+            )
+            db.session.add(pre)
+            db.session.commit()
+            flash(f'Acesso liberado para CPF {{cpf}}. O funcionário já pode se cadastrar.')
+            
+    pendentes = PreCadastro.query.all()
+    return render_template('admin_liberar_acesso.html', pendentes=pendentes)
 
+@app.route('/admin/liberar-acesso/excluir/<int:id>')
+@login_required
+def excluir_pre_cadastro(id):
+    if current_user.role != 'Master': return redirect(url_for('dashboard'))
+    pre = PreCadastro.query.get(id)
+    if pre:
+        db.session.delete(pre)
+        db.session.commit()
+        flash('Pré-cadastro removido.')
+    return redirect(url_for('liberar_acesso'))
+
+# --- ROTAS MANTIDAS ---
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if current_user.is_authenticated: return redirect(url_for('dashboard'))
@@ -321,6 +347,44 @@ def primeiro_acesso():
 @login_required
 def gerenciar_usuarios(): return render_template('admin_usuarios.html', users=User.query.all()) if current_user.role == 'Master' else redirect(url_for('dashboard'))
 
+# (Rota de novo usuario manual mantida como backup)
+@app.route('/admin/usuarios/novo', methods=['GET', 'POST'])
+@login_required
+def novo_usuario(): 
+    if request.method == 'POST':
+        uname = request.form.get('username')
+        if User.query.filter_by(username=uname).first(): flash('Existe.')
+        else:
+            senha = secrets.token_hex(3)
+            dt_escala = None
+            if request.form.get('dt_escala'): dt_escala = datetime.strptime(request.form.get('dt_escala'), '%Y-%m-%d').date()
+            novo = User(username=uname, real_name=request.form.get('real_name'), role=request.form.get('role'), is_first_access=True, horario_entrada=request.form.get('h_ent'), horario_almoco_inicio=request.form.get('h_alm_ini'), horario_almoco_fim=request.form.get('h_alm_fim'), horario_saida=request.form.get('h_sai'), escala=request.form.get('escala'), data_inicio_escala=dt_escala)
+            novo.set_password(senha); db.session.add(novo); db.session.commit()
+            return render_template('sucesso_usuario.html', novo_user=uname, senha_gerada=senha)
+    return render_template('novo_usuario.html')
+
+@app.route('/admin/usuarios/editar/<int:id>', methods=['GET', 'POST'])
+@login_required
+def editar_usuario(id):
+    user = User.query.get_or_404(id)
+    if request.method == 'POST':
+        try:
+            acao = request.form.get('acao')
+            if acao == 'excluir':
+                if user.username == 'Thaynara': flash('Erro master.')
+                else: 
+                    PontoRegistro.query.filter_by(user_id=user.id).delete(); PontoResumo.query.filter_by(user_id=user.id).delete(); PontoAjuste.query.filter_by(user_id=user.id).delete(); db.session.delete(user); db.session.commit(); flash('Excluido.')
+                return redirect(url_for('gerenciar_usuarios'))
+            elif acao == 'resetar_senha': nova = secrets.token_hex(3); user.set_password(nova); user.is_first_access = True; db.session.commit(); flash(f'Senha: {{nova}}'); return redirect(url_for('editar_usuario', id=id))
+            else:
+                user.real_name = request.form.get('real_name'); user.username = request.form.get('username')
+                if user.username != 'Thaynara': user.role = request.form.get('role')
+                user.salario = float(request.form.get('salario') or 0); user.horario_entrada = request.form.get('h_ent'); user.horario_almoco_inicio = request.form.get('h_alm_ini'); user.horario_almoco_fim = request.form.get('h_alm_fim'); user.horario_saida = request.form.get('h_sai'); user.escala = request.form.get('escala')
+                if request.form.get('dt_escala'): user.data_inicio_escala = datetime.strptime(request.form.get('dt_escala'), '%Y-%m-%d').date()
+                db.session.commit(); calcular_dia(user.id, get_brasil_time().date()); return redirect(url_for('gerenciar_usuarios'))
+        except Exception as e: db.session.rollback(); flash(f'Erro: {{e}}'); return redirect(url_for('editar_usuario', id=id))
+    return render_template('editar_usuario.html', user=user)
+
 @app.route('/')
 @login_required
 def dashboard():
@@ -333,37 +397,28 @@ def dashboard():
     elif pontos >= 4: status = "Dia Finalizado"
     return render_template('dashboard.html', status_ponto=status)
 
-@app.route('/admin/solicitacoes', methods=['GET', 'POST'])
+@app.route('/ponto/registrar', methods=['GET', 'POST'])
 @login_required
-def admin_solicitacoes():
-    if current_user.role != 'Master': return redirect(url_for('dashboard'))
+def registrar_ponto():
+    hoje = get_brasil_time().date()
+    meses = {{1:'Janeiro', 2:'Fevereiro', 3:'Março', 4:'Abril', 5:'Maio', 6:'Junho', 7:'Julho', 8:'Agosto', 9:'Setembro', 10:'Outubro', 11:'Novembro', 12:'Dezembro'}}
+    hoje_extenso = f"{{hoje.day}} de {{meses[hoje.month]}} de {{hoje.year}}"
+    bloqueado = False; motivo = ""
+    if current_user.escala == '5x2' and hoje.weekday() >= 5: bloqueado = True; motivo = "Não é possível realizar a marcação de ponto."
+    elif current_user.escala == '12x36' and current_user.data_inicio_escala:
+        if (hoje - current_user.data_inicio_escala).days % 2 != 0: bloqueado = True; motivo = "Não é possível realizar a marcação de ponto."
+    pontos = PontoRegistro.query.filter_by(user_id=current_user.id, data_registro=hoje).order_by(PontoRegistro.hora_registro).all()
+    prox = "Entrada"
+    if len(pontos) == 1: prox = "Ida Almoço"
+    elif len(pontos) == 2: prox = "Volta Almoço"
+    elif len(pontos) == 3: prox = "Saída"
+    elif len(pontos) >= 4: prox = "Extra"
     if request.method == 'POST':
-        try:
-            solic = PontoAjuste.query.get(request.form.get('solic_id'))
-            decisao = request.form.get('decisao')
-            if decisao == 'aprovar':
-                solic.status = 'Aprovado'
-                if solic.tipo_solicitacao == 'Exclusao':
-                    if solic.ponto_original_id: db.session.delete(PontoRegistro.query.get(solic.ponto_original_id))
-                elif solic.tipo_solicitacao == 'Edicao':
-                    p = PontoRegistro.query.get(solic.ponto_original_id)
-                    h, m = map(int, solic.novo_horario.split(':'))
-                    p.hora_registro = time(h, m); p.tipo = solic.tipo_batida
-                elif solic.tipo_solicitacao == 'Inclusao':
-                    h, m = map(int, solic.novo_horario.split(':'))
-                    db.session.add(PontoRegistro(user_id=solic.user_id, data_registro=solic.data_referencia, hora_registro=time(h, m), tipo=solic.tipo_batida, latitude='Ajuste', longitude='Manual'))
-                db.session.commit(); calcular_dia(solic.user_id, solic.data_referencia); flash('Aprovado.')
-            elif decisao == 'reprovar':
-                solic.status = 'Reprovado'; solic.motivo_reprovacao = request.form.get('motivo_repro'); db.session.commit(); flash('Reprovado.')
-        except Exception as e: db.session.rollback(); flash(f'Erro: {{e}}')
-        return redirect(url_for('admin_solicitacoes'))
-    pendentes = PontoAjuste.query.filter_by(status='Pendente').order_by(PontoAjuste.created_at).all()
-    dados_extras = {{}}
-    for p in pendentes:
-        if p.ponto_original_id:
-            original = PontoRegistro.query.get(p.ponto_original_id)
-            if original: dados_extras[p.id] = original.hora_registro.strftime('%H:%M')
-    return render_template('admin_solicitacoes.html', solicitacoes=pendentes, extras=dados_extras)
+        if bloqueado: flash('Bloqueado'); return redirect(url_for('dashboard'))
+        db.session.add(PontoRegistro(user_id=current_user.id, data_registro=hoje, hora_registro=get_brasil_time().time(), tipo=prox, latitude=request.form.get('latitude'), longitude=request.form.get('longitude')))
+        db.session.commit(); calcular_dia(current_user.id, hoje)
+        return redirect(url_for('dashboard'))
+    return render_template('ponto_registro.html', proxima_acao=prox, hoje_extenso=hoje_extenso, pontos=pontos, bloqueado=bloqueado, motivo=motivo)
 
 @app.route('/admin/relatorio-folha', methods=['GET', 'POST'])
 @login_required
@@ -371,16 +426,19 @@ def admin_relatorio_folha():
     if current_user.role != 'Master': return redirect(url_for('dashboard'))
     mes_ref = request.form.get('mes_ref') or datetime.now().strftime('%Y-%m')
     try: ano, mes = map(int, mes_ref.split('-'))
-    except: hoje = datetime.now(); ano, mes = hoje.year, hoje.month
+    except: hoje = datetime.now(); ano, mes = hoje.year, hoje.month; mes_ref = hoje.strftime('%Y-%m')
+    if request.method == 'POST': flash(f'Exibindo dados de {{mes_ref}}')
     users = User.query.order_by(User.real_name).all()
     relatorio = []
     for u in users:
-        resumos = PontoResumo.query.filter(PontoResumo.user_id == u.id, func.extract('year', PontoResumo.data_referencia) == ano, func.extract('month', PontoResumo.data_referencia) == mes).all()
-        total_saldo = sum(r.minutos_saldo for r in resumos)
-        sinal = "+" if total_saldo >= 0 else "-"
-        abs_s = abs(total_saldo)
-        sal = u.salario if u.salario else 0.0
-        relatorio.append({{'nome': u.real_name, 'cargo': u.role, 'salario': sal, 'saldo_minutos': total_saldo, 'saldo_formatado': f"{{sinal}}{{abs_s // 60:02d}}:{{abs_s % 60:02d}}", 'status': 'Crédito' if total_saldo >= 0 else 'Débito'}})
+        try:
+            resumos = PontoResumo.query.filter(PontoResumo.user_id == u.id, func.extract('year', PontoResumo.data_referencia) == ano, func.extract('month', PontoResumo.data_referencia) == mes).all()
+            total_saldo = sum(r.minutos_saldo for r in resumos)
+            sinal = "+" if total_saldo >= 0 else "-"
+            abs_s = abs(total_saldo)
+            sal_val = u.salario if u.salario is not None else 0.0
+            relatorio.append({{'nome': u.real_name, 'cargo': u.role, 'salario': sal_val, 'saldo_minutos': total_saldo, 'saldo_formatado': f"{{sinal}}{{abs_s // 60:02d}}:{{abs_s % 60:02d}}", 'status': 'Crédito' if total_saldo >= 0 else 'Débito'}})
+        except: continue
     return render_template('admin_relatorio_folha.html', relatorio=relatorio, mes_ref=mes_ref)
 
 @app.route('/controle-uniforme')
@@ -456,6 +514,37 @@ def solicitar_ajuste():
             original = PontoRegistro.query.get(p.ponto_original_id)
             if original: dados_extras[p.id] = original.hora_registro.strftime('%H:%M')
     return render_template('solicitar_ajuste.html', pontos=pontos_dia, data_sel=data_selecionada, meus_ajustes=meus_ajustes, extras=dados_extras)
+@app.route('/admin/solicitacoes', methods=['GET', 'POST'])
+@login_required
+def admin_solicitacoes():
+    if current_user.role != 'Master': return redirect(url_for('dashboard'))
+    if request.method == 'POST':
+        try:
+            solic = PontoAjuste.query.get(request.form.get('solic_id'))
+            decisao = request.form.get('decisao')
+            if decisao == 'aprovar':
+                solic.status = 'Aprovado'
+                if solic.tipo_solicitacao == 'Exclusao':
+                    if solic.ponto_original_id: db.session.delete(PontoRegistro.query.get(solic.ponto_original_id))
+                elif solic.tipo_solicitacao == 'Edicao':
+                    p = PontoRegistro.query.get(solic.ponto_original_id)
+                    h, m = map(int, solic.novo_horario.split(':'))
+                    p.hora_registro = time(h, m); p.tipo = solic.tipo_batida
+                elif solic.tipo_solicitacao == 'Inclusao':
+                    h, m = map(int, solic.novo_horario.split(':'))
+                    db.session.add(PontoRegistro(user_id=solic.user_id, data_registro=solic.data_referencia, hora_registro=time(h, m), tipo=solic.tipo_batida, latitude='Ajuste', longitude='Manual'))
+                db.session.commit(); calcular_dia(solic.user_id, solic.data_referencia); flash('Aprovado.')
+            elif decisao == 'reprovar':
+                solic.status = 'Reprovado'; solic.motivo_reprovacao = request.form.get('motivo_repro'); db.session.commit(); flash('Reprovado.')
+        except Exception as e: db.session.rollback(); flash(f'Erro: {{e}}')
+        return redirect(url_for('admin_solicitacoes'))
+    pendentes = PontoAjuste.query.filter_by(status='Pendente').order_by(PontoAjuste.created_at).all()
+    dados_extras = {{}}
+    for p in pendentes:
+        if p.ponto_original_id:
+            original = PontoRegistro.query.get(p.ponto_original_id)
+            if original: dados_extras[p.id] = original.hora_registro.strftime('%H:%M')
+    return render_template('admin_solicitacoes.html', solicitacoes=pendentes, extras=dados_extras)
 @app.route('/ponto/espelho')
 @login_required
 def espelho_ponto():
@@ -503,72 +592,126 @@ if __name__ == '__main__':
     app.run(host='0.0.0.0', port=port)
 """
 
-# --- NOVOS TEMPLATES (V29) ---
-FILE_NOVO_USUARIO = """
+# --- TEMPLATE LOGIN (BOTÃO NOVO) ---
+FILE_LOGIN = """
 {% extends 'base.html' %}
 {% block content %}
-<div class="max-w-lg mx-auto">
-    <div class="flex items-center justify-between mb-6"><h2 class="text-lg font-bold text-slate-800">Novo Cadastro</h2><a href="/admin/usuarios" class="text-xs font-medium text-slate-500 hover:text-slate-800">Cancelar</a></div>
-    <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-        <form action="/admin/usuarios/novo" method="POST" class="p-8 space-y-6">
-            <div class="space-y-4">
-                <div><label class="label-pro">Nome Completo</label><input type="text" name="real_name" class="input-pro" placeholder="Ex: Maria da Silva" required></div>
-                <div><label class="label-pro">Cargo / Função</label><input type="text" name="role" class="input-pro" placeholder="Ex: Assistente" required></div>
-                <div><label class="label-pro text-emerald-600">Salário Base (R$)</label><input type="number" step="0.01" name="salario" class="input-pro border-emerald-200 text-emerald-700 font-bold" placeholder="2000.00"></div>
-            </div>
-            <div class="pt-4 border-t border-slate-100">
-                <p class="text-xs font-bold text-slate-400 uppercase mb-3">Escala e Jornada</p>
-                <div class="mb-4">
-                    <label class="label-pro">Tipo de Escala</label>
-                    <select name="escala" class="input-pro" onchange="toggleDtRef(this)">
-                        <option value="Livre">Livre (Sem Bloqueio)</option><option value="5x2">Normal 5x2 (Seg-Sex)</option><option value="12x36">Plantão 12x36</option>
-                    </select>
-                </div>
-                <div id="divDtRef" class="hidden mb-4 bg-blue-50 p-3 rounded border border-blue-100">
-                    <label class="label-pro text-blue-700">Data de Referência (Dia Trabalhado)</label><input type="date" name="dt_escala" class="input-pro">
-                </div>
-                <div class="grid grid-cols-2 gap-4">
-                    <div><label class="label-pro">Entrada</label><input type="time" name="h_ent" value="07:12" class="input-pro"></div>
-                    <div><label class="label-pro">Saída Almoço</label><input type="time" name="h_alm_ini" value="12:00" class="input-pro"></div>
-                    <div><label class="label-pro">Volta Almoço</label><input type="time" name="h_alm_fim" value="13:00" class="input-pro"></div>
-                    <div><label class="label-pro">Saída</label><input type="time" name="h_sai" value="17:00" class="input-pro"></div>
-                </div>
-            </div>
-            <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-lg shadow-md transition transform active:scale-95">GERAR ACESSO AUTOMÁTICO</button>
+<div class="flex flex-col items-center justify-center min-h-[60vh]">
+    <div class="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center text-white font-bold text-3xl mb-6 shadow-lg shadow-blue-200">T</div>
+    <div class="bg-white p-8 rounded-2xl shadow-xl border border-slate-100 w-full max-w-sm">
+        <h2 class="text-xl font-bold text-center text-slate-800 mb-6">Acesso TdS</h2>
+        <form action="/login" method="POST" class="space-y-4">
+            <div><label class="block text-xs font-bold text-slate-400 uppercase mb-2">Usuário</label><input type="text" name="username" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 focus:outline-none focus:border-blue-500" placeholder="ex: joao.silva" required></div>
+            <div><label class="block text-xs font-bold text-slate-400 uppercase mb-2">Senha</label><input type="password" name="password" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 focus:outline-none focus:border-blue-500" placeholder="••••••" required></div>
+            <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-lg shadow-lg transition">ENTRAR</button>
         </form>
     </div>
+    
+    <!-- Botao Auto Cadastro -->
+    <a href="/cadastrar" class="mt-6 text-sm text-blue-600 font-bold hover:underline">
+        Sou Funcionário e quero criar minha senha
+    </a>
+    
+    <p class="text-xs text-slate-400 mt-6">Sistema TdS Gestão &copy; 2026</p>
 </div>
-<script>
-    function toggleDtRef(sel) { if (sel.value === '12x36') document.getElementById('divDtRef').classList.remove('hidden'); else document.getElementById('divDtRef').classList.add('hidden'); }
-</script>
-<style>.label-pro { display: block; font-size: 0.7rem; font-weight: 700; color: #64748b; text-transform: uppercase; margin-bottom: 0.5rem; } .input-pro { width: 100%; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 0.5rem; padding: 0.75rem 1rem; color: #1e293b; font-weight: 500; outline: none; }</style>
 {% endblock %}
 """
 
-FILE_SUCESSO_USUARIO = """
+# --- TEMPLATE AUTO CADASTRO (FUNCIONARIO) ---
+FILE_AUTO_CADASTRO = """
 {% extends 'base.html' %}
 {% block content %}
-<div class="max-w-lg mx-auto flex flex-col items-center justify-center min-h-[50vh] text-center">
-    <div class="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-600 mb-6 shadow-sm animate-bounce"><i class="fas fa-id-badge text-3xl"></i></div>
-    <h2 class="text-2xl font-bold text-slate-800 mb-2">Crachá Digital Gerado!</h2>
-    <p class="text-slate-500 mb-8">Colaborador: <strong>{{ nome_real }}</strong></p>
-    <div class="bg-white border-2 border-dashed border-emerald-300 p-8 rounded-xl w-full mb-8 shadow-lg relative overflow-hidden">
-        <div class="absolute top-0 left-0 w-full h-2 bg-emerald-400"></div>
-        <div class="mb-6">
-            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">LOGIN DE ACESSO</p>
-            <div class="text-3xl font-mono font-bold text-slate-800 select-all">{{ novo_user }}</div>
-        </div>
-        <div>
-            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">SENHA TEMPORÁRIA</p>
-            <div class="text-3xl font-mono font-bold text-blue-600 select-all">{{ senha_gerada }}</div>
+<div class="flex flex-col items-center justify-center min-h-[60vh]">
+    <div class="bg-white p-8 rounded-2xl shadow-xl border border-slate-100 w-full max-w-md">
+        <h2 class="text-xl font-bold text-slate-800 mb-2">Primeiro Acesso</h2>
+        <p class="text-sm text-slate-500 mb-6">Digite seu CPF para validar se seu cadastro foi liberado pelo RH.</p>
+        
+        <form action="/cadastrar" method="POST" class="space-y-4">
+            <div>
+                <label class="block text-xs font-bold text-slate-400 uppercase mb-2">CPF (Somente Números)</label>
+                <input type="text" name="cpf" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 font-bold text-lg tracking-wide focus:outline-none focus:border-blue-500" placeholder="000.000.000-00" required>
+            </div>
+            
+            <hr class="border-slate-100 my-4">
+            
+            <div>
+                <label class="block text-xs font-bold text-slate-400 uppercase mb-2">Crie seu Usuário</label>
+                <input type="text" name="username" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 focus:outline-none focus:border-blue-500" placeholder="ex: maria.silva" required>
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-slate-400 uppercase mb-2">Crie sua Senha</label>
+                <input type="password" name="password" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 focus:outline-none focus:border-blue-500" required>
+            </div>
+            
+            <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-4 rounded-lg shadow-lg transition">
+                VALIDAR E CRIAR CONTA
+            </button>
+        </form>
+        <div class="text-center mt-4">
+            <a href="/login" class="text-xs text-slate-400 hover:text-slate-600">Voltar para Login</a>
         </div>
     </div>
-    <div class="bg-blue-50 text-blue-800 text-xs p-4 rounded-lg mb-8 max-w-sm"><i class="fas fa-info-circle mr-1"></i> Tire um print ou anote agora. A senha desaparecerá ao sair desta tela.</div>
-    <a href="/admin/usuarios" class="bg-slate-800 hover:bg-slate-900 text-white font-bold py-3 px-8 rounded-full transition shadow-lg">CONCLUIR E VOLTAR</a>
 </div>
 {% endblock %}
 """
 
+# --- TEMPLATE ADMIN LIBERAR (MASTER) ---
+FILE_LIBERAR_ACESSO = """
+{% extends 'base.html' %}
+{% block content %}
+<div class="max-w-2xl mx-auto">
+    <div class="flex items-center justify-between mb-6">
+        <h2 class="text-lg font-bold text-slate-800">Liberar Acessos (Lista Branca)</h2>
+        <a href="/admin/usuarios" class="text-xs font-bold text-slate-400 hover:text-slate-600">VER USUÁRIOS ATIVOS</a>
+    </div>
+
+    <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-8">
+        <div class="bg-blue-50 px-6 py-4 border-b border-blue-100">
+            <h3 class="font-bold text-blue-800">Adicionar Funcionário na Fila</h3>
+            <p class="text-xs text-blue-600">O funcionário só poderá criar conta se o CPF estiver aqui.</p>
+        </div>
+        <form action="/admin/liberar-acesso" method="POST" class="p-6 space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="label-pro">CPF (Somente Números)</label>
+                    <input type="text" name="cpf" class="input-pro font-mono" placeholder="00000000000" required>
+                </div>
+                <div>
+                    <label class="label-pro">Nome Completo</label>
+                    <input type="text" name="nome" class="input-pro" placeholder="Para identificação" required>
+                </div>
+            </div>
+            <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg shadow-md transition">
+                LIBERAR CPF
+            </button>
+        </form>
+    </div>
+
+    <h3 class="font-bold text-slate-700 mb-4 text-sm uppercase">Fila de Espera (Aguardando Cadastro)</h3>
+    <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="divide-y divide-slate-100">
+            {% for p in pendentes %}
+            <div class="px-6 py-4 flex items-center justify-between hover:bg-slate-50">
+                <div>
+                    <div class="font-bold text-slate-800">{{ p.nome_previsto }}</div>
+                    <div class="text-xs font-mono text-slate-500">CPF: {{ p.cpf }}</div>
+                </div>
+                <div class="flex items-center gap-3">
+                    <span class="text-[10px] bg-yellow-100 text-yellow-700 px-2 py-1 rounded font-bold uppercase">Aguardando</span>
+                    <a href="/admin/liberar-acesso/excluir/{{ p.id }}" class="text-red-400 hover:text-red-600" onclick="return confirm('Remover da lista?')"><i class="fas fa-trash"></i></a>
+                </div>
+            </div>
+            {% else %}
+            <div class="p-8 text-center text-slate-400 text-sm">Nenhum CPF na fila de espera.</div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+<style>.label-pro { display: block; font-size: 0.7rem; font-weight: 700; color: #64748b; text-transform: uppercase; margin-bottom: 0.5rem; } .input-pro { width: 100%; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 0.5rem; padding: 0.75rem 1rem; outline: none; }</style>
+{% endblock %}
+"""
+
+# --- FUNÇÕES ---
 def create_backup():
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     backup = os.path.join("backup", ts)
@@ -591,7 +734,7 @@ def git_update():
         subprocess.run(["git", "add", "."], check=True)
         subprocess.run(["git", "commit", "-m", COMMIT_MSG], check=False)
         subprocess.run(["git", "push"], check=True)
-        print("\n>>> SUCESSO V29 FIXED! <<<")
+        print("\n>>> SUCESSO V30 AUTO CADASTRO! <<<")
     except Exception as e: print(f"Git: {e}")
 
 def self_destruct():
@@ -599,14 +742,17 @@ def self_destruct():
     except: pass
 
 def main():
-    print(f"--- UPDATE V29 FIX SYNTAX: {PROJECT_NAME} ---")
+    print(f"--- UPDATE V30 AUTO CADASTRO: {PROJECT_NAME} ---")
     create_backup()
     write_file("runtime.txt", FILE_RUNTIME)
     write_file("requirements.txt", FILE_REQ)
     write_file("Procfile", FILE_PROCFILE)
     write_file("app.py", FILE_APP)
-    write_file("templates/novo_usuario.html", FILE_NOVO_USUARIO)
-    write_file("templates/sucesso_usuario.html", FILE_SUCESSO_USUARIO)
+    
+    write_file("templates/login.html", FILE_LOGIN) # Botao novo
+    write_file("templates/auto_cadastro.html", FILE_AUTO_CADASTRO) # Tela nova func
+    write_file("templates/admin_liberar_acesso.html", FILE_LIBERAR_ACESSO) # Tela nova master
+    
     git_update()
     self_destruct()
 
