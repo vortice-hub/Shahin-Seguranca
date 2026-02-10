@@ -1,22 +1,4 @@
 import os
-import shutil
-import subprocess
-import sys
-from datetime import datetime
-
-# --- CONFIGURAÇÕES ---
-PROJECT_NAME = "TdS Gestão de RH"
-COMMIT_MSG = "V34: Visualizacao de Pre-Cadastros Pendentes na Tela de Usuarios"
-DB_URL_FIXA = "postgresql://neondb_owner:npg_UBg0b7YKqLPm@ep-steep-wave-aflx731c-pooler.c-2.us-west-2.aws.neon.tech/neondb?sslmode=require"
-
-# --- CONFIG FILES ---
-FILE_RUNTIME = """python-3.11.9"""
-FILE_REQ = """flask\nflask-sqlalchemy\npsycopg2-binary\ngunicorn\nflask-login\nwerkzeug"""
-FILE_PROCFILE = """web: gunicorn app:app"""
-
-# --- APP.PY (Atualizado para enviar pendentes para o template) ---
-FILE_APP = f"""
-import os
 import logging
 import secrets
 import random
@@ -34,18 +16,18 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 app.secret_key = 'chave_v34_pending_list'
 
-db_url = "{DB_URL_FIXA}"
+db_url = "postgresql://neondb_owner:npg_UBg0b7YKqLPm@ep-steep-wave-aflx731c-pooler.c-2.us-west-2.aws.neon.tech/neondb?sslmode=require"
 if db_url.startswith("postgres://"):
     db_url = db_url.replace("postgres://", "postgresql://", 1)
 
 app.config['SQLALCHEMY_DATABASE_URI'] = db_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-db = SQLAlchemy(app, engine_options={{
+db = SQLAlchemy(app, engine_options={
     "pool_pre_ping": True,
     "pool_size": 10,
     "pool_recycle": 300,
-}})
+})
 
 login_manager = LoginManager()
 login_manager.init_app(app)
@@ -63,17 +45,17 @@ def gerar_login_automatico(nome_completo):
     try:
         clean_name = remove_accents(nome_completo).lower().strip()
         parts = clean_name.split()
-        if not parts: return f"user.{{random.randint(10,99)}}"
+        if not parts: return f"user.{random.randint(10,99)}"
         primeiro = parts[0]
         ultimo = parts[-1] if len(parts) > 1 else "colab"
         for _ in range(10): 
             num = random.randint(10, 99)
-            login_candidato = f"{{primeiro}}.{{ultimo}}.{{num}}"
+            login_candidato = f"{primeiro}.{ultimo}.{num}"
             if not User.query.filter_by(username=login_candidato).first():
                 return login_candidato
-        return f"{{primeiro}}.{{random.randint(1000,9999)}}"
+        return f"{primeiro}.{random.randint(1000,9999)}"
     except:
-        return f"user.{{random.randint(1000,9999)}}"
+        return f"user.{random.randint(1000,9999)}"
 
 # --- MODELOS ---
 class PreCadastro(db.Model):
@@ -309,8 +291,8 @@ def novo_usuario():
             
         except Exception as e:
             db.session.rollback()
-            logger.error(f"Erro ao criar usuario: {{e}}")
-            flash(f"Erro interno: {{str(e)}}")
+            logger.error(f"Erro ao criar usuario: {e}")
+            flash(f"Erro interno: {str(e)}")
             return redirect(url_for('novo_usuario'))
     return render_template('novo_usuario.html')
 
@@ -345,14 +327,14 @@ def editar_usuario(id):
                 else: 
                     PontoRegistro.query.filter_by(user_id=user.id).delete(); PontoResumo.query.filter_by(user_id=user.id).delete(); PontoAjuste.query.filter_by(user_id=user.id).delete(); db.session.delete(user); db.session.commit(); flash('Excluido.')
                 return redirect(url_for('gerenciar_usuarios'))
-            elif acao == 'resetar_senha': nova = secrets.token_hex(3); user.set_password(nova); user.is_first_access = True; db.session.commit(); flash(f'Senha: {{nova}}'); return redirect(url_for('editar_usuario', id=id))
+            elif acao == 'resetar_senha': nova = secrets.token_hex(3); user.set_password(nova); user.is_first_access = True; db.session.commit(); flash(f'Senha: {nova}'); return redirect(url_for('editar_usuario', id=id))
             else:
                 user.real_name = request.form.get('real_name'); user.username = request.form.get('username')
                 if user.username != 'Thaynara': user.role = request.form.get('role')
                 user.salario = float(request.form.get('salario') or 0); user.horario_entrada = request.form.get('h_ent'); user.horario_almoco_inicio = request.form.get('h_alm_ini'); user.horario_almoco_fim = request.form.get('h_alm_fim'); user.horario_saida = request.form.get('h_sai'); user.escala = request.form.get('escala')
                 if request.form.get('dt_escala'): user.data_inicio_escala = datetime.strptime(request.form.get('dt_escala'), '%Y-%m-%d').date()
                 db.session.commit(); calcular_dia(user.id, get_brasil_time().date()); return redirect(url_for('gerenciar_usuarios'))
-        except Exception as e: db.session.rollback(); flash(f'Erro: {{e}}'); return redirect(url_for('editar_usuario', id=id))
+        except Exception as e: db.session.rollback(); flash(f'Erro: {e}'); return redirect(url_for('editar_usuario', id=id))
     return render_template('editar_usuario.html', user=user)
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -391,8 +373,8 @@ def dashboard():
 @login_required
 def registrar_ponto():
     hoje = get_brasil_time().date()
-    meses = {{1:'Janeiro', 2:'Fevereiro', 3:'Março', 4:'Abril', 5:'Maio', 6:'Junho', 7:'Julho', 8:'Agosto', 9:'Setembro', 10:'Outubro', 11:'Novembro', 12:'Dezembro'}}
-    hoje_extenso = f"{{hoje.day}} de {{meses[hoje.month]}} de {{hoje.year}}"
+    meses = {1:'Janeiro', 2:'Fevereiro', 3:'Março', 4:'Abril', 5:'Maio', 6:'Junho', 7:'Julho', 8:'Agosto', 9:'Setembro', 10:'Outubro', 11:'Novembro', 12:'Dezembro'}
+    hoje_extenso = f"{hoje.day} de {meses[hoje.month]} de {hoje.year}"
     bloqueado = False; motivo = ""
     if current_user.escala == '5x2' and hoje.weekday() >= 5: bloqueado = True; motivo = "Não é possível realizar a marcação de ponto."
     elif current_user.escala == '12x36' and current_user.data_inicio_escala:
@@ -417,7 +399,7 @@ def admin_relatorio_folha():
     mes_ref = request.form.get('mes_ref') or datetime.now().strftime('%Y-%m')
     try: ano, mes = map(int, mes_ref.split('-'))
     except: hoje = datetime.now(); ano, mes = hoje.year, hoje.month; mes_ref = hoje.strftime('%Y-%m')
-    if request.method == 'POST': flash(f'Exibindo dados de {{mes_ref}}')
+    if request.method == 'POST': flash(f'Exibindo dados de {mes_ref}')
     users = User.query.order_by(User.real_name).all()
     relatorio = []
     for u in users:
@@ -427,7 +409,7 @@ def admin_relatorio_folha():
             sinal = "+" if total_saldo >= 0 else "-"
             abs_s = abs(total_saldo)
             sal_val = u.salario if u.salario is not None else 0.0
-            relatorio.append({{'nome': u.real_name, 'cargo': u.role, 'salario': sal_val, 'saldo_minutos': total_saldo, 'saldo_formatado': f"{{sinal}}{{abs_s // 60:02d}}:{{abs_s % 60:02d}}", 'status': 'Crédito' if total_saldo >= 0 else 'Débito'}})
+            relatorio.append({'nome': u.real_name, 'cargo': u.role, 'salario': sal_val, 'saldo_minutos': total_saldo, 'saldo_formatado': f"{sinal}{abs_s // 60:02d}:{abs_s % 60:02d}", 'status': 'Crédito' if total_saldo >= 0 else 'Débito'})
         except: continue
     return render_template('admin_relatorio_folha.html', relatorio=relatorio, mes_ref=mes_ref)
 
@@ -498,7 +480,7 @@ def solicitar_ajuste():
                 db.session.add(solic); db.session.commit(); flash('Enviado!')
                 return redirect(url_for('solicitar_ajuste'))
             except: pass
-    dados_extras = {{}}
+    dados_extras = {}
     for p in meus_ajustes:
         if p.ponto_original_id:
             original = PontoRegistro.query.get(p.ponto_original_id)
@@ -526,10 +508,10 @@ def admin_solicitacoes():
                 db.session.commit(); calcular_dia(solic.user_id, solic.data_referencia); flash('Aprovado.')
             elif decisao == 'reprovar':
                 solic.status = 'Reprovado'; solic.motivo_reprovacao = request.form.get('motivo_repro'); db.session.commit(); flash('Reprovado.')
-        except Exception as e: db.session.rollback(); flash(f'Erro: {{e}}')
+        except Exception as e: db.session.rollback(); flash(f'Erro: {e}')
         return redirect(url_for('admin_solicitacoes'))
     pendentes = PontoAjuste.query.filter_by(status='Pendente').order_by(PontoAjuste.created_at).all()
-    dados_extras = {{}}
+    dados_extras = {}
     for p in pendentes:
         if p.ponto_original_id:
             original = PontoRegistro.query.get(p.ponto_original_id)
@@ -539,136 +521,3 @@ def admin_solicitacoes():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
-"""
-
-# --- ADMIN USUARIOS (LISTA COM PENDENTES) ---
-FILE_ADMIN_USUARIOS = """
-{% extends 'base.html' %}
-{% block content %}
-<div class="flex items-center justify-between mb-6">
-    <h2 class="text-2xl font-bold text-slate-800">Funcionários</h2>
-</div>
-
-<a href="/admin/usuarios/novo" class="block w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl shadow-md text-center mb-8 transition transform hover:-translate-y-1">
-    <i class="fas fa-user-plus mr-2"></i> CADASTRAR NOVO FUNCIONÁRIO
-</a>
-
-<div class="mb-6">
-    <input type="text" id="buscaFunc" onkeyup="filtrarTabela('buscaFunc', 'listaFunc')" placeholder="Pesquisar funcionário..." class="w-full p-4 rounded-xl border border-slate-200 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-</div>
-
-<!-- LISTA DE PENDENTES (AGUARDANDO CADASTRO) -->
-{% if pendentes %}
-<div class="bg-yellow-50 border border-yellow-200 rounded-xl overflow-hidden mb-8 shadow-sm">
-    <div class="px-6 py-4 border-b border-yellow-200 bg-yellow-100/50 flex justify-between items-center">
-        <h3 class="font-bold text-yellow-800"><i class="fas fa-clock mr-2"></i> Aguardando Cadastro ({{ pendentes|length }})</h3>
-    </div>
-    <div class="divide-y divide-yellow-200/50">
-        {% for p in pendentes %}
-        <div class="px-6 py-4 flex items-center justify-between hover:bg-yellow-100/30 transition">
-            <div>
-                <div class="font-bold text-slate-800">{{ p.nome_previsto }}</div>
-                <div class="text-xs font-mono text-slate-500">CPF: {{ p.cpf }}</div>
-                <div class="text-[10px] text-slate-400 mt-1">{{ p.cargo }}</div>
-            </div>
-            <a href="/admin/liberar-acesso/excluir/{{ p.id }}" class="text-red-400 hover:text-red-600 p-2" onclick="return confirm('Remover da lista de espera?')">
-                <i class="fas fa-trash"></i>
-            </a>
-        </div>
-        {% endfor %}
-    </div>
-</div>
-{% endif %}
-
-<!-- LISTA DE ATIVOS -->
-<div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-    <div class="px-6 py-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
-        <h3 class="font-bold text-slate-700">Equipe Ativa</h3>
-        <span class="text-xs bg-slate-200 text-slate-600 px-2 py-1 rounded-full font-bold">{{ users|length }}</span>
-    </div>
-    <div class="divide-y divide-slate-100" id="listaFunc">
-        {% for u in users %}
-        <div class="px-6 py-4 flex items-center justify-between hover:bg-slate-50 transition group item-lista">
-            <div class="flex items-center gap-4">
-                <div class="w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm bg-slate-100 text-slate-600">
-                    {{ u.real_name[:2].upper() }}
-                </div>
-                <div>
-                    <div class="font-bold text-slate-800 nome-item">{{ u.real_name }}</div>
-                    <div class="text-xs text-slate-500">{{ u.role }}</div>
-                </div>
-            </div>
-            
-            <div class="flex items-center gap-3">
-                <span class="px-2 py-1 bg-emerald-100 text-emerald-700 text-[10px] font-bold uppercase rounded">Ativo</span>
-                
-                <a href="/admin/usuarios/editar/{{ u.id }}" class="w-8 h-8 flex items-center justify-center rounded-full text-slate-300 hover:bg-white hover:text-blue-600 hover:shadow border border-transparent hover:border-slate-200 transition">
-                    <i class="fas fa-pencil-alt text-xs"></i>
-                </a>
-            </div>
-        </div>
-        {% endfor %}
-    </div>
-</div>
-
-<script>
-function filtrarTabela(inputId, listaId) {
-    let input = document.getElementById(inputId);
-    let filter = input.value.toUpperCase();
-    let lista = document.getElementById(listaId);
-    let itens = lista.getElementsByClassName('item-lista');
-    for (let i = 0; i < itens.length; i++) {
-        let nome = itens[i].getElementsByClassName('nome-item')[0];
-        if (nome.innerHTML.toUpperCase().indexOf(filter) > -1) { itens[i].style.display = ""; } else { itens[i].style.display = "none"; }
-    }
-}
-</script>
-{% endblock %}
-"""
-
-# --- FUNÇÕES ---
-def create_backup():
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    backup = os.path.join("backup", ts)
-    files = ["app.py", "requirements.txt", "Procfile", "runtime.txt"]
-    for root, _, fs in os.walk("templates"):
-        for f in fs: files.append(os.path.join(root, f))
-    for f in files:
-        if os.path.exists(f):
-            dest = os.path.join(backup, f)
-            os.makedirs(os.path.dirname(dest), exist_ok=True)
-            shutil.copy2(f, dest)
-
-def write_file(path, content):
-    os.makedirs(os.path.dirname(path) if os.path.dirname(path) else '.', exist_ok=True)
-    with open(path, 'w', encoding='utf-8') as f: f.write(content.strip())
-    print(f"Atualizado: {path}")
-
-def git_update():
-    try:
-        subprocess.run(["git", "add", "."], check=True)
-        subprocess.run(["git", "commit", "-m", COMMIT_MSG], check=False)
-        subprocess.run(["git", "push"], check=True)
-        print("\n>>> SUCESSO V34 PENDING LIST! <<<")
-    except Exception as e: print(f"Git: {e}")
-
-def self_destruct():
-    try: os.remove(os.path.abspath(__file__))
-    except: pass
-
-def main():
-    print(f"--- UPDATE V34 PENDING LIST: {PROJECT_NAME} ---")
-    create_backup()
-    write_file("runtime.txt", FILE_RUNTIME)
-    write_file("requirements.txt", FILE_REQ)
-    write_file("Procfile", FILE_PROCFILE)
-    write_file("app.py", FILE_APP)
-    write_file("templates/admin_usuarios.html", FILE_ADMIN_USUARIOS)
-    
-    git_update()
-    self_destruct()
-
-if __name__ == "__main__":
-    main()
-
-

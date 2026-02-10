@@ -3,6 +3,7 @@ import logging
 import secrets
 import random
 import unicodedata
+import calendar
 from flask import Flask, render_template, request, redirect, url_for, flash
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
@@ -14,7 +15,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-app.secret_key = 'chave_v34_pending_list'
+app.secret_key = 'chave_v35_routes_fix'
 
 db_url = "postgresql://neondb_owner:npg_UBg0b7YKqLPm@ep-steep-wave-aflx731c-pooler.c-2.us-west-2.aws.neon.tech/neondb?sslmode=require"
 if db_url.startswith("postgres://"):
@@ -167,6 +168,7 @@ class HistoricoSaida(db.Model):
 @login_manager.user_loader
 def load_user(user_id): return User.query.get(int(user_id))
 
+# --- MOTOR DE CÁLCULO ---
 def time_to_min(t_input):
     if not t_input: return 0
     try:
@@ -224,36 +226,75 @@ def calcular_dia(user_id, data_ref):
 try:
     with app.app_context():
         db.create_all()
+        try:
+            with db.engine.connect() as conn:
+                conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS cpf VARCHAR(14) UNIQUE"))
+                conn.commit()
+        except: pass
         if not User.query.filter_by(username='Thaynara').first():
             m = User(username='Thaynara', real_name='Thaynara Master', role='Master', is_first_access=False); m.set_password('1855'); db.session.add(m); db.session.commit()
 except: pass
 
-# --- ROTA LISTAGEM DE USUARIOS (ATUALIZADA) ---
+# --- ROTA ESPELHO (RESTAURADA) ---
+@app.route('/ponto/espelho')
+@login_required
+def espelho_ponto():
+    data_filtro = request.args.get('data_filtro')
+    query = PontoRegistro.query
+    if current_user.role != 'Master': query = query.filter_by(user_id=current_user.id)
+    if data_filtro:
+        try: query = query.filter_by(data_registro=datetime.strptime(data_filtro, '%Y-%m-%d').date())
+        except: pass
+    
+    if current_user.role == 'Master':
+        registros_raw = query.join(User).order_by(PontoRegistro.data_registro.desc(), User.real_name, PontoRegistro.hora_registro).limit(1000).all()
+        espelho_agrupado = {} 
+        for r in registros_raw:
+            chave = f"{r.data_registro}_{r.user_id}"
+            if chave not in espelho_agrupado:
+                resumo = PontoResumo.query.filter_by(user_id=r.user_id, data_referencia=r.data_registro).first()
+                saldo_fmt = "--:--"
+                status_dia = ""
+                if resumo:
+                    abs_s = abs(resumo.minutos_saldo)
+                    sinal = "+" if resumo.minutos_saldo >= 0 else "-"
+                    saldo_fmt = f"{sinal}{abs_s // 60:02d}:{abs_s % 60:02d}"
+                    status_dia = resumo.status_dia
+                espelho_agrupado[chave] = {'user': r.user, 'data': r.data_registro, 'pontos': [], 'saldo': saldo_fmt, 'status': status_dia}
+            espelho_agrupado[chave]['pontos'].append(r)
+        return render_template('ponto_espelho_master.html', grupos=espelho_agrupado.values(), filtro_data=data_filtro)
+    else:
+        registros = query.order_by(PontoRegistro.data_registro.desc(), PontoRegistro.hora_registro.desc()).limit(100).all()
+        dias_agrupados = {}
+        for r in registros:
+            d = r.data_registro
+            if d not in dias_agrupados:
+                resumo = PontoResumo.query.filter_by(user_id=current_user.id, data_referencia=d).first()
+                saldo_fmt = "--:--"
+                if resumo:
+                    abs_s = abs(resumo.minutos_saldo)
+                    sinal = "+" if resumo.minutos_saldo >= 0 else "-"
+                    saldo_fmt = f"{sinal}{abs_s // 60:02d}:{abs_s % 60:02d}"
+                dias_agrupados[d] = {'data': d, 'pontos': [], 'saldo': saldo_fmt}
+            dias_agrupados[d]['pontos'].append(r)
+        return render_template('ponto_espelho.html', dias=dias_agrupados.values(), filtro_data=data_filtro)
+
+# --- ROTAS ADMIN ---
 @app.route('/admin/usuarios')
 @login_required
 def gerenciar_usuarios():
     if current_user.role != 'Master': return redirect(url_for('dashboard'))
-    
-    # Busca usuarios ativos
     users = User.query.all()
-    # Busca usuarios pendentes (PreCadastro)
     pendentes = PreCadastro.query.all()
-    
     return render_template('admin_usuarios.html', users=users, pendentes=pendentes)
 
-# --- ROTA EXCLUIR PRE-CADASTRO (NOVA PARA LISTA) ---
-@app.route('/admin/usuarios/excluir-pendente/<int:id>')
+@app.route('/admin/liberar-acesso/excluir/<int:id>')
 @login_required
-def excluir_pendente(id):
+def excluir_pre_cadastro(id):
     if current_user.role != 'Master': return redirect(url_for('dashboard'))
     pre = PreCadastro.query.get(id)
-    if pre:
-        db.session.delete(pre)
-        db.session.commit()
-        flash('Pré-cadastro removido da lista de espera.')
+    if pre: db.session.delete(pre); db.session.commit(); flash('Removido.')
     return redirect(url_for('gerenciar_usuarios'))
-
-# --- DEMAIS ROTAS ---
 
 @app.route('/admin/usuarios/novo', methods=['GET', 'POST'])
 @login_required
@@ -261,51 +302,30 @@ def novo_usuario():
     if current_user.role != 'Master': return redirect(url_for('dashboard'))
     if request.method == 'POST':
         try:
-            real_name = request.form.get('real_name')
             cpf = request.form.get('cpf').replace('.', '').replace('-', '').strip()
+            nome = request.form.get('real_name')
             if User.query.filter_by(cpf=cpf).first():
                 flash('Erro: Este CPF já possui cadastro no sistema.')
                 return redirect(url_for('novo_usuario'))
-            
-            # CRIA PRE-CADASTRO
             dt_escala = None
             if request.form.get('dt_escala'):
                 dt_escala = datetime.strptime(request.form.get('dt_escala'), '%Y-%m-%d').date()
-            
-            pre = PreCadastro(
-                cpf=cpf,
-                nome_previsto=real_name,
-                cargo=request.form.get('role'),
-                salario=float(request.form.get('salario') or 0),
-                horario_entrada=request.form.get('h_ent') or '07:12',
-                horario_almoco_inicio=request.form.get('h_alm_ini') or '12:00',
-                horario_almoco_fim=request.form.get('h_alm_fim') or '13:00',
-                horario_saida=request.form.get('h_sai') or '17:00',
-                escala=request.form.get('escala'),
-                data_inicio_escala=dt_escala
-            )
-            db.session.add(pre)
-            db.session.commit()
-            
-            return render_template('sucesso_usuario.html', nome_real=real_name, cpf=cpf)
-            
+            pre = PreCadastro(cpf=cpf, nome_previsto=nome, cargo=request.form.get('role'), salario=float(request.form.get('salario') or 0), horario_entrada=request.form.get('h_ent') or '07:12', horario_almoco_inicio=request.form.get('h_alm_ini') or '12:00', horario_almoco_fim=request.form.get('h_alm_fim') or '13:00', horario_saida=request.form.get('h_sai') or '17:00', escala=request.form.get('escala'), data_inicio_escala=dt_escala)
+            db.session.add(pre); db.session.commit()
+            return render_template('sucesso_usuario.html', nome_real=nome, cpf=cpf)
         except Exception as e:
-            db.session.rollback()
-            logger.error(f"Erro ao criar usuario: {e}")
-            flash(f"Erro interno: {str(e)}")
-            return redirect(url_for('novo_usuario'))
+            db.session.rollback(); logger.error(f"Erro: {e}"); flash(f"Erro interno: {str(e)}"); return redirect(url_for('novo_usuario'))
     return render_template('novo_usuario.html')
 
 @app.route('/cadastrar', methods=['GET', 'POST'])
 def auto_cadastro():
-    if request.method == 'GET':
-        return render_template('auto_cadastro.html', step=1)
+    if request.method == 'GET': return render_template('auto_cadastro.html', step=1)
     if request.method == 'POST':
         cpf = request.form.get('cpf').replace('.', '').replace('-', '').strip()
         pre = PreCadastro.query.filter_by(cpf=cpf).first()
         if not pre:
             if User.query.filter_by(cpf=cpf).first(): flash('Você já tem cadastro. Faça login.'); return redirect(url_for('login'))
-            flash('CPF não encontrado na lista de liberação.'); return redirect(url_for('auto_cadastro'))
+            flash('CPF não encontrado na lista de liberação. Fale com o RH.'); return redirect(url_for('auto_cadastro'))
         password = request.form.get('password')
         if password:
             username = gerar_login_automatico(pre.nome_previsto)
@@ -318,6 +338,7 @@ def auto_cadastro():
 @app.route('/admin/usuarios/editar/<int:id>', methods=['GET', 'POST'])
 @login_required
 def editar_usuario(id):
+    if current_user.role != 'Master': return redirect(url_for('dashboard'))
     user = User.query.get_or_404(id)
     if request.method == 'POST':
         try:
@@ -331,7 +352,7 @@ def editar_usuario(id):
             else:
                 user.real_name = request.form.get('real_name'); user.username = request.form.get('username')
                 if user.username != 'Thaynara': user.role = request.form.get('role')
-                user.salario = float(request.form.get('salario') or 0); user.horario_entrada = request.form.get('h_ent'); user.horario_almoco_inicio = request.form.get('h_alm_ini'); user.horario_almoco_fim = request.form.get('h_alm_fim'); user.horario_saida = request.form.get('h_sai'); user.escala = request.form.get('escala')
+                user.salario = float(request.form.get('salario') or 0); user.horario_entrada = request.form.get('h_ent') or '07:12'; user.horario_almoco_inicio = request.form.get('h_alm_ini') or '12:00'; user.horario_almoco_fim = request.form.get('h_alm_fim') or '13:00'; user.horario_saida = request.form.get('h_sai') or '17:00'; user.escala = request.form.get('escala')
                 if request.form.get('dt_escala'): user.data_inicio_escala = datetime.strptime(request.form.get('dt_escala'), '%Y-%m-%d').date()
                 db.session.commit(); calcular_dia(user.id, get_brasil_time().date()); return redirect(url_for('gerenciar_usuarios'))
         except Exception as e: db.session.rollback(); flash(f'Erro: {e}'); return redirect(url_for('editar_usuario', id=id))

@@ -1,0 +1,67 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="max-w-lg mx-auto">
+    <div class="flex items-center justify-between mb-6">
+        <h2 class="text-lg font-bold text-slate-800">Novo Cadastro Manual</h2>
+        <a href="/admin/usuarios" class="text-xs font-medium text-slate-500 hover:text-slate-800">Cancelar</a>
+    </div>
+
+    <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <form action="/admin/usuarios/novo" method="POST" class="p-8 space-y-6">
+            
+            <div class="space-y-4">
+                <div>
+                    <label class="label-pro">Nome Completo</label>
+                    <input type="text" name="real_name" class="input-pro" placeholder="Ex: Maria da Silva" required>
+                </div>
+                <div>
+                    <label class="label-pro text-blue-600">CPF (Somente Números)</label>
+                    <input type="text" name="cpf" class="input-pro font-mono bg-blue-50 border-blue-200" placeholder="00000000000" required>
+                </div>
+                <div>
+                    <label class="label-pro">Cargo / Função</label>
+                    <input type="text" name="role" class="input-pro" placeholder="Ex: Assistente" required>
+                </div>
+                <div>
+                    <label class="label-pro text-emerald-600">Salário Base (R$)</label>
+                    <input type="number" step="0.01" name="salario" class="input-pro border-emerald-200 text-emerald-700 font-bold" placeholder="2000.00">
+                </div>
+            </div>
+
+            <!-- JORNADA DE TRABALHO -->
+            <div class="pt-4 border-t border-slate-100">
+                <p class="text-xs font-bold text-slate-400 uppercase mb-3">Escala e Jornada</p>
+                <div class="mb-4">
+                    <label class="label-pro">Tipo de Escala</label>
+                    <select name="escala" class="input-pro" onchange="toggleDtRef(this)">
+                        <option value="Livre">Livre (Sem Bloqueio)</option>
+                        <option value="5x2">Normal 5x2 (Seg-Sex)</option>
+                        <option value="12x36">Plantão 12x36</option>
+                    </select>
+                </div>
+                <div id="divDtRef" class="hidden mb-4 bg-blue-50 p-3 rounded border border-blue-100">
+                    <label class="label-pro text-blue-700">Data de Referência (Dia Trabalhado)</label>
+                    <input type="date" name="dt_escala" class="input-pro">
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div><label class="label-pro">Entrada</label><input type="time" name="h_ent" value="07:12" class="input-pro"></div>
+                    <div><label class="label-pro">Saída Almoço</label><input type="time" name="h_alm_ini" value="12:00" class="input-pro"></div>
+                    <div><label class="label-pro">Volta Almoço</label><input type="time" name="h_alm_fim" value="13:00" class="input-pro"></div>
+                    <div><label class="label-pro">Saída</label><input type="time" name="h_sai" value="17:00" class="input-pro"></div>
+                </div>
+            </div>
+
+            <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-lg shadow-md transition transform active:scale-95">
+                GERAR ACESSO AUTOMÁTICO
+            </button>
+        </form>
+    </div>
+</div>
+<script>
+    function toggleDtRef(sel) {
+        if (sel.value === '12x36') document.getElementById('divDtRef').classList.remove('hidden');
+        else document.getElementById('divDtRef').classList.add('hidden');
+    }
+</script>
+<style>.label-pro { display: block; font-size: 0.7rem; font-weight: 700; color: #64748b; text-transform: uppercase; margin-bottom: 0.5rem; } .input-pro { width: 100%; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 0.5rem; padding: 0.75rem 1rem; color: #1e293b; font-weight: 500; outline: none; }</style>
+{% endblock %}
