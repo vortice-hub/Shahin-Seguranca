@@ -6,7 +6,7 @@ from datetime import datetime
 
 # --- CONFIGURAÇÕES ---
 PROJECT_NAME = "TdS Gestão de RH"
-COMMIT_MSG = "V35: Fix Critico - Restauracao da Rota Espelho de Ponto"
+COMMIT_MSG = "V36: Botao Zerar Relatorio de Folha (Limpa Saldos do Mes)"
 DB_URL_FIXA = "postgresql://neondb_owner:npg_UBg0b7YKqLPm@ep-steep-wave-aflx731c-pooler.c-2.us-west-2.aws.neon.tech/neondb?sslmode=require"
 
 # --- CONFIG FILES ---
@@ -14,7 +14,7 @@ FILE_RUNTIME = """python-3.11.9"""
 FILE_REQ = """flask\nflask-sqlalchemy\npsycopg2-binary\ngunicorn\nflask-login\nwerkzeug"""
 FILE_PROCFILE = """web: gunicorn app:app"""
 
-# --- APP.PY (Completo e Corrigido) ---
+# --- APP.PY (Nova Rota de Zerar) ---
 FILE_APP = f"""
 import os
 import logging
@@ -33,7 +33,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-app.secret_key = 'chave_v35_routes_fix'
+app.secret_key = 'chave_v36_reset_report'
 
 db_url = "{DB_URL_FIXA}"
 if db_url.startswith("postgres://"):
@@ -244,75 +244,60 @@ def calcular_dia(user_id, data_ref):
 try:
     with app.app_context():
         db.create_all()
-        try:
-            with db.engine.connect() as conn:
-                conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS cpf VARCHAR(14) UNIQUE"))
-                conn.commit()
-        except: pass
         if not User.query.filter_by(username='Thaynara').first():
             m = User(username='Thaynara', real_name='Thaynara Master', role='Master', is_first_access=False); m.set_password('1855'); db.session.add(m); db.session.commit()
 except: pass
 
-# --- ROTA ESPELHO (RESTAURADA) ---
-@app.route('/ponto/espelho')
+# --- NOVA ROTA: ZERAR RELATORIO ---
+@app.route('/admin/relatorio-folha/zerar', methods=['POST'])
 @login_required
-def espelho_ponto():
-    data_filtro = request.args.get('data_filtro')
-    query = PontoRegistro.query
-    if current_user.role != 'Master': query = query.filter_by(user_id=current_user.id)
-    if data_filtro:
-        try: query = query.filter_by(data_registro=datetime.strptime(data_filtro, '%Y-%m-%d').date())
-        except: pass
+def zerar_relatorio():
+    if current_user.role != 'Master': return redirect(url_for('dashboard'))
     
-    if current_user.role == 'Master':
-        registros_raw = query.join(User).order_by(PontoRegistro.data_registro.desc(), User.real_name, PontoRegistro.hora_registro).limit(1000).all()
-        espelho_agrupado = {{}} 
-        for r in registros_raw:
-            chave = f"{{r.data_registro}}_{{r.user_id}}"
-            if chave not in espelho_agrupado:
-                resumo = PontoResumo.query.filter_by(user_id=r.user_id, data_referencia=r.data_registro).first()
-                saldo_fmt = "--:--"
-                status_dia = ""
-                if resumo:
-                    abs_s = abs(resumo.minutos_saldo)
-                    sinal = "+" if resumo.minutos_saldo >= 0 else "-"
-                    saldo_fmt = f"{{sinal}}{{abs_s // 60:02d}}:{{abs_s % 60:02d}}"
-                    status_dia = resumo.status_dia
-                espelho_agrupado[chave] = {{'user': r.user, 'data': r.data_registro, 'pontos': [], 'saldo': saldo_fmt, 'status': status_dia}}
-            espelho_agrupado[chave]['pontos'].append(r)
-        return render_template('ponto_espelho_master.html', grupos=espelho_agrupado.values(), filtro_data=data_filtro)
-    else:
-        registros = query.order_by(PontoRegistro.data_registro.desc(), PontoRegistro.hora_registro.desc()).limit(100).all()
-        dias_agrupados = {{}}
-        for r in registros:
-            d = r.data_registro
-            if d not in dias_agrupados:
-                resumo = PontoResumo.query.filter_by(user_id=current_user.id, data_referencia=d).first()
-                saldo_fmt = "--:--"
-                if resumo:
-                    abs_s = abs(resumo.minutos_saldo)
-                    sinal = "+" if resumo.minutos_saldo >= 0 else "-"
-                    saldo_fmt = f"{{sinal}}{{abs_s // 60:02d}}:{{abs_s % 60:02d}}"
-                dias_agrupados[d] = {{'data': d, 'pontos': [], 'saldo': saldo_fmt}}
-            dias_agrupados[d]['pontos'].append(r)
-        return render_template('ponto_espelho.html', dias=dias_agrupados.values(), filtro_data=data_filtro)
+    mes_ref = request.form.get('mes_ref')
+    if not mes_ref:
+        flash('Erro: Mês não identificado.')
+        return redirect(url_for('admin_relatorio_folha'))
+        
+    try:
+        ano, mes = map(int, mes_ref.split('-'))
+        
+        # Apaga SOMENTE os resumos calculados daquele mes
+        # Os pontos originais sao mantidos para seguranca
+        num_deleted = PontoResumo.query.filter(
+            func.extract('year', PontoResumo.data_referencia) == ano,
+            func.extract('month', PontoResumo.data_referencia) == mes
+        ).delete(synchronize_session=False)
+        
+        db.session.commit()
+        flash(f'Relatório de {{mes_ref}} zerado com sucesso! ({{num_deleted}} registros limpos)')
+        
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Erro ao zerar: {{e}}')
+        
+    return redirect(url_for('admin_relatorio_folha'))
 
-# --- ROTAS ADMIN ---
-@app.route('/admin/usuarios')
+@app.route('/admin/relatorio-folha', methods=['GET', 'POST'])
 @login_required
-def gerenciar_usuarios():
+def admin_relatorio_folha():
     if current_user.role != 'Master': return redirect(url_for('dashboard'))
-    users = User.query.all()
-    pendentes = PreCadastro.query.all()
-    return render_template('admin_usuarios.html', users=users, pendentes=pendentes)
-
-@app.route('/admin/liberar-acesso/excluir/<int:id>')
-@login_required
-def excluir_pre_cadastro(id):
-    if current_user.role != 'Master': return redirect(url_for('dashboard'))
-    pre = PreCadastro.query.get(id)
-    if pre: db.session.delete(pre); db.session.commit(); flash('Removido.')
-    return redirect(url_for('gerenciar_usuarios'))
+    mes_ref = request.form.get('mes_ref') or datetime.now().strftime('%Y-%m')
+    try: ano, mes = map(int, mes_ref.split('-'))
+    except: hoje = datetime.now(); ano, mes = hoje.year, hoje.month; mes_ref = hoje.strftime('%Y-%m')
+    if request.method == 'POST' and not request.form.get('acao_zerar'): flash(f'Exibindo dados de {{mes_ref}}')
+    users = User.query.order_by(User.real_name).all()
+    relatorio = []
+    for u in users:
+        try:
+            resumos = PontoResumo.query.filter(PontoResumo.user_id == u.id, func.extract('year', PontoResumo.data_referencia) == ano, func.extract('month', PontoResumo.data_referencia) == mes).all()
+            total_saldo = sum(r.minutos_saldo for r in resumos)
+            sinal = "+" if total_saldo >= 0 else "-"
+            abs_s = abs(total_saldo)
+            sal_val = u.salario if u.salario is not None else 0.0
+            relatorio.append({{'nome': u.real_name, 'cargo': u.role, 'salario': sal_val, 'saldo_minutos': total_saldo, 'saldo_formatado': f"{{sinal}}{{abs_s // 60:02d}}:{{abs_s % 60:02d}}", 'status': 'Crédito' if total_saldo >= 0 else 'Débito'}})
+        except: continue
+    return render_template('admin_relatorio_folha.html', relatorio=relatorio, mes_ref=mes_ref)
 
 @app.route('/admin/usuarios/novo', methods=['GET', 'POST'])
 @login_required
@@ -320,19 +305,15 @@ def novo_usuario():
     if current_user.role != 'Master': return redirect(url_for('dashboard'))
     if request.method == 'POST':
         try:
+            real_name = request.form.get('real_name')
             cpf = request.form.get('cpf').replace('.', '').replace('-', '').strip()
-            nome = request.form.get('real_name')
-            if User.query.filter_by(cpf=cpf).first():
-                flash('Erro: Este CPF já possui cadastro no sistema.')
-                return redirect(url_for('novo_usuario'))
+            if User.query.filter_by(cpf=cpf).first(): flash('Erro: CPF já existe.'); return redirect(url_for('novo_usuario'))
             dt_escala = None
-            if request.form.get('dt_escala'):
-                dt_escala = datetime.strptime(request.form.get('dt_escala'), '%Y-%m-%d').date()
-            pre = PreCadastro(cpf=cpf, nome_previsto=nome, cargo=request.form.get('role'), salario=float(request.form.get('salario') or 0), horario_entrada=request.form.get('h_ent') or '07:12', horario_almoco_inicio=request.form.get('h_alm_ini') or '12:00', horario_almoco_fim=request.form.get('h_alm_fim') or '13:00', horario_saida=request.form.get('h_sai') or '17:00', escala=request.form.get('escala'), data_inicio_escala=dt_escala)
+            if request.form.get('dt_escala'): dt_escala = datetime.strptime(request.form.get('dt_escala'), '%Y-%m-%d').date()
+            pre = PreCadastro(cpf=cpf, nome_previsto=real_name, cargo=request.form.get('role'), salario=float(request.form.get('salario') or 0), horario_entrada=request.form.get('h_ent') or '07:12', horario_almoco_inicio=request.form.get('h_alm_ini') or '12:00', horario_almoco_fim=request.form.get('h_alm_fim') or '13:00', horario_saida=request.form.get('h_sai') or '17:00', escala=request.form.get('escala'), data_inicio_escala=dt_escala)
             db.session.add(pre); db.session.commit()
-            return render_template('sucesso_usuario.html', nome_real=nome, cpf=cpf)
-        except Exception as e:
-            db.session.rollback(); logger.error(f"Erro: {{e}}"); flash(f"Erro interno: {{str(e)}}"); return redirect(url_for('novo_usuario'))
+            return render_template('sucesso_usuario.html', nome_real=real_name, cpf=cpf)
+        except Exception as e: db.session.rollback(); logger.error(f"Erro: {{e}}"); flash(f"Erro interno: {{str(e)}}"); return redirect(url_for('novo_usuario'))
     return render_template('novo_usuario.html')
 
 @app.route('/cadastrar', methods=['GET', 'POST'])
@@ -353,10 +334,17 @@ def auto_cadastro():
             return render_template('auto_cadastro_sucesso.html', username=username, nome=pre.nome_previsto)
         else: return render_template('auto_cadastro.html', step=2, cpf=cpf, nome=pre.nome_previsto)
 
+@app.route('/admin/liberar-acesso/excluir/<int:id>')
+@login_required
+def excluir_pre_cadastro(id):
+    if current_user.role != 'Master': return redirect(url_for('dashboard'))
+    pre = PreCadastro.query.get(id)
+    if pre: db.session.delete(pre); db.session.commit(); flash('Removido.')
+    return redirect(url_for('gerenciar_usuarios'))
+
 @app.route('/admin/usuarios/editar/<int:id>', methods=['GET', 'POST'])
 @login_required
 def editar_usuario(id):
-    if current_user.role != 'Master': return redirect(url_for('dashboard'))
     user = User.query.get_or_404(id)
     if request.method == 'POST':
         try:
@@ -370,7 +358,7 @@ def editar_usuario(id):
             else:
                 user.real_name = request.form.get('real_name'); user.username = request.form.get('username')
                 if user.username != 'Thaynara': user.role = request.form.get('role')
-                user.salario = float(request.form.get('salario') or 0); user.horario_entrada = request.form.get('h_ent') or '07:12'; user.horario_almoco_inicio = request.form.get('h_alm_ini') or '12:00'; user.horario_almoco_fim = request.form.get('h_alm_fim') or '13:00'; user.horario_saida = request.form.get('h_sai') or '17:00'; user.escala = request.form.get('escala')
+                user.salario = float(request.form.get('salario') or 0); user.horario_entrada = request.form.get('h_ent'); user.horario_almoco_inicio = request.form.get('h_alm_ini'); user.horario_almoco_fim = request.form.get('h_alm_fim'); user.horario_saida = request.form.get('h_sai'); user.escala = request.form.get('escala')
                 if request.form.get('dt_escala'): user.data_inicio_escala = datetime.strptime(request.form.get('dt_escala'), '%Y-%m-%d').date()
                 db.session.commit(); calcular_dia(user.id, get_brasil_time().date()); return redirect(url_for('gerenciar_usuarios'))
         except Exception as e: db.session.rollback(); flash(f'Erro: {{e}}'); return redirect(url_for('editar_usuario', id=id))
@@ -395,6 +383,12 @@ def primeiro_acesso():
     if request.method == 'POST':
         if request.form.get('nova_senha') == request.form.get('confirmacao'): current_user.set_password(request.form.get('nova_senha')); current_user.is_first_access = False; db.session.commit(); return redirect(url_for('dashboard'))
     return render_template('primeiro_acesso.html')
+
+@app.route('/admin/usuarios')
+@login_required
+def gerenciar_usuarios(): 
+    users = User.query.all(); pendentes = PreCadastro.query.all()
+    return render_template('admin_usuarios.html', users=users, pendentes=pendentes)
 
 @app.route('/')
 @login_required
@@ -430,27 +424,6 @@ def registrar_ponto():
         db.session.commit(); calcular_dia(current_user.id, hoje)
         return redirect(url_for('dashboard'))
     return render_template('ponto_registro.html', proxima_acao=prox, hoje_extenso=hoje_extenso, pontos=pontos, bloqueado=bloqueado, motivo=motivo)
-
-@app.route('/admin/relatorio-folha', methods=['GET', 'POST'])
-@login_required
-def admin_relatorio_folha():
-    if current_user.role != 'Master': return redirect(url_for('dashboard'))
-    mes_ref = request.form.get('mes_ref') or datetime.now().strftime('%Y-%m')
-    try: ano, mes = map(int, mes_ref.split('-'))
-    except: hoje = datetime.now(); ano, mes = hoje.year, hoje.month; mes_ref = hoje.strftime('%Y-%m')
-    if request.method == 'POST': flash(f'Exibindo dados de {{mes_ref}}')
-    users = User.query.order_by(User.real_name).all()
-    relatorio = []
-    for u in users:
-        try:
-            resumos = PontoResumo.query.filter(PontoResumo.user_id == u.id, func.extract('year', PontoResumo.data_referencia) == ano, func.extract('month', PontoResumo.data_referencia) == mes).all()
-            total_saldo = sum(r.minutos_saldo for r in resumos)
-            sinal = "+" if total_saldo >= 0 else "-"
-            abs_s = abs(total_saldo)
-            sal_val = u.salario if u.salario is not None else 0.0
-            relatorio.append({{'nome': u.real_name, 'cargo': u.role, 'salario': sal_val, 'saldo_minutos': total_saldo, 'saldo_formatado': f"{{sinal}}{{abs_s // 60:02d}}:{{abs_s % 60:02d}}", 'status': 'Crédito' if total_saldo >= 0 else 'Débito'}})
-        except: continue
-    return render_template('admin_relatorio_folha.html', relatorio=relatorio, mes_ref=mes_ref)
 
 @app.route('/controle-uniforme')
 @login_required
@@ -562,6 +535,68 @@ if __name__ == '__main__':
     app.run(host='0.0.0.0', port=port)
 """
 
+# --- TEMPLATE RELATORIO COM BOTAO ZERAR ---
+FILE_RELATORIO = """
+{% extends 'base.html' %}
+{% block content %}
+<div class="mb-6 flex flex-col md:flex-row justify-between items-center gap-4">
+    <h2 class="text-2xl font-bold text-slate-800">Relatório de Folha</h2>
+    <form action="/admin/relatorio-folha" method="POST" class="flex gap-2">
+        <input type="month" name="mes_ref" value="{{ mes_ref }}" class="border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-600 bg-white">
+        <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded-lg font-bold text-sm hover:bg-blue-700 transition">GERAR RELATÓRIO</button>
+    </form>
+</div>
+
+<!-- BOTAO DE ZERAR FOLHA (PERIGO) -->
+<div class="bg-red-50 border border-red-200 rounded-xl p-4 mb-8 flex justify-between items-center">
+    <div>
+        <h3 class="text-red-800 font-bold text-sm"><i class="fas fa-exclamation-triangle mr-1"></i> Área de Fechamento</h3>
+        <p class="text-xs text-red-600">Deseja limpar os saldos calculados deste mês? Isso não apaga os pontos batidos, apenas os cálculos.</p>
+    </div>
+    <form action="/admin/relatorio-folha/zerar" method="POST">
+        <input type="hidden" name="mes_ref" value="{{ mes_ref }}">
+        <button type="submit" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg text-xs shadow-md transition" onclick="return confirm('ATENÇÃO: Você está prestes a ZERAR todos os saldos calculados de {{ mes_ref }}. Tem certeza?')">
+            ZERAR FOLHA DO MÊS
+        </button>
+    </form>
+</div>
+
+<div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+    <table class="w-full text-left text-sm text-slate-600">
+        <thead class="bg-slate-50 text-xs uppercase text-slate-400 font-bold border-b border-slate-100">
+            <tr>
+                <th class="px-6 py-4">Funcionário</th>
+                <th class="px-6 py-4">Salário Base</th>
+                <th class="px-6 py-4 text-center">Status Ponto</th>
+                <th class="px-6 py-4 text-right">Saldo Horas</th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+            {% for item in relatorio %}
+            <tr class="hover:bg-slate-50 transition">
+                <td class="px-6 py-4 font-bold text-slate-800">{{ item.nome }} <span class="text-xs font-normal text-slate-400 block">{{ item.cargo }}</span></td>
+                <td class="px-6 py-4">R$ {{ "%.2f"|format(item.salario) }}</td>
+                <td class="px-6 py-4 text-center">
+                    <span class="px-2 py-1 rounded text-[10px] font-bold uppercase
+                        {% if item.saldo_minutos >= 0 %} bg-emerald-100 text-emerald-700
+                        {% else %} bg-red-100 text-red-700 {% endif %}">
+                        {{ item.status }}
+                    </span>
+                </td>
+                <td class="px-6 py-4 text-right font-mono font-bold 
+                    {% if item.saldo_minutos >= 0 %} text-emerald-600 {% else %} text-red-600 {% endif %}">
+                    {{ item.saldo_formatado }}
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="4" class="px-6 py-8 text-center text-slate-400">Nenhum dado calculado para o período.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
+"""
+
 # --- FUNÇÕES ---
 def create_backup():
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -585,7 +620,7 @@ def git_update():
         subprocess.run(["git", "add", "."], check=True)
         subprocess.run(["git", "commit", "-m", COMMIT_MSG], check=False)
         subprocess.run(["git", "push"], check=True)
-        print("\n>>> SUCESSO V35! ROTA RESTAURADA <<<")
+        print("\n>>> SUCESSO V36 ZERAR FOLHA! <<<")
     except Exception as e: print(f"Git: {e}")
 
 def self_destruct():
@@ -593,12 +628,13 @@ def self_destruct():
     except: pass
 
 def main():
-    print(f"--- UPDATE V35 FIX ROUTES: {PROJECT_NAME} ---")
+    print(f"--- UPDATE V36 RESET REPORT: {PROJECT_NAME} ---")
     create_backup()
     write_file("runtime.txt", FILE_RUNTIME)
     write_file("requirements.txt", FILE_REQ)
     write_file("Procfile", FILE_PROCFILE)
     write_file("app.py", FILE_APP)
+    write_file("templates/admin_relatorio_folha.html", FILE_RELATORIO)
     
     git_update()
     self_destruct()
