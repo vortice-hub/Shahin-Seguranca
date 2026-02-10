@@ -14,7 +14,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-app.secret_key = 'chave_v33_cpf_flow'
+app.secret_key = 'chave_v32_fix_create'
 
 db_url = "postgresql://neondb_owner:npg_UBg0b7YKqLPm@ep-steep-wave-aflx731c-pooler.c-2.us-west-2.aws.neon.tech/neondb?sslmode=require"
 if db_url.startswith("postgres://"):
@@ -36,6 +36,7 @@ login_manager.login_view = 'login'
 def get_brasil_time():
     return datetime.utcnow() - timedelta(hours=3)
 
+# --- HELPER ---
 def remove_accents(input_str):
     if not input_str: return ""
     nfkd_form = unicodedata.normalize('NFKD', input_str)
@@ -167,6 +168,7 @@ class HistoricoSaida(db.Model):
 @login_manager.user_loader
 def load_user(user_id): return User.query.get(int(user_id))
 
+# --- MOTOR DE CÁLCULO ---
 def time_to_min(t_input):
     if not t_input: return 0
     try:
@@ -228,32 +230,37 @@ try:
             m = User(username='Thaynara', real_name='Thaynara Master', role='Master', is_first_access=False); m.set_password('1855'); db.session.add(m); db.session.commit()
 except: pass
 
-# --- ROTA DE LIBERAR ACESSO (MASTER) - NAO CRIA USER, SO PRE-CADASTRO ---
+# --- ROTA DE CRIACAO MANUAL CORRIGIDA E BLINDADA ---
 @app.route('/admin/usuarios/novo', methods=['GET', 'POST'])
 @login_required
 def novo_usuario():
     if current_user.role != 'Master': return redirect(url_for('dashboard'))
     
     if request.method == 'POST':
-        cpf = request.form.get('cpf').replace('.', '').replace('-', '').strip()
-        real_name = request.form.get('real_name')
-        
-        # Validacoes
-        if User.query.filter_by(cpf=cpf).first():
-            flash('Erro: Este CPF já tem conta ativa.')
-        elif PreCadastro.query.filter_by(cpf=cpf).first():
-            flash('Erro: Este CPF já está liberado aguardando cadastro.')
-        else:
-            # Salva na tabela temporaria PreCadastro
+        try:
+            real_name = request.form.get('real_name')
+            cpf = request.form.get('cpf').replace('.', '').replace('-', '').strip()
+            
+            # Validação de CPF Duplicado
+            if User.query.filter_by(cpf=cpf).first():
+                flash('Erro: Este CPF já possui cadastro no sistema.')
+                return redirect(url_for('novo_usuario'))
+
+            # Geração de Login
+            username = gerar_login_automatico(real_name)
+            senha_temp = secrets.token_hex(3)
+            
             dt_escala = None
             if request.form.get('dt_escala'):
                 dt_escala = datetime.strptime(request.form.get('dt_escala'), '%Y-%m-%d').date()
             
-            pre = PreCadastro(
-                cpf=cpf,
-                nome_previsto=real_name,
-                cargo=request.form.get('role'),
+            novo = User(
+                username=username, 
+                real_name=real_name, 
+                role=request.form.get('role'),
+                cpf=cpf, # CPF Agora é salvo
                 salario=float(request.form.get('salario') or 0),
+                is_first_access=True,
                 horario_entrada=request.form.get('h_ent') or '07:12',
                 horario_almoco_inicio=request.form.get('h_alm_ini') or '12:00',
                 horario_almoco_fim=request.form.get('h_alm_fim') or '13:00',
@@ -261,74 +268,99 @@ def novo_usuario():
                 escala=request.form.get('escala'),
                 data_inicio_escala=dt_escala
             )
-            db.session.add(pre)
+            novo.set_password(senha_temp)
+            db.session.add(novo)
             db.session.commit()
             
-            # Master nao vê senha nem login, apenas sucesso
-            return render_template('sucesso_usuario.html', nome_real=real_name, cpf=cpf)
+            return render_template('sucesso_usuario.html', novo_user=username, senha_gerada=senha_temp, nome_real=real_name)
+            
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"Erro ao criar usuario: {e}")
+            flash(f"Erro interno: {str(e)}")
+            return redirect(url_for('novo_usuario'))
             
     return render_template('novo_usuario.html')
 
-# --- ROTA AUTO CADASTRO (FUNCIONARIO) ---
+# --- ROTAS MANTIDAS (Para funcionamento do sistema) ---
 @app.route('/cadastrar', methods=['GET', 'POST'])
 def auto_cadastro():
-    # FASE 1: DIGITAR CPF
-    if request.method == 'GET':
-        return render_template('auto_cadastro.html', step=1)
-        
-    # FASE 2: VALIDAR E CRIAR
     if request.method == 'POST':
         cpf = request.form.get('cpf').replace('.', '').replace('-', '').strip()
-        
-        # Verifica se esta liberado
+        if User.query.filter_by(cpf=cpf).first(): flash('Erro: CPF já cadastrado.'); return redirect(url_for('login'))
         pre = PreCadastro.query.filter_by(cpf=cpf).first()
-        
-        if not pre:
-            if User.query.filter_by(cpf=cpf).first():
-                flash('Você já tem cadastro. Faça login.')
-                return redirect(url_for('login'))
-            else:
-                flash('CPF não encontrado na lista de liberação. Fale com o RH.')
-                return redirect(url_for('auto_cadastro'))
-                
-        # Se achou o pré-cadastro e senha veio no post, cria.
-        password = request.form.get('password')
-        if password:
-            # GERA LOGIN AUTOMATICO
-            username = gerar_login_automatico(pre.nome_previsto)
-            while User.query.filter_by(username=username).first():
-                username = gerar_login_automatico(pre.nome_previsto)
-                
-            novo_user = User(
-                username=username,
-                password_hash=generate_password_hash(password),
-                real_name=pre.nome_previsto,
-                role=pre.cargo,
-                cpf=cpf,
-                salario=pre.salario,
-                horario_entrada=pre.horario_entrada,
-                horario_almoco_inicio=pre.horario_almoco_inicio,
-                horario_almoco_fim=pre.horario_almoco_fim,
-                horario_saida=pre.horario_saida,
-                escala=pre.escala,
-                data_inicio_escala=pre.data_inicio_escala,
-                is_first_access=False 
-            )
-            db.session.add(novo_user)
-            db.session.delete(pre) # Remove da fila
-            db.session.commit()
-            
-            # Mostra o Login gerado para ele anotar
-            return render_template('auto_cadastro_sucesso.html', username=username, nome=pre.nome_previsto)
-            
+        if pre:
+            username = gerar_login_automatico(pre.nome_previsto); password = request.form.get('password')
+            while User.query.filter_by(username=username).first(): username = gerar_login_automatico(pre.nome_previsto)
+            novo_user = User(username=username, password_hash=generate_password_hash(password), real_name=pre.nome_previsto, role=pre.cargo, cpf=cpf, salario=pre.salario, horario_entrada=pre.horario_entrada, horario_almoco_inicio=pre.horario_almoco_inicio, horario_almoco_fim=pre.horario_almoco_fim, horario_saida=pre.horario_saida, escala=pre.escala, data_inicio_escala=pre.data_inicio_escala, is_first_access=False)
+            db.session.add(novo_user); db.session.delete(pre); db.session.commit()
+            flash(f'Conta criada! LOGIN: {username}'); return redirect(url_for('login'))
+        else: flash('Erro: CPF não autorizado.')
+    return render_template('auto_cadastro.html')
+
+@app.route('/admin/liberar-acesso', methods=['GET', 'POST'])
+@login_required
+def liberar_acesso():
+    if current_user.role != 'Master': return redirect(url_for('dashboard'))
+    if request.method == 'POST':
+        cpf = request.form.get('cpf').replace('.', '').replace('-', '').strip()
+        if PreCadastro.query.filter_by(cpf=cpf).first() or User.query.filter_by(cpf=cpf).first(): flash('CPF já existe.')
         else:
-            # Mostra tela para criar senha
-            return render_template('auto_cadastro.html', step=2, cpf=cpf, nome=pre.nome_previsto)
+            dt_escala = None
+            if request.form.get('dt_escala'): dt_escala = datetime.strptime(request.form.get('dt_escala'), '%Y-%m-%d').date()
+            pre = PreCadastro(cpf=cpf, nome_previsto=request.form.get('nome'), cargo=request.form.get('cargo'), salario=float(request.form.get('salario') or 2000), horario_entrada=request.form.get('h_ent') or '07:12', horario_almoco_inicio=request.form.get('h_alm_ini') or '12:00', horario_almoco_fim=request.form.get('h_alm_fim') or '13:00', horario_saida=request.form.get('h_sai') or '17:00', escala=request.form.get('escala'), data_inicio_escala=dt_escala)
+            db.session.add(pre); db.session.commit(); flash(f'Liberado: {cpf}')
+    return render_template('admin_liberar_acesso.html', pendentes=PreCadastro.query.all())
 
-# --- DEMAIS ROTAS ---
+@app.route('/admin/liberar-acesso/excluir/<int:id>')
+@login_required
+def excluir_pre_cadastro(id):
+    pre = PreCadastro.query.get(id)
+    if pre: db.session.delete(pre); db.session.commit(); flash('Removido.')
+    return redirect(url_for('liberar_acesso'))
 
-@app.route('/admin/liberar-acesso') # Redireciona antigo link se houver
-def liberar_acesso_redirect(): return redirect(url_for('novo_usuario'))
+@app.route('/ponto/registrar', methods=['GET', 'POST'])
+@login_required
+def registrar_ponto():
+    hoje = get_brasil_time().date()
+    meses = {1:'Janeiro', 2:'Fevereiro', 3:'Março', 4:'Abril', 5:'Maio', 6:'Junho', 7:'Julho', 8:'Agosto', 9:'Setembro', 10:'Outubro', 11:'Novembro', 12:'Dezembro'}
+    hoje_extenso = f"{hoje.day} de {meses[hoje.month]} de {hoje.year}"
+    bloqueado = False; motivo = ""
+    if current_user.escala == '5x2' and hoje.weekday() >= 5: bloqueado = True; motivo = "Não é possível realizar a marcação de ponto."
+    elif current_user.escala == '12x36' and current_user.data_inicio_escala:
+        if (hoje - current_user.data_inicio_escala).days % 2 != 0: bloqueado = True; motivo = "Não é possível realizar a marcação de ponto."
+    pontos = PontoRegistro.query.filter_by(user_id=current_user.id, data_registro=hoje).order_by(PontoRegistro.hora_registro).all()
+    prox = "Entrada"
+    if len(pontos) == 1: prox = "Ida Almoço"
+    elif len(pontos) == 2: prox = "Volta Almoço"
+    elif len(pontos) == 3: prox = "Saída"
+    elif len(pontos) >= 4: prox = "Extra"
+    if request.method == 'POST':
+        if bloqueado: flash('Bloqueado'); return redirect(url_for('dashboard'))
+        db.session.add(PontoRegistro(user_id=current_user.id, data_registro=hoje, hora_registro=get_brasil_time().time(), tipo=prox, latitude=request.form.get('latitude'), longitude=request.form.get('longitude')))
+        db.session.commit(); calcular_dia(current_user.id, hoje)
+        return redirect(url_for('dashboard'))
+    return render_template('ponto_registro.html', proxima_acao=prox, hoje_extenso=hoje_extenso, pontos=pontos, bloqueado=bloqueado, motivo=motivo)
+
+@app.route('/admin/relatorio-folha', methods=['GET', 'POST'])
+@login_required
+def admin_relatorio_folha():
+    if current_user.role != 'Master': return redirect(url_for('dashboard'))
+    mes_ref = request.form.get('mes_ref') or datetime.now().strftime('%Y-%m')
+    try: ano, mes = map(int, mes_ref.split('-'))
+    except: hoje = datetime.now(); ano, mes = hoje.year, hoje.month
+    users = User.query.order_by(User.real_name).all()
+    relatorio = []
+    for u in users:
+        try:
+            resumos = PontoResumo.query.filter(PontoResumo.user_id == u.id, func.extract('year', PontoResumo.data_referencia) == ano, func.extract('month', PontoResumo.data_referencia) == mes).all()
+            total_saldo = sum(r.minutos_saldo for r in resumos)
+            sinal = "+" if total_saldo >= 0 else "-"
+            abs_s = abs(total_saldo)
+            sal_val = u.salario if u.salario is not None else 0.0
+            relatorio.append({'nome': u.real_name, 'cargo': u.role, 'salario': sal_val, 'saldo_minutos': total_saldo, 'saldo_formatado': f"{sinal}{abs_s // 60:02d}:{abs_s % 60:02d}", 'status': 'Crédito' if total_saldo >= 0 else 'Débito'})
+        except: continue
+    return render_template('admin_relatorio_folha.html', relatorio=relatorio, mes_ref=mes_ref)
 
 @app.route('/admin/usuarios/editar/<int:id>', methods=['GET', 'POST'])
 @login_required
@@ -387,50 +419,6 @@ def dashboard():
     elif pontos == 3: status = "Trabalhando (Tarde)"
     elif pontos >= 4: status = "Dia Finalizado"
     return render_template('dashboard.html', status_ponto=status)
-
-@app.route('/ponto/registrar', methods=['GET', 'POST'])
-@login_required
-def registrar_ponto():
-    hoje = get_brasil_time().date()
-    meses = {1:'Janeiro', 2:'Fevereiro', 3:'Março', 4:'Abril', 5:'Maio', 6:'Junho', 7:'Julho', 8:'Agosto', 9:'Setembro', 10:'Outubro', 11:'Novembro', 12:'Dezembro'}
-    hoje_extenso = f"{hoje.day} de {meses[hoje.month]} de {hoje.year}"
-    bloqueado = False; motivo = ""
-    if current_user.escala == '5x2' and hoje.weekday() >= 5: bloqueado = True; motivo = "Não é possível realizar a marcação de ponto."
-    elif current_user.escala == '12x36' and current_user.data_inicio_escala:
-        if (hoje - current_user.data_inicio_escala).days % 2 != 0: bloqueado = True; motivo = "Não é possível realizar a marcação de ponto."
-    pontos = PontoRegistro.query.filter_by(user_id=current_user.id, data_registro=hoje).order_by(PontoRegistro.hora_registro).all()
-    prox = "Entrada"
-    if len(pontos) == 1: prox = "Ida Almoço"
-    elif len(pontos) == 2: prox = "Volta Almoço"
-    elif len(pontos) == 3: prox = "Saída"
-    elif len(pontos) >= 4: prox = "Extra"
-    if request.method == 'POST':
-        if bloqueado: flash('Bloqueado'); return redirect(url_for('dashboard'))
-        db.session.add(PontoRegistro(user_id=current_user.id, data_registro=hoje, hora_registro=get_brasil_time().time(), tipo=prox, latitude=request.form.get('latitude'), longitude=request.form.get('longitude')))
-        db.session.commit(); calcular_dia(current_user.id, hoje)
-        return redirect(url_for('dashboard'))
-    return render_template('ponto_registro.html', proxima_acao=prox, hoje_extenso=hoje_extenso, pontos=pontos, bloqueado=bloqueado, motivo=motivo)
-
-@app.route('/admin/relatorio-folha', methods=['GET', 'POST'])
-@login_required
-def admin_relatorio_folha():
-    if current_user.role != 'Master': return redirect(url_for('dashboard'))
-    mes_ref = request.form.get('mes_ref') or datetime.now().strftime('%Y-%m')
-    try: ano, mes = map(int, mes_ref.split('-'))
-    except: hoje = datetime.now(); ano, mes = hoje.year, hoje.month; mes_ref = hoje.strftime('%Y-%m')
-    if request.method == 'POST': flash(f'Exibindo dados de {mes_ref}')
-    users = User.query.order_by(User.real_name).all()
-    relatorio = []
-    for u in users:
-        try:
-            resumos = PontoResumo.query.filter(PontoResumo.user_id == u.id, func.extract('year', PontoResumo.data_referencia) == ano, func.extract('month', PontoResumo.data_referencia) == mes).all()
-            total_saldo = sum(r.minutos_saldo for r in resumos)
-            sinal = "+" if total_saldo >= 0 else "-"
-            abs_s = abs(total_saldo)
-            sal_val = u.salario if u.salario is not None else 0.0
-            relatorio.append({'nome': u.real_name, 'cargo': u.role, 'salario': sal_val, 'saldo_minutos': total_saldo, 'saldo_formatado': f"{sinal}{abs_s // 60:02d}:{abs_s % 60:02d}", 'status': 'Crédito' if total_saldo >= 0 else 'Débito'})
-        except: continue
-    return render_template('admin_relatorio_folha.html', relatorio=relatorio, mes_ref=mes_ref)
 
 @app.route('/controle-uniforme')
 @login_required
