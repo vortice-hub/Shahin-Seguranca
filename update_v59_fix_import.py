@@ -1,3 +1,14 @@
+import os
+import shutil
+import subprocess
+import sys
+
+# --- CONFIGURAÇÕES ---
+PROJECT_NAME = "Shahin Gestão"
+COMMIT_MSG = "V59: Fix ImportError - Restaurando gerar_login_automatico e estabilidade"
+
+# --- 1. APP/UTILS.PY (COMPLETO E REVISADO) ---
+FILE_UTILS = """
 from datetime import datetime, timedelta, time
 from app.models import db, PontoRegistro, PontoResumo, User
 import unicodedata
@@ -84,3 +95,33 @@ def calcular_dia(user_id, data_ref):
         db.session.commit()
     except:
         db.session.rollback()
+"""
+
+# --- FUNÇÕES DE SISTEMA ---
+def write_file(path, content):
+    os.makedirs(os.path.dirname(path) if os.path.dirname(path) else '.', exist_ok=True)
+    with open(path, 'w', encoding='utf-8') as f: f.write(content.strip())
+    print(f"Atualizado: {path}")
+
+def git_update():
+    try:
+        subprocess.run(["git", "add", "."], check=True)
+        subprocess.run(["git", "commit", "-m", COMMIT_MSG], check=False)
+        subprocess.run(["git", "push"], check=True)
+        print("\n>>> SUCESSO V59! SISTEMA DE LOGIN RESTAURADO E DEPLOY LIBERADO <<<")
+    except Exception as e: print(f"Git: {e}")
+
+def self_destruct():
+    try: os.remove(os.path.abspath(__file__))
+    except: pass
+
+def main():
+    print(f"--- UPDATE V59 FIX: {PROJECT_NAME} ---")
+    write_file("app/utils.py", FILE_UTILS)
+    git_update()
+    self_destruct()
+
+if __name__ == "__main__":
+    main()
+
+
