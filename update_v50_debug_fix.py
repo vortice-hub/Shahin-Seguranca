@@ -1,3 +1,14 @@
+import os
+import shutil
+import subprocess
+import sys
+
+# --- CONFIGURAÇÕES ---
+PROJECT_NAME = "Shahin Gestão"
+COMMIT_MSG = "V50: Debug Mode - Correcao URL Cloudinary (Raw) e Logs Detalhados"
+
+# --- APP/ROUTES/HOLERITES.PY (Blindado e Tagarela) ---
+FILE_BP_HOLERITES = """
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from flask_login import login_required, current_user
 from app import db
@@ -131,3 +142,34 @@ def confirmar_recebimento(id):
     logger.info(f"Redirecionando usuario {current_user.real_name} para {doc.url_arquivo}")
     
     return redirect(doc.url_arquivo)
+"""
+
+# --- FUNÇÕES ---
+def write_file(path, content):
+    os.makedirs(os.path.dirname(path) if os.path.dirname(path) else '.', exist_ok=True)
+    with open(path, 'w', encoding='utf-8') as f:
+        f.write(content.strip())
+    print(f"Atualizado: {path}")
+
+def git_update():
+    try:
+        subprocess.run(["git", "add", "."], check=True)
+        subprocess.run(["git", "commit", "-m", COMMIT_MSG], check=False)
+        subprocess.run(["git", "push"], check=True)
+        print("\n>>> SUCESSO V50! LOGS ATIVADOS E UPLOAD CORRIGIDO <<<")
+    except Exception as e: print(f"Git: {e}")
+
+def self_destruct():
+    try: os.remove(os.path.abspath(__file__))
+    except: pass
+
+def main():
+    print(f"--- UPDATE V50 DEBUG: {PROJECT_NAME} ---")
+    write_file("app/routes/holerites.py", FILE_BP_HOLERITES)
+    git_update()
+    self_destruct()
+
+if __name__ == "__main__":
+    main()
+
+
