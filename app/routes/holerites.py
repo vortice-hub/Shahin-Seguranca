@@ -6,6 +6,7 @@ from app.utils import get_brasil_time, remove_accents
 import io
 import logging
 from pypdf import PdfReader, PdfWriter
+from sqlalchemy import text
 
 logger = logging.getLogger(__name__)
 holerite_bp = Blueprint('holerite', __name__, url_prefix='/holerites')
@@ -25,6 +26,14 @@ def encontrar_usuario_por_nome(texto_pagina):
 def admin_importar():
     if current_user.role != 'Master': return redirect(url_for('main.dashboard'))
     
+    # REPARO DE EMERGENCIA: Garante que a coluna existe no Postgres
+    try:
+        db.session.execute(text("ALTER TABLE holerites ADD COLUMN IF NOT EXISTS conteudo_pdf BYTEA"))
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Erro ao reparar coluna: {e}")
+
     if request.method == 'POST':
         if request.form.get('acao') == 'limpar_tudo':
             Holerite.query.delete(); db.session.commit()
@@ -53,11 +62,11 @@ def admin_importar():
                         db.session.add(novo)
                     sucesso += 1
             db.session.commit()
-            flash(f'Sucesso: {sucesso} holerites guardados no sistema.')
+            flash(f'Sucesso: {sucesso} holerites processados.')
         except Exception as e:
-            db.session.rollback(); flash(f'Erro: {e}')
+            db.session.rollback(); flash(f'Erro no processamento: {e}')
 
-    ultimos = Holerite.query.order_by(Holerite.enviado_em.desc()).limit(20).all()
+    ultimos = Holerite.query.order_by(Holerite.enviado_em.desc()).limit(30).all()
     return render_template('admin_upload_holerite.html', uploads=ultimos)
 
 @holerite_bp.route('/meus-documentos')
@@ -66,17 +75,19 @@ def meus_holerites():
     docs = Holerite.query.filter_by(user_id=current_user.id).order_by(Holerite.mes_referencia.desc()).all()
     return render_template('meus_holerites.html', holerites=docs)
 
-@holerite_bp.route('/baixar/<int:id>', methods=['POST'])
+@holerite_bp.route('/baixar/<int:id>', methods=['GET', 'POST'])
 @login_required
 def baixar_holerite(id):
     doc = Holerite.query.get_or_404(id)
-    if doc.user_id != current_user.id: return redirect(url_for('main.dashboard'))
+    # Master pode baixar qualquer um, Funcionario só o dele
+    if current_user.role != 'Master' and doc.user_id != current_user.id: 
+        return redirect(url_for('main.dashboard'))
     
-    if not doc.visualizado:
+    if not doc.visualizado and current_user.id == doc.user_id:
         doc.visualizado = True; doc.visualizado_em = get_brasil_time(); db.session.commit()
         
     if not doc.conteudo_pdf:
-        flash("Arquivo não encontrado no banco."); return redirect(url_for('holerite.meus_holerites'))
+        flash("Conteúdo do arquivo não encontrado."); return redirect(url_for('holerite.meus_holerites'))
         
     return send_file(
         io.BytesIO(doc.conteudo_pdf),
