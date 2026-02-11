@@ -2,72 +2,41 @@
 {% block content %}
 <div class="max-w-4xl mx-auto">
     <div class="mb-6 flex justify-between items-center">
-        <div>
-            <h2 class="text-2xl font-bold text-slate-800">Importação de Holerites</h2>
-            <p class="text-sm text-slate-500">Envie o PDF da folha.</p>
-        </div>
-        
-        <!-- Botao Limpar Testes -->
-        <form action="/holerites/admin/importar" method="POST" onsubmit="return confirm('Isso apagará TODOS os holerites enviados até agora. Use apenas para limpar testes quebrados. Continuar?')">
-            <input type="hidden" name="acao" value="limpar_tudo">
-            <button type="submit" class="text-xs text-red-500 hover:text-red-700 underline font-bold">Limpar Histórico de Testes</button>
-        </form>
+        <div><h2 class="text-2xl font-bold text-slate-800">Importação de Holerites</h2><p class="text-sm text-slate-500">Envie o PDF da folha.</p></div>
+        <form action="/holerites/admin/importar" method="POST" onsubmit="return confirm('Apagar tudo?')"><input type="hidden" name="acao" value="limpar_tudo"><button type="submit" class="text-xs text-red-500 hover:text-red-700 underline font-bold">Limpar Histórico</button></form>
     </div>
 
     <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-8 mb-8">
         <form action="/holerites/admin/importar" method="POST" enctype="multipart/form-data" class="space-y-6">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                    <label class="label-pro">Mês de Referência</label>
-                    <input type="month" name="mes_ref" class="input-pro" required>
-                </div>
-                <div>
-                    <label class="label-pro">Arquivo PDF</label>
-                    <input type="file" name="arquivo_pdf" accept=".pdf" class="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100" required>
-                </div>
+                <div><label class="label-pro">Mês de Referência</label><input type="month" name="mes_ref" class="input-pro" required></div>
+                <div><label class="label-pro">Arquivo PDF</label><input type="file" name="arquivo_pdf" accept=".pdf" class="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100" required></div>
             </div>
-            <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-lg shadow-md transition flex items-center justify-center gap-2" onclick="this.innerHTML='<i class=\'fas fa-spinner fa-spin\'></i> Processando...';">
-                <i class="fas fa-cloud-upload-alt"></i> PROCESSAR E DISTRIBUIR
-            </button>
+            <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-lg shadow-md transition flex items-center justify-center gap-2" onclick="this.innerHTML='<i class=\'fas fa-spinner fa-spin\'></i> Processando...';"><i class="fas fa-cloud-upload-alt"></i> PROCESSAR E DISTRIBUIR</button>
         </form>
     </div>
 
     <h3 class="text-lg font-bold text-slate-700 mb-4 px-2">Últimos Envios</h3>
     <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-        <div class="overflow-x-auto">
-            <table class="w-full text-left text-sm text-slate-600">
-                <thead class="bg-slate-50 text-xs uppercase text-slate-400 font-bold border-b border-slate-100">
-                    <tr>
-                        <th class="px-6 py-3">Funcionário</th>
-                        <th class="px-6 py-3">Referência</th>
-                        <th class="px-6 py-3">Enviado Em</th>
-                        <th class="px-6 py-3 text-center">Status Leitura</th>
-                        <th class="px-6 py-3 text-right">Ação</th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-slate-100">
-                    {% for item in uploads %}
-                    <tr class="hover:bg-slate-50 transition">
-                        <td class="px-6 py-3 font-bold text-slate-800">{{ item.user.real_name }}</td>
-                        <td class="px-6 py-3">{{ item.mes_referencia }}</td>
-                        <td class="px-6 py-3 text-xs">{{ item.enviado_em.strftime('%d/%m %H:%M') }}</td>
-                        <td class="px-6 py-3 text-center">
-                            {% if item.visualizado %}
-                                <span class="bg-emerald-100 text-emerald-700 px-2 py-1 rounded text-[10px] font-bold uppercase">Lido</span>
-                            {% else %}
-                                <span class="bg-yellow-100 text-yellow-700 px-2 py-1 rounded text-[10px] font-bold uppercase">Pendente</span>
-                            {% endif %}
-                        </td>
-                        <td class="px-6 py-3 text-right">
-                            <a href="{{ item.url_arquivo }}" target="_blank" class="text-blue-600 hover:underline text-xs font-bold"><i class="fas fa-eye"></i> Ver</a>
-                        </td>
-                    </tr>
-                    {% else %}
-                    <tr><td colspan="5" class="px-6 py-8 text-center text-slate-400">Nenhum envio recente.</td></tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
+        <table class="w-full text-left text-sm text-slate-600">
+            <thead class="bg-slate-50 text-xs uppercase text-slate-400 font-bold border-b border-slate-100"><tr><th class="px-6 py-3">Funcionário</th><th class="px-6 py-3">Referência</th><th class="px-6 py-3">Enviado Em</th><th class="px-6 py-3 text-center">Status</th><th class="px-6 py-3 text-right">Ação</th></tr></thead>
+            <tbody class="divide-y divide-slate-100">
+                {% for item in uploads %}
+                <tr class="hover:bg-slate-50 transition">
+                    <td class="px-6 py-3 font-bold text-slate-800">{{ item.user.real_name }}</td>
+                    <td class="px-6 py-3">{{ item.mes_referencia }}</td>
+                    <td class="px-6 py-3 text-xs">{{ item.enviado_em.strftime('%d/%m %H:%M') }}</td>
+                    <td class="px-6 py-3 text-center">{% if item.visualizado %}<span class="bg-emerald-100 text-emerald-700 px-2 py-1 rounded text-[10px] font-bold uppercase">Lido</span>{% else %}<span class="bg-yellow-100 text-yellow-700 px-2 py-1 rounded text-[10px] font-bold uppercase">Pendente</span>{% endif %}</td>
+                    <!-- O Master pode baixar usando a mesma rota de proxy -->
+                    <td class="px-6 py-3 text-right">
+                        <form action="/holerites/baixar/{{ item.id }}" method="POST" target="_blank" style="display:inline;">
+                            <button type="submit" class="text-blue-600 hover:underline text-xs font-bold"><i class="fas fa-eye"></i> Ver</button>
+                        </form>
+                    </td>
+                </tr>
+                {% else %}<tr><td colspan="5" class="px-6 py-8 text-center text-slate-400">Nenhum envio recente.</td></tr>{% endfor %}
+            </tbody>
+        </table>
     </div>
 </div>
 <style>.label-pro { display: block; font-size: 0.7rem; font-weight: 700; color: #64748b; text-transform: uppercase; margin-bottom: 0.5rem; } .input-pro { width: 100%; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 0.5rem; padding: 0.75rem 1rem; outline: none; }</style>

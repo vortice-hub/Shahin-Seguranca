@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash
+from flask import Blueprint, render_template, request, redirect, url_for, flash, send_file, make_response
 from flask_login import login_required, current_user
 from app import db
 from app.models import User, Holerite
@@ -7,6 +7,7 @@ import cloudinary
 import cloudinary.uploader
 import io
 import logging
+import requests
 from pypdf import PdfReader, PdfWriter
 
 logger = logging.getLogger(__name__)
@@ -69,26 +70,19 @@ def admin_importar():
                     writer.write(output_stream)
                     output_stream.seek(0)
                     
-                    filename = f"holerite_{user.id}_{mes_ref}_{int(get_brasil_time().timestamp())}.pdf"
+                    filename = f"holerite_{user.id}_{mes_ref}_{int(get_brasil_time().timestamp())}"
                     
-                    # Upload RAW
+                    # Upload como AUTO (Deixa o Cloudinary decidir o melhor jeito)
                     upload_result = cloudinary.uploader.upload(
                         output_stream, 
                         public_id=filename, 
-                        resource_type="raw", 
-                        folder="holerites_v52", 
-                        format="pdf"
+                        resource_type="auto", 
+                        folder="holerites_v53"
                     )
                     
-                    # --- BLINDAGEM DE URL ---
                     url_pdf = upload_result.get('secure_url')
                     pid = upload_result.get('public_id')
                     
-                    # Se por acaso o Cloudinary devolver link de imagem, forçamos RAW
-                    if '/image/upload/' in url_pdf:
-                        url_pdf = url_pdf.replace('/image/upload/', '/raw/upload/')
-                    
-                    # Salva no banco
                     existente = Holerite.query.filter_by(user_id=user.id, mes_referencia=mes_ref).first()
                     if existente:
                         existente.url_arquivo = url_pdf
@@ -105,7 +99,7 @@ def admin_importar():
             flash(f'Sucesso: {sucesso} holerites enviados.')
             
         except Exception as e:
-            logger.error(f"ERRO: {e}")
+            logger.error(f"ERRO UPLOAD: {e}")
             db.session.rollback()
             flash(f'Erro: {str(e)}')
 
@@ -118,15 +112,43 @@ def meus_holerites():
     docs = Holerite.query.filter_by(user_id=current_user.id).order_by(Holerite.mes_referencia.desc()).all()
     return render_template('meus_holerites.html', holerites=docs)
 
-@holerite_bp.route('/confirmar-recebimento/<int:id>', methods=['POST'])
+# --- ROTA DE DOWNLOAD (PROXY) ---
+@holerite_bp.route('/baixar/<int:id>', methods=['GET', 'POST'])
 @login_required
-def confirmar_recebimento(id):
+def baixar_holerite(id):
     doc = Holerite.query.get_or_404(id)
-    if doc.user_id != current_user.id: return redirect(url_for('main.dashboard'))
+    if doc.user_id != current_user.id: 
+        flash("Acesso negado.")
+        return redirect(url_for('main.dashboard'))
     
+    # Registra visualização
     if not doc.visualizado:
         doc.visualizado = True
         doc.visualizado_em = get_brasil_time()
         db.session.commit()
         
-    return redirect(doc.url_arquivo)
+    try:
+        # O PULO DO GATO: O servidor baixa o arquivo do Cloudinary
+        response = requests.get(doc.url_arquivo)
+        
+        if response.status_code == 200:
+            # Cria um arquivo na memória para entregar ao usuário
+            arquivo_memoria = io.BytesIO(response.content)
+            
+            # Define o nome do arquivo para download
+            nome_download = f"Holerite_{doc.mes_referencia}.pdf"
+            
+            return send_file(
+                arquivo_memoria,
+                mimetype='application/pdf',
+                as_attachment=True, # Força o download
+                download_name=nome_download
+            )
+        else:
+            flash(f"Erro ao buscar arquivo na nuvem (Status {response.status_code}). Tente novamente.")
+            return redirect(url_for('holerite.meus_holerites'))
+            
+    except Exception as e:
+        logger.error(f"Erro Proxy Download: {e}")
+        flash("Erro ao baixar documento. Contate o RH.")
+        return redirect(url_for('holerite.meus_holerites'))

@@ -6,3 +6,4 @@ flask-login
 werkzeug
 cloudinary
 pypdf
+requests
