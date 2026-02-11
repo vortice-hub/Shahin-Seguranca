@@ -1,4 +1,15 @@
 import os
+import shutil
+import subprocess
+import sys
+
+# --- CONFIGURAÇÕES ---
+PROJECT_NAME = "TdS Gestão de RH"
+COMMIT_MSG = "V41: Fix Final - Conexao Banco Blindada e Estrutura de Boot Robusta"
+
+# --- 1. app/__init__.py (O Coração do Sistema) ---
+FILE_INIT = """
+import os
 import logging
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
@@ -88,3 +99,56 @@ def create_app():
 # --- INSTANCIA GLOBAL ---
 # Isso permite que o Gunicorn encontre 'app' se procurar neste arquivo
 app = create_app()
+"""
+
+# --- 2. run.py (O Gatilho Correto) ---
+FILE_RUN = """
+from app import create_app
+
+# Cria a aplicação usando a fábrica
+app = create_app()
+
+if __name__ == "__main__":
+    # Roda localmente
+    app.run(debug=True)
+"""
+
+# --- 3. Procfile (Comando de Inicialização) ---
+# Força o uso do run:app que é o padrão correto para essa estrutura
+FILE_PROCFILE = """web: gunicorn run:app"""
+
+# --- FUNÇÕES ---
+def write_file(path, content):
+    os.makedirs(os.path.dirname(path) if os.path.dirname(path) else '.', exist_ok=True)
+    with open(path, 'w', encoding='utf-8') as f:
+        f.write(content.strip())
+    print(f"Atualizado: {path}")
+
+def git_update():
+    try:
+        subprocess.run(["git", "add", "."], check=True)
+        subprocess.run(["git", "commit", "-m", COMMIT_MSG], check=False)
+        subprocess.run(["git", "push"], check=True)
+        print("\n>>> SUCESSO V41! CORREÇÃO FINAL ENVIADA <<<")
+    except Exception as e:
+        print(f"Erro Git: {e}")
+
+def self_destruct():
+    try: os.remove(os.path.abspath(__file__))
+    except: pass
+
+def main():
+    print(f"--- FIX V41 FINAL: {PROJECT_NAME} ---")
+    
+    # Reescreve arquivos vitais
+    write_file("app/__init__.py", FILE_INIT)
+    write_file("run.py", FILE_RUN)
+    write_file("Procfile", FILE_PROCFILE)
+    
+    git_update()
+    self_destruct()
+
+if __name__ == "__main__":
+    main()
+
+
