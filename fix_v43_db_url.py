@@ -1,4 +1,15 @@
 import os
+import shutil
+import subprocess
+import sys
+
+# --- CONFIGURAÇÕES ---
+PROJECT_NAME = "TdS Gestão de RH"
+COMMIT_MSG = "V43: Fix Critical - Cleaning Neon DB URL (Removing psql command wrapper)"
+
+# --- 1. app/__init__.py (Com URL Limpa e Segura) ---
+FILE_INIT = """
+import os
 import logging
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
@@ -86,3 +97,38 @@ def create_app():
 
 # Instância Global para o Gunicorn
 app = create_app()
+"""
+
+# --- FUNÇÕES ---
+def write_file(path, content):
+    os.makedirs(os.path.dirname(path) if os.path.dirname(path) else '.', exist_ok=True)
+    with open(path, 'w', encoding='utf-8') as f:
+        f.write(content.strip())
+    print(f"Atualizado: {path}")
+
+def git_update():
+    try:
+        subprocess.run(["git", "add", "."], check=True)
+        subprocess.run(["git", "commit", "-m", COMMIT_MSG], check=False)
+        subprocess.run(["git", "push"], check=True)
+        print("\n>>> SUCESSO V43! URL DO BANCO CORRIGIDA <<<")
+    except Exception as e:
+        print(f"Erro Git: {e}")
+
+def self_destruct():
+    try: os.remove(os.path.abspath(__file__))
+    except: pass
+
+def main():
+    print(f"--- FIX V43 DB URL: {PROJECT_NAME} ---")
+    
+    # Atualiza apenas o init onde fica a conexao
+    write_file("app/__init__.py", FILE_INIT)
+    
+    git_update()
+    self_destruct()
+
+if __name__ == "__main__":
+    main()
+
+
