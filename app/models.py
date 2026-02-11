@@ -115,3 +115,16 @@ class HistoricoSaida(db.Model):
     genero = db.Column(db.String(20))
     quantidade = db.Column(db.Integer)
     data_entrega = db.Column(db.DateTime, default=get_brasil_time)
+
+class Holerite(db.Model):
+    __tablename__ = 'holerites'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    mes_referencia = db.Column(db.String(7), nullable=False) # Formato YYYY-MM
+    url_arquivo = db.Column(db.String(500), nullable=False)
+    public_id = db.Column(db.String(100)) # ID no Cloudinary
+    visualizado = db.Column(db.Boolean, default=False)
+    visualizado_em = db.Column(db.DateTime, nullable=True)
+    enviado_em = db.Column(db.DateTime, default=get_brasil_time)
+    
+    user = db.relationship('User', backref=db.backref('holerites', lazy=True))
