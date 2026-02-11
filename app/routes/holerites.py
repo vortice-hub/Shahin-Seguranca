@@ -4,40 +4,31 @@ from app import db
 from app.models import User, Holerite
 from app.utils import get_brasil_time, remove_accents
 import io
-import logging
 from pypdf import PdfReader, PdfWriter
 from sqlalchemy import text
 
-logger = logging.getLogger(__name__)
 holerite_bp = Blueprint('holerite', __name__, url_prefix='/holerites')
 
 def encontrar_usuario_por_nome(texto_pagina):
     texto_limpo = remove_accents(texto_pagina).upper()
     users = User.query.all()
-    candidatos = []
     for u in users:
         nome_limpo = remove_accents(u.real_name).upper().strip()
         if len(nome_limpo.split()) > 1 and nome_limpo in texto_limpo:
-            candidatos.append(u)
-    return candidatos[0] if len(candidatos) == 1 else None
+            return u
+    return None
 
 @holerite_bp.route('/admin/importar', methods=['GET', 'POST'])
 @login_required
 def admin_importar():
     if current_user.role != 'Master': return redirect(url_for('main.dashboard'))
     
-    # MIGRAÇÃO DE BANCO: Remove a obrigatoriedade da coluna url_arquivo
-    try:
-        db.session.execute(text("ALTER TABLE holerites ALTER COLUMN url_arquivo DROP NOT NULL"))
-        db.session.commit()
-    except Exception as e:
-        db.session.rollback()
-        logger.warning(f"Aviso de migracao: {e}")
-
     if request.method == 'POST':
         if request.form.get('acao') == 'limpar_tudo':
-            Holerite.query.delete(); db.session.commit()
-            flash('Histórico limpo.'); return redirect(url_for('holerite.admin_importar'))
+            Holerite.query.delete()
+            db.session.commit()
+            flash('Histórico removido.')
+            return redirect(url_for('holerite.admin_importar'))
 
         file = request.files.get('arquivo_pdf')
         mes_ref = request.form.get('mes_ref')
@@ -50,24 +41,23 @@ def admin_importar():
                 user = encontrar_usuario_por_nome(page.extract_text())
                 if user:
                     writer = PdfWriter(); writer.add_page(page)
-                    out = io.BytesIO(); writer.write(out); binary_data = out.getvalue()
+                    out = io.BytesIO(); writer.write(out)
                     
                     existente = Holerite.query.filter_by(user_id=user.id, mes_referencia=mes_ref).first()
                     if existente:
-                        existente.conteudo_pdf = binary_data
-                        existente.url_arquivo = None # Forçamos nulo aqui
+                        existente.conteudo_pdf = out.getvalue()
                         existente.enviado_em = get_brasil_time()
                         existente.visualizado = False
                     else:
-                        novo = Holerite(user_id=user.id, mes_referencia=mes_ref, conteudo_pdf=binary_data, url_arquivo=None)
+                        novo = Holerite(user_id=user.id, mes_referencia=mes_ref, conteudo_pdf=out.getvalue())
                         db.session.add(novo)
                     sucesso += 1
             db.session.commit()
-            flash(f'Sucesso: {sucesso} holerites guardados no banco de dados.')
+            flash(f'Sucesso: {sucesso} holerites processados.')
         except Exception as e:
-            db.session.rollback(); flash(f'Erro no processamento: {e}')
+            db.session.rollback(); flash(f'Erro: {e}')
 
-    ultimos = Holerite.query.order_by(Holerite.enviado_em.desc()).limit(30).all()
+    ultimos = Holerite.query.order_by(Holerite.enviado_em.desc()).limit(20).all()
     return render_template('admin_upload_holerite.html', uploads=ultimos)
 
 @holerite_bp.route('/meus-documentos')
@@ -84,10 +74,9 @@ def baixar_holerite(id):
         return redirect(url_for('main.dashboard'))
     
     if not doc.visualizado and current_user.id == doc.user_id:
-        doc.visualizado = True; doc.visualizado_em = get_brasil_time(); db.session.commit()
-        
-    if not doc.conteudo_pdf:
-        flash("Arquivo não encontrado."); return redirect(url_for('holerite.meus_holerites'))
+        doc.visualizado = True
+        doc.visualizado_em = get_brasil_time()
+        db.session.commit()
         
     return send_file(
         io.BytesIO(doc.conteudo_pdf),

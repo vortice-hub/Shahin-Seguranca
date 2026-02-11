@@ -1,5 +1,4 @@
 from datetime import datetime, timedelta, time
-from app.models import db, PontoRegistro, PontoResumo, User
 import unicodedata
 import re
 
@@ -11,12 +10,10 @@ def remove_accents(txt):
     return "".join(c for c in unicodedata.normalize('NFD', txt) if unicodedata.category(c) != 'Mn')
 
 def gerar_login_automatico(nome_completo):
-    # Pega o primeiro nome, remove acentos e deixa minusculo
+    if not nome_completo: return "user"
     partes = nome_completo.split()
     primeiro_nome = remove_accents(partes[0]).lower()
-    # Remove caracteres especiais
-    primeiro_nome = re.sub(r'[^a-z]', '', primeiro_nome)
-    return primeiro_nome
+    return re.sub(r'[^a-z]', '', primeiro_nome)
 
 def time_to_minutes(t):
     if not t: return 0
@@ -35,13 +32,13 @@ def format_minutes_to_hm(total_minutes):
     return f"{sinal}{h:02d}:{m:02d}"
 
 def calcular_dia(user_id, data_ref):
+    from app import db
     from app.models import User, PontoRegistro, PontoResumo
     user = User.query.get(user_id)
     if not user: return
 
     registros = PontoRegistro.query.filter_by(user_id=user_id, data_registro=data_ref).order_by(PontoRegistro.hora_registro).all()
     
-    # Horários previstos
     ent_prev = time_to_minutes(user.horario_entrada)
     sai_prev = time_to_minutes(user.horario_saida)
     alm_ini_prev = time_to_minutes(user.horario_almoco_inicio)
@@ -50,12 +47,10 @@ def calcular_dia(user_id, data_ref):
     minutos_esperados = (sai_prev - ent_prev) - (alm_fim_prev - alm_ini_prev)
     if minutos_esperados < 0: minutos_esperados = 0
     
-    # Regra de Escala
     if data_ref.weekday() >= 5 and user.escala != 'Livre':
         minutos_esperados = 0
 
     trabalhado_total = 0
-    # Cálculo por pares
     for i in range(0, len(registros), 2):
         if i + 1 < len(registros):
             inicio = time_to_minutes(registros[i].hora_registro)
@@ -79,7 +74,6 @@ def calcular_dia(user_id, data_ref):
     resumo.minutos_esperados = minutos_esperados
     resumo.minutos_saldo = saldo
     resumo.status_dia = status
-    
     try:
         db.session.commit()
     except:
