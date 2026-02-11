@@ -5,9 +5,9 @@ import sys
 
 # --- CONFIGURAÇÕES ---
 PROJECT_NAME = "Shahin Gestão"
-COMMIT_MSG = "V51: Fix Critical - Corrigindo nome da variavel upload_result na rota de holerites"
+COMMIT_MSG = "V52: Limpeza Total de Holerites Antigos e Blindagem de URL Raw"
 
-# --- APP/ROUTES/HOLERITES.PY (Corrigido) ---
+# --- APP/ROUTES/HOLERITES.PY (Com blindagem de URL) ---
 FILE_BP_HOLERITES = """
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from flask_login import login_required, current_user
@@ -24,12 +24,14 @@ logger = logging.getLogger(__name__)
 
 holerite_bp = Blueprint('holerite', __name__, url_prefix='/holerites')
 
-# Configuraçao Explicita
-cloudinary.config(
-    cloud_name = "dxb4fbdjy",
-    api_key = "537342766187832",
-    api_secret = "cbINpCjQtRh7oKp-uVX2YPdOKaI"
-)
+try:
+    if not cloudinary.config().cloud_name:
+        cloudinary.config(
+            cloud_name = "dxb4fbdjy",
+            api_key = "537342766187832",
+            api_secret = "cbINpCjQtRh7oKp-uVX2YPdOKaI"
+        )
+except: pass
 
 def encontrar_usuario_por_nome(texto_pagina):
     texto_limpo = remove_accents(texto_pagina).upper()
@@ -48,7 +50,6 @@ def admin_importar():
     if current_user.role != 'Master': return redirect(url_for('main.dashboard'))
     
     if request.method == 'POST':
-        # Limpeza
         if request.form.get('acao') == 'limpar_tudo':
             try:
                 Holerite.query.delete()
@@ -56,7 +57,7 @@ def admin_importar():
                 flash('Limpeza concluída.')
             except Exception as e:
                 db.session.rollback()
-                flash(f'Erro ao limpar: {e}')
+                flash(f'Erro: {e}')
             return redirect(url_for('holerite.admin_importar'))
 
         file = request.files.get('arquivo_pdf')
@@ -81,22 +82,22 @@ def admin_importar():
                     
                     filename = f"holerite_{user.id}_{mes_ref}_{int(get_brasil_time().timestamp())}.pdf"
                     
-                    logger.info(f"Iniciando upload RAW para: {user.real_name}")
-                    
                     # Upload RAW
                     upload_result = cloudinary.uploader.upload(
                         output_stream, 
                         public_id=filename, 
                         resource_type="raw", 
-                        folder="holerites_v51", 
+                        folder="holerites_v52", 
                         format="pdf"
                     )
                     
-                    logger.info(f"Sucesso Cloudinary: {upload_result.get('secure_url')}")
-                    
-                    # --- CORREÇÃO AQUI ---
+                    # --- BLINDAGEM DE URL ---
                     url_pdf = upload_result.get('secure_url')
-                    pid = upload_result.get('public_id') # Antes estava 'upload.get', gerando erro
+                    pid = upload_result.get('public_id')
+                    
+                    # Se por acaso o Cloudinary devolver link de imagem, forçamos RAW
+                    if '/image/upload/' in url_pdf:
+                        url_pdf = url_pdf.replace('/image/upload/', '/raw/upload/')
                     
                     # Salva no banco
                     existente = Holerite.query.filter_by(user_id=user.id, mes_referencia=mes_ref).first()
@@ -112,12 +113,12 @@ def admin_importar():
                     sucesso += 1
             
             db.session.commit()
-            flash(f'Sucesso: {sucesso} holerites enviados corretamente.')
+            flash(f'Sucesso: {sucesso} holerites enviados.')
             
         except Exception as e:
-            logger.error(f"ERRO NO UPLOAD: {e}")
+            logger.error(f"ERRO: {e}")
             db.session.rollback()
-            flash(f'Erro no upload: {str(e)}')
+            flash(f'Erro: {str(e)}')
 
     ultimos = Holerite.query.order_by(Holerite.enviado_em.desc()).limit(20).all()
     return render_template('admin_upload_holerite.html', uploads=ultimos)
@@ -142,6 +143,88 @@ def confirmar_recebimento(id):
     return redirect(doc.url_arquivo)
 """
 
+# --- SCRIPT DE LIMPEZA DO BANCO (EXECUTA NO INIT) ---
+FILE_INIT_CLEAN = """
+import os
+import logging
+from flask import Flask
+from flask_sqlalchemy import SQLAlchemy
+from flask_login import LoginManager
+import cloudinary
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+db = SQLAlchemy()
+login_manager = LoginManager()
+
+def create_app():
+    app_inst = Flask(__name__)
+    app_inst.secret_key = os.environ.get('SECRET_KEY', 'chave_v52_clean_db')
+    
+    clean_db = "postgresql://neondb_owner:npg_UBg0b7YKqLPm@ep-steep-wave-aflx731c-pooler.c-2.us-west-2.aws.neon.tech/neondb?sslmode=require"
+    env_db = os.environ.get('DATABASE_URL')
+    
+    if env_db and env_db.startswith("postgres"): db_url = env_db
+    else: db_url = clean_db
+        
+    if db_url.startswith("postgres://"): db_url = db_url.replace("postgres://", "postgresql://", 1)
+
+    app_inst.config['SQLALCHEMY_DATABASE_URI'] = db_url
+    app_inst.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    app_inst.config['SQLALCHEMY_ENGINE_OPTIONS'] = {"pool_pre_ping": True, "pool_recycle": 300, "pool_size": 10}
+
+    cloudinary.config(
+        cloud_name = "dxb4fbdjy",
+        api_key = "537342766187832",
+        api_secret = "cbINpCjQtRh7oKp-uVX2YPdOKaI"
+    )
+
+    db.init_app(app_inst)
+    login_manager.init_app(app_inst)
+    login_manager.login_view = 'auth.login'
+
+    with app_inst.app_context():
+        from app.routes.auth import auth_bp
+        from app.routes.main import main_bp
+        from app.routes.admin import admin_bp
+        from app.routes.ponto import ponto_bp
+        from app.routes.estoque import estoque_bp
+        from app.routes.holerites import holerite_bp 
+        
+        app_inst.register_blueprint(auth_bp)
+        app_inst.register_blueprint(main_bp)
+        app_inst.register_blueprint(admin_bp)
+        app_inst.register_blueprint(ponto_bp)
+        app_inst.register_blueprint(estoque_bp)
+        app_inst.register_blueprint(holerite_bp)
+
+        try:
+            db.create_all()
+            from app.models import User, Holerite
+            if not User.query.filter_by(username='Thaynara').first():
+                m = User(username='Thaynara', real_name='Thaynara Master', role='Master', is_first_access=False)
+                m.set_password('1855')
+                db.session.add(m)
+                db.session.commit()
+            
+            # --- LIMPEZA DE HOLERITES ANTIGOS (Executa 1 vez para corrigir base) ---
+            # Removemos todos para garantir que nao sobrou lixo
+            # Se quiser desativar isso depois, comente as linhas abaixo
+            count = Holerite.query.count()
+            if count > 0:
+                Holerite.query.delete()
+                db.session.commit()
+                logger.warning(f"LIMPEZA V52: {count} holerites antigos/quebrados foram removidos do banco.")
+                
+        except Exception as e:
+            logger.error(f"Erro Boot DB: {e}")
+
+    return app_inst
+
+app = create_app()
+"""
+
 # --- FUNÇÕES ---
 def write_file(path, content):
     os.makedirs(os.path.dirname(path) if os.path.dirname(path) else '.', exist_ok=True)
@@ -154,7 +237,7 @@ def git_update():
         subprocess.run(["git", "add", "."], check=True)
         subprocess.run(["git", "commit", "-m", COMMIT_MSG], check=False)
         subprocess.run(["git", "push"], check=True)
-        print("\n>>> SUCESSO V51! CORREÇÃO APLICADA <<<")
+        print("\n>>> SUCESSO V52! LIMPEZA TOTAL E CORREÇÃO <<<")
     except Exception as e: print(f"Git: {e}")
 
 def self_destruct():
@@ -162,8 +245,9 @@ def self_destruct():
     except: pass
 
 def main():
-    print(f"--- UPDATE V51 DEBUG FIX: {PROJECT_NAME} ---")
+    print(f"--- UPDATE V52 CLEAN SLATE: {PROJECT_NAME} ---")
     write_file("app/routes/holerites.py", FILE_BP_HOLERITES)
+    write_file("app/__init__.py", FILE_INIT_CLEAN) # Inclui o script de delete
     git_update()
     self_destruct()
 

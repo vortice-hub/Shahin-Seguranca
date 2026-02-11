@@ -13,12 +13,14 @@ logger = logging.getLogger(__name__)
 
 holerite_bp = Blueprint('holerite', __name__, url_prefix='/holerites')
 
-# Configuraçao Explicita
-cloudinary.config(
-    cloud_name = "dxb4fbdjy",
-    api_key = "537342766187832",
-    api_secret = "cbINpCjQtRh7oKp-uVX2YPdOKaI"
-)
+try:
+    if not cloudinary.config().cloud_name:
+        cloudinary.config(
+            cloud_name = "dxb4fbdjy",
+            api_key = "537342766187832",
+            api_secret = "cbINpCjQtRh7oKp-uVX2YPdOKaI"
+        )
+except: pass
 
 def encontrar_usuario_por_nome(texto_pagina):
     texto_limpo = remove_accents(texto_pagina).upper()
@@ -37,7 +39,6 @@ def admin_importar():
     if current_user.role != 'Master': return redirect(url_for('main.dashboard'))
     
     if request.method == 'POST':
-        # Limpeza
         if request.form.get('acao') == 'limpar_tudo':
             try:
                 Holerite.query.delete()
@@ -45,7 +46,7 @@ def admin_importar():
                 flash('Limpeza concluída.')
             except Exception as e:
                 db.session.rollback()
-                flash(f'Erro ao limpar: {e}')
+                flash(f'Erro: {e}')
             return redirect(url_for('holerite.admin_importar'))
 
         file = request.files.get('arquivo_pdf')
@@ -70,22 +71,22 @@ def admin_importar():
                     
                     filename = f"holerite_{user.id}_{mes_ref}_{int(get_brasil_time().timestamp())}.pdf"
                     
-                    logger.info(f"Iniciando upload RAW para: {user.real_name}")
-                    
                     # Upload RAW
                     upload_result = cloudinary.uploader.upload(
                         output_stream, 
                         public_id=filename, 
                         resource_type="raw", 
-                        folder="holerites_v51", 
+                        folder="holerites_v52", 
                         format="pdf"
                     )
                     
-                    logger.info(f"Sucesso Cloudinary: {upload_result.get('secure_url')}")
-                    
-                    # --- CORREÇÃO AQUI ---
+                    # --- BLINDAGEM DE URL ---
                     url_pdf = upload_result.get('secure_url')
-                    pid = upload_result.get('public_id') # Antes estava 'upload.get', gerando erro
+                    pid = upload_result.get('public_id')
+                    
+                    # Se por acaso o Cloudinary devolver link de imagem, forçamos RAW
+                    if '/image/upload/' in url_pdf:
+                        url_pdf = url_pdf.replace('/image/upload/', '/raw/upload/')
                     
                     # Salva no banco
                     existente = Holerite.query.filter_by(user_id=user.id, mes_referencia=mes_ref).first()
@@ -101,12 +102,12 @@ def admin_importar():
                     sucesso += 1
             
             db.session.commit()
-            flash(f'Sucesso: {sucesso} holerites enviados corretamente.')
+            flash(f'Sucesso: {sucesso} holerites enviados.')
             
         except Exception as e:
-            logger.error(f"ERRO NO UPLOAD: {e}")
+            logger.error(f"ERRO: {e}")
             db.session.rollback()
-            flash(f'Erro no upload: {str(e)}')
+            flash(f'Erro: {str(e)}')
 
     ultimos = Holerite.query.order_by(Holerite.enviado_em.desc()).limit(20).all()
     return render_template('admin_upload_holerite.html', uploads=ultimos)
