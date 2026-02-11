@@ -5,14 +5,9 @@ import sys
 
 # --- CONFIGURAÇÕES ---
 PROJECT_NAME = "Shahin Gestão"
-COMMIT_MSG = "V44: Rebranding para Shahin e Rodape Vortice Company"
+COMMIT_MSG = "V45: Fix Rebranding - Atualizando Templates na Pasta Correta (app/templates)"
 
-# --- CONFIG FILES ---
-FILE_RUNTIME = """python-3.11.9"""
-FILE_REQ = """flask\nflask-sqlalchemy\npsycopg2-binary\ngunicorn\nflask-login\nwerkzeug"""
-FILE_PROCFILE = """web: gunicorn app:app"""
-
-# --- BASE TEMPLATE (REBRANDING) ---
+# --- BASE TEMPLATE (SHAHIN + VORTICE) ---
 FILE_BASE = """
 <!DOCTYPE html>
 <html lang="pt-br">
@@ -57,12 +52,10 @@ FILE_BASE = """
             <nav class="flex-1 overflow-y-auto py-4">
                 <ul class="space-y-1">
                     <li><a href="/" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-home w-6 text-center mr-2 text-slate-500 group-hover:text-blue-500"></i><span class="font-medium">Início</span></a></li>
-                    
                     <li class="pt-4 pb-2 px-6 text-[10px] font-bold uppercase text-slate-600">Ponto Eletrônico</li>
                     <li><a href="/ponto/registrar" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-fingerprint w-6 text-center mr-2 text-slate-500 group-hover:text-purple-500"></i><span class="font-medium">Registrar Ponto</span></a></li>
                     <li><a href="/ponto/espelho" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-calendar-alt w-6 text-center mr-2 text-slate-500"></i><span class="font-medium">Espelho de Ponto</span></a></li>
                     <li><a href="/ponto/solicitar-ajuste" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-edit w-6 text-center mr-2 text-slate-500"></i><span class="font-medium">Solicitar Ajuste</span></a></li>
-                    
                     {% if current_user.role == 'Master' %}
                     <li class="pt-4 pb-2 px-6 text-[10px] font-bold uppercase text-slate-600">Administração</li>
                     <li><a href="/admin/relatorio-folha" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-file-invoice-dollar w-6 text-center mr-2 text-slate-500 group-hover:text-emerald-400"></i><span class="font-medium">Relatório de Folha</span></a></li>
@@ -70,7 +63,6 @@ FILE_BASE = """
                     <li><a href="/admin/solicitacoes" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-check-double w-6 text-center mr-2 text-slate-500 group-hover:text-emerald-500"></i><span class="font-medium">Solicitações de Ponto</span></a></li>
                     <li><a href="/admin/usuarios" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-users-cog w-6 text-center mr-2 text-blue-400"></i><span class="font-medium">Funcionários</span></a></li>
                     {% endif %}
-                    
                     <li><a href="/logout" class="flex items-center px-6 py-3 hover:bg-red-900/20 hover:text-red-400 transition group mt-8"><i class="fas fa-sign-out-alt w-6 text-center mr-2 text-slate-500 group-hover:text-red-400"></i><span class="font-medium">Sair</span></a></li>
                 </ul>
             </nav>
@@ -126,29 +118,43 @@ FILE_LOGIN = """
 
 # --- FUNÇÕES ---
 def write_file(path, content):
+    # Garante que o diretorio existe (app/templates)
     os.makedirs(os.path.dirname(path) if os.path.dirname(path) else '.', exist_ok=True)
     with open(path, 'w', encoding='utf-8') as f:
         f.write(content.strip())
     print(f"Atualizado: {path}")
+
+def cleanup_old_templates():
+    # Remove a pasta templates na raiz se ela existir, pois ela confunde
+    if os.path.exists("templates"):
+        try:
+            shutil.rmtree("templates")
+            print("Pasta antiga 'templates/' (raiz) removida para evitar conflitos.")
+        except Exception as e:
+            print(f"Aviso: Não foi possível remover 'templates/' antigo: {e}")
 
 def git_update():
     try:
         subprocess.run(["git", "add", "."], check=True)
         subprocess.run(["git", "commit", "-m", COMMIT_MSG], check=False)
         subprocess.run(["git", "push"], check=True)
-        print("\n>>> SUCESSO V44 REBRANDING! <<<")
-    except Exception as e: print(f"Git: {e}")
+        print("\n>>> SUCESSO V45! REBRANDING FORÇADO <<<")
+    except Exception as e:
+        print(f"Erro Git: {e}")
 
 def self_destruct():
     try: os.remove(os.path.abspath(__file__))
     except: pass
 
 def main():
-    print(f"--- UPDATE V44 REBRANDING: {PROJECT_NAME} ---")
+    print(f"--- UPDATE V45 FORCE REBRAND: {PROJECT_NAME} ---")
     
-    # Atualiza apenas os templates visuais, mantendo o app.py intacto
-    write_file("templates/base.html", FILE_BASE)
-    write_file("templates/login.html", FILE_LOGIN)
+    # IMPORTANTE: Escreve dentro de app/templates, que é onde o Flask Modularizado olha
+    write_file("app/templates/base.html", FILE_BASE)
+    write_file("app/templates/login.html", FILE_LOGIN)
+    
+    # Limpeza
+    cleanup_old_templates()
     
     git_update()
     self_destruct()
