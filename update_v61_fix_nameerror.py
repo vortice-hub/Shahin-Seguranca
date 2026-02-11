@@ -1,3 +1,14 @@
+import os
+import shutil
+import subprocess
+import sys
+
+# --- CONFIGURAÇÕES ---
+PROJECT_NAME = "Shahin Gestão"
+COMMIT_MSG = "V61: Fix NameError - Importando func do sqlalchemy em ponto.py"
+
+# --- 1. APP/ROUTES/PONTO.PY (CORRIGIDO) ---
+FILE_BP_PONTO = """
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from flask_login import login_required, current_user
 from app import db
@@ -59,3 +70,33 @@ def espelho_ponto():
 def solicitar_ajuste():
     # Rota básica para evitar erro de link quebrado, pode ser expandida depois
     return render_template('solicitar_ajuste.html')
+"""
+
+# --- FUNÇÕES DE SISTEMA ---
+def write_file(path, content):
+    os.makedirs(os.path.dirname(path) if os.path.dirname(path) else '.', exist_ok=True)
+    with open(path, 'w', encoding='utf-8') as f: f.write(content.strip())
+    print(f"Atualizado: {path}")
+
+def git_update():
+    try:
+        subprocess.run(["git", "add", "."], check=True)
+        subprocess.run(["git", "commit", "-m", COMMIT_MSG], check=False)
+        subprocess.run(["git", "push"], check=True)
+        print("\n>>> SUCESSO V61! NAMEERROR CORRIGIDO <<<")
+    except Exception as e: print(f"Git: {e}")
+
+def self_destruct():
+    try: os.remove(os.path.abspath(__file__))
+    except: pass
+
+def main():
+    print(f"--- UPDATE V61 FIX: {PROJECT_NAME} ---")
+    write_file("app/routes/ponto.py", FILE_BP_PONTO)
+    git_update()
+    self_destruct()
+
+if __name__ == "__main__":
+    main()
+
+
