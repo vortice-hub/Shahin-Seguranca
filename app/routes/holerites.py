@@ -9,7 +9,6 @@ import io
 import logging
 from pypdf import PdfReader, PdfWriter
 
-# Logger para ver no Render
 logger = logging.getLogger(__name__)
 
 holerite_bp = Blueprint('holerite', __name__, url_prefix='/holerites')
@@ -40,9 +39,13 @@ def admin_importar():
     if request.method == 'POST':
         # Limpeza
         if request.form.get('acao') == 'limpar_tudo':
-            Holerite.query.delete()
-            db.session.commit()
-            flash('Limpeza concluída.')
+            try:
+                Holerite.query.delete()
+                db.session.commit()
+                flash('Limpeza concluída.')
+            except Exception as e:
+                db.session.rollback()
+                flash(f'Erro ao limpar: {e}')
             return redirect(url_for('holerite.admin_importar'))
 
         file = request.files.get('arquivo_pdf')
@@ -59,32 +62,30 @@ def admin_importar():
                 user = encontrar_usuario_por_nome(texto)
                 
                 if user:
-                    # Prepara PDF individual
                     writer = PdfWriter()
                     writer.add_page(page)
                     output_stream = io.BytesIO()
                     writer.write(output_stream)
                     output_stream.seek(0)
                     
-                    # --- CORREÇÃO CRITICA V50 ---
-                    # 1. Nome do arquivo PRECISA ter .pdf no final para resource_type='raw'
                     filename = f"holerite_{user.id}_{mes_ref}_{int(get_brasil_time().timestamp())}.pdf"
                     
-                    logger.info(f"Iniciando upload para: {user.real_name} - Arquivo: {filename}")
+                    logger.info(f"Iniciando upload RAW para: {user.real_name}")
                     
-                    # 2. Upload forçado como RAW (Arquivo bruto)
+                    # Upload RAW
                     upload_result = cloudinary.uploader.upload(
                         output_stream, 
                         public_id=filename, 
-                        resource_type="raw", # Obriga ser Raw
-                        folder="holerites_v50", # Pasta nova para não misturar com erros antigos
+                        resource_type="raw", 
+                        folder="holerites_v51", 
                         format="pdf"
                     )
                     
-                    logger.info(f"Resposta Cloudinary: {upload_result}")
+                    logger.info(f"Sucesso Cloudinary: {upload_result.get('secure_url')}")
                     
+                    # --- CORREÇÃO AQUI ---
                     url_pdf = upload_result.get('secure_url')
-                    pid = upload.get('public_id')
+                    pid = upload_result.get('public_id') # Antes estava 'upload.get', gerando erro
                     
                     # Salva no banco
                     existente = Holerite.query.filter_by(user_id=user.id, mes_referencia=mes_ref).first()
@@ -100,7 +101,7 @@ def admin_importar():
                     sucesso += 1
             
             db.session.commit()
-            flash(f'Sucesso: {sucesso} holerites processados e enviados.')
+            flash(f'Sucesso: {sucesso} holerites enviados corretamente.')
             
         except Exception as e:
             logger.error(f"ERRO NO UPLOAD: {e}")
@@ -127,7 +128,4 @@ def confirmar_recebimento(id):
         doc.visualizado_em = get_brasil_time()
         db.session.commit()
         
-    # LOG PARA DEBUG
-    logger.info(f"Redirecionando usuario {current_user.real_name} para {doc.url_arquivo}")
-    
     return redirect(doc.url_arquivo)
