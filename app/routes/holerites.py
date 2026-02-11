@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash, send_file
+from flask import Blueprint, render_template, request, redirect, url_for, flash
 from flask_login import login_required, current_user
 from app import db
 from app.models import User, Holerite
@@ -8,9 +8,11 @@ import cloudinary.uploader
 import re
 import io
 from pypdf import PdfReader, PdfWriter
+from sqlalchemy import desc
 
 holerite_bp = Blueprint('holerite', __name__, url_prefix='/holerites')
 
+# Configuração de Fallback (Garante que funcione mesmo sem ENV)
 try:
     if not cloudinary.config().cloud_name:
         cloudinary.config(
@@ -21,25 +23,15 @@ try:
 except: pass
 
 def encontrar_usuario_por_nome(texto_pagina):
-    # Normaliza o texto da pagina (Maiusculo, sem acento)
     texto_limpo = remove_accents(texto_pagina).upper()
-    
-    # Busca usuarios ativos
     users = User.query.all()
-    
     candidatos = []
-    
     for user in users:
-        # Normaliza nome do usuario
         nome_user_limpo = remove_accents(user.real_name).upper().strip()
-        
-        # Verifica se o nome completo esta contido no texto da pagina
-        if nome_user_limpo in texto_limpo:
+        # Verifica se o nome tem pelo menos 2 partes para evitar falsos positivos com nomes curtos
+        if len(nome_user_limpo.split()) > 1 and nome_user_limpo in texto_limpo:
             candidatos.append(user)
-            
-    # Se achou exatamente 1, retorna ele. Se achou 0 ou mais de 1 (homonimos), retorna None por seguranca.
-    if len(candidatos) == 1:
-        return candidatos[0]
+    if len(candidatos) == 1: return candidatos[0]
     return None
 
 @holerite_bp.route('/admin/importar', methods=['GET', 'POST'])
@@ -71,18 +63,23 @@ def admin_importar():
                     writer.write(output_stream)
                     output_stream.seek(0)
                     
-                    filename = f"holerite_{user.id}_{mes_ref}_{int(get_brasil_time().timestamp())}"
+                    # Nome do arquivo único
+                    # Adiciona .pdf no final para garantir extensao no raw
+                    filename = f"holerite_{user.id}_{mes_ref}_{int(get_brasil_time().timestamp())}.pdf"
                     
+                    # Upload CORRIGIDO (Raw para evitar processamento de imagem e erro 401)
                     upload = cloudinary.uploader.upload(
                         output_stream, 
                         public_id=filename, 
-                        resource_type="auto",
-                        folder="holerites_shahin"
+                        resource_type="raw", # Mudança chave: RAW trata como arquivo genérico
+                        folder="holerites_shahin",
+                        access_mode="public"
                     )
                     
                     url = upload.get('secure_url')
                     pid = upload.get('public_id')
                     
+                    # Salva no Banco
                     existente = Holerite.query.filter_by(user_id=user.id, mes_referencia=mes_ref).first()
                     if existente:
                         existente.url_arquivo = url
@@ -98,13 +95,16 @@ def admin_importar():
                     falha += 1
             
             db.session.commit()
-            flash(f'Processado: {sucesso} identificados por NOME. {falha} páginas não identificadas/ambíguas.')
+            flash(f'Importação Finalizada: {sucesso} enviados. {falha} páginas não identificadas.')
             
         except Exception as e:
             db.session.rollback()
-            flash(f'Erro: {str(e)}')
+            flash(f'Erro crítico: {str(e)}')
+
+    # Busca histórico de uploads recentes para mostrar ao Master (Feedback Visual)
+    ultimos_uploads = Holerite.query.join(User).order_by(Holerite.enviado_em.desc()).limit(50).all()
             
-    return render_template('admin_upload_holerite.html')
+    return render_template('admin_upload_holerite.html', uploads=ultimos_uploads)
 
 @holerite_bp.route('/meus-documentos')
 @login_required
@@ -117,9 +117,11 @@ def meus_holerites():
 def confirmar_recebimento(id):
     doc = Holerite.query.get_or_404(id)
     if doc.user_id != current_user.id: return redirect(url_for('main.dashboard'))
+    
     if not doc.visualizado:
         doc.visualizado = True
         doc.visualizado_em = get_brasil_time()
         db.session.commit()
-        flash('Recebimento confirmado.')
+        flash('Confirmado.')
+        
     return redirect(doc.url_arquivo)
