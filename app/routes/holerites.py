@@ -1,40 +1,24 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash, send_file, make_response
+from flask import Blueprint, render_template, request, redirect, url_for, flash, send_file
 from flask_login import login_required, current_user
 from app import db
 from app.models import User, Holerite
 from app.utils import get_brasil_time, remove_accents
-import cloudinary
-import cloudinary.uploader
-import cloudinary.utils
 import io
 import logging
-import requests
 from pypdf import PdfReader, PdfWriter
 
 logger = logging.getLogger(__name__)
-
 holerite_bp = Blueprint('holerite', __name__, url_prefix='/holerites')
-
-# Configuração (Sempre garantindo as credenciais)
-try:
-    if not cloudinary.config().cloud_name:
-        cloudinary.config(
-            cloud_name = "dxb4fbdjy",
-            api_key = "537342766187832",
-            api_secret = "cbINpCjQtRh7oKp-uVX2YPdOKaI"
-        )
-except: pass
 
 def encontrar_usuario_por_nome(texto_pagina):
     texto_limpo = remove_accents(texto_pagina).upper()
     users = User.query.all()
     candidatos = []
-    for user in users:
-        nome_user_limpo = remove_accents(user.real_name).upper().strip()
-        if len(nome_user_limpo.split()) > 1 and nome_user_limpo in texto_limpo:
-            candidatos.append(user)
-    if len(candidatos) == 1: return candidatos[0]
-    return None
+    for u in users:
+        nome_limpo = remove_accents(u.real_name).upper().strip()
+        if len(nome_limpo.split()) > 1 and nome_limpo in texto_limpo:
+            candidatos.append(u)
+    return candidatos[0] if len(candidatos) == 1 else None
 
 @holerite_bp.route('/admin/importar', methods=['GET', 'POST'])
 @login_required
@@ -43,68 +27,35 @@ def admin_importar():
     
     if request.method == 'POST':
         if request.form.get('acao') == 'limpar_tudo':
-            try:
-                Holerite.query.delete()
-                db.session.commit()
-                flash('Limpeza concluída.')
-            except Exception as e:
-                db.session.rollback()
-                flash(f'Erro: {e}')
-            return redirect(url_for('holerite.admin_importar'))
+            Holerite.query.delete(); db.session.commit()
+            flash('Histórico limpo.'); return redirect(url_for('holerite.admin_importar'))
 
         file = request.files.get('arquivo_pdf')
         mes_ref = request.form.get('mes_ref')
-        
-        if not file: return redirect(url_for('holerite.admin_importar'))
+        if not file or not mes_ref: return redirect(url_for('holerite.admin_importar'))
             
         try:
             reader = PdfReader(file)
             sucesso = 0
-            
-            for i, page in enumerate(reader.pages):
-                texto = page.extract_text()
-                user = encontrar_usuario_por_nome(texto)
-                
+            for page in reader.pages:
+                user = encontrar_usuario_por_nome(page.extract_text())
                 if user:
-                    writer = PdfWriter()
-                    writer.add_page(page)
-                    output_stream = io.BytesIO()
-                    writer.write(output_stream)
-                    output_stream.seek(0)
-                    
-                    filename = f"holerite_{user.id}_{mes_ref}_{int(get_brasil_time().timestamp())}.pdf"
-                    
-                    # Upload RAW com type='upload' (Tenta forçar publico, mas a leitura usará assinatura)
-                    upload_result = cloudinary.uploader.upload(
-                        output_stream, 
-                        public_id=filename, 
-                        resource_type="raw", 
-                        folder="holerites_v54",
-                        type="upload" 
-                    )
-                    
-                    url_pdf = upload_result.get('secure_url')
-                    pid = upload_result.get('public_id')
+                    writer = PdfWriter(); writer.add_page(page)
+                    out = io.BytesIO(); writer.write(out); binary_data = out.getvalue()
                     
                     existente = Holerite.query.filter_by(user_id=user.id, mes_referencia=mes_ref).first()
                     if existente:
-                        existente.url_arquivo = url_pdf
-                        existente.public_id = pid
+                        existente.conteudo_pdf = binary_data
                         existente.enviado_em = get_brasil_time()
                         existente.visualizado = False
                     else:
-                        novo = Holerite(user_id=user.id, mes_referencia=mes_ref, url_arquivo=url_pdf, public_id=pid)
+                        novo = Holerite(user_id=user.id, mes_referencia=mes_ref, conteudo_pdf=binary_data)
                         db.session.add(novo)
-                    
                     sucesso += 1
-            
             db.session.commit()
-            flash(f'Sucesso: {sucesso} holerites enviados.')
-            
+            flash(f'Sucesso: {sucesso} holerites guardados no sistema.')
         except Exception as e:
-            logger.error(f"ERRO UPLOAD: {e}")
-            db.session.rollback()
-            flash(f'Erro: {str(e)}')
+            db.session.rollback(); flash(f'Erro: {e}')
 
     ultimos = Holerite.query.order_by(Holerite.enviado_em.desc()).limit(20).all()
     return render_template('admin_upload_holerite.html', uploads=ultimos)
@@ -115,61 +66,21 @@ def meus_holerites():
     docs = Holerite.query.filter_by(user_id=current_user.id).order_by(Holerite.mes_referencia.desc()).all()
     return render_template('meus_holerites.html', holerites=docs)
 
-# --- DOWNLOAD BLINDADO (URL ASSINADA) ---
 @holerite_bp.route('/baixar/<int:id>', methods=['POST'])
 @login_required
 def baixar_holerite(id):
     doc = Holerite.query.get_or_404(id)
-    if doc.user_id != current_user.id: 
-        flash("Acesso negado.")
-        return redirect(url_for('main.dashboard'))
+    if doc.user_id != current_user.id: return redirect(url_for('main.dashboard'))
     
-    # Registra visualização
     if not doc.visualizado:
-        doc.visualizado = True
-        doc.visualizado_em = get_brasil_time()
-        db.session.commit()
+        doc.visualizado = True; doc.visualizado_em = get_brasil_time(); db.session.commit()
         
-    try:
-        # TENTATIVA 1: Gerar URL Assinada como RAW
-        # O sign_url=True usa a API Secret para criar um token de acesso temporário
-        signed_url, options = cloudinary.utils.cloudinary_url(
-            doc.public_id, 
-            resource_type="raw", 
-            sign_url=True
-        )
+    if not doc.conteudo_pdf:
+        flash("Arquivo não encontrado no banco."); return redirect(url_for('holerite.meus_holerites'))
         
-        logger.info(f"Tentando baixar RAW assinado: {signed_url}")
-        response = requests.get(signed_url)
-        
-        # TENTATIVA 2: Se der 404/401, tenta como IMAGE (as vezes o Cloudinary classifica PDF como imagem)
-        if response.status_code != 200:
-            logger.warning(f"Falha RAW ({response.status_code}). Tentando como IMAGE...")
-            signed_url_img, opts = cloudinary.utils.cloudinary_url(
-                doc.public_id, 
-                resource_type="image", 
-                sign_url=True
-            )
-            response = requests.get(signed_url_img)
-
-        # Se funcionou algum dos dois
-        if response.status_code == 200:
-            arquivo_memoria = io.BytesIO(response.content)
-            nome_download = f"Holerite_{doc.mes_referencia}.pdf"
-            
-            return send_file(
-                arquivo_memoria,
-                mimetype='application/pdf',
-                as_attachment=True, 
-                download_name=nome_download
-            )
-        else:
-            # Falhou tudo
-            logger.error(f"Erro Final Cloudinary: {response.status_code} - {response.text}")
-            flash(f"Erro ao recuperar arquivo (Erro {response.status_code}). Contate o Suporte.")
-            return redirect(url_for('holerite.meus_holerites'))
-            
-    except Exception as e:
-        logger.error(f"Exceção Download: {e}")
-        flash("Erro interno ao baixar documento.")
-        return redirect(url_for('holerite.meus_holerites'))
+    return send_file(
+        io.BytesIO(doc.conteudo_pdf),
+        mimetype='application/pdf',
+        as_attachment=True,
+        download_name=f"Holerite_{doc.mes_referencia}.pdf"
+    )
