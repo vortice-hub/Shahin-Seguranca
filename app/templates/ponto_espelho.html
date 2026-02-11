@@ -1,35 +1,59 @@
 {% extends 'base.html' %}
 {% block content %}
-<div class="flex items-center justify-between mb-6">
-    <h2 class="text-xl font-bold text-slate-800">Meu Espelho</h2>
-    <form action="/ponto/espelho" method="GET" class="flex gap-2">
-        <input type="date" name="data_filtro" value="{{ filtro_data }}" class="border border-slate-200 rounded-lg px-2 py-1 text-xs text-slate-600">
-        <button type="submit" class="bg-blue-600 text-white px-3 py-1 rounded-lg font-bold text-xs"><i class="fas fa-filter"></i></button>
-        {% if filtro_data %}<a href="/ponto/espelho" class="bg-slate-200 text-slate-600 px-3 py-1 rounded-lg font-bold text-xs">X</a>{% endif %}
-    </form>
+<div class="mb-6 flex justify-between items-center">
+    <div>
+        <h2 class="text-2xl font-bold text-slate-800">Espelho de Ponto</h2>
+        <p class="text-sm text-slate-500">Colaborador: <span class="font-bold text-slate-700">{{ user.real_name }}</span></p>
+    </div>
+    <div class="text-right">
+        <span class="text-xs font-bold text-slate-400 uppercase">Período</span>
+        <div class="font-bold text-slate-700">{{ mes_ref }}</div>
+    </div>
 </div>
 
-<div class="space-y-4">
-    {% for dia in dias %}
-    <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-        <div class="px-4 py-3 bg-slate-50 border-b border-slate-100 flex justify-between items-center">
-            <span class="font-bold text-slate-700 text-sm">{{ dia.data.strftime('%d/%m/%Y') }}</span>
-            <span class="font-mono text-xs font-bold px-2 py-1 rounded 
-                {% if '-' in dia.saldo %} bg-red-100 text-red-700 {% else %} bg-emerald-100 text-emerald-700 {% endif %}">
-                Saldo: {{ dia.saldo }}
-            </span>
-        </div>
-        <div class="p-3 grid grid-cols-2 gap-2">
-            {% for p in dia.pontos %}
-            <div class="flex justify-between p-2 bg-white border border-slate-100 rounded text-xs">
-                <span class="text-slate-500 font-bold">{{ p.tipo }}</span>
-                <span class="text-blue-600 font-mono font-bold">{{ p.hora_registro.strftime('%H:%M') }}</span>
-            </div>
-            {% endfor %}
-        </div>
+<div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+    <div class="overflow-x-auto">
+        <table class="w-full text-left text-sm">
+            <thead class="bg-slate-50 text-slate-400 font-bold text-xs uppercase border-b border-slate-100">
+                <tr>
+                    <th class="px-4 py-4">Data</th>
+                    <th class="px-4 py-4">Batidas Realizadas</th>
+                    <th class="px-4 py-4 text-center">Trabalhado</th>
+                    <th class="px-4 py-4 text-center">Saldo</th>
+                    <th class="px-4 py-4 text-right">Status</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+                {% for r in resumos %}
+                <tr class="hover:bg-slate-50 transition cursor-help" onclick="toggleDetails('det-{{ r.id }}')">
+                    <td class="px-4 py-4 font-medium text-slate-700">{{ r.data_referencia.strftime('%d/%m (%a)') }}</td>
+                    <td class="px-4 py-4">
+                        <div class="flex flex-wrap gap-1">
+                            {% for b in detalhes[r.id] %}
+                            <span class="bg-slate-100 text-slate-600 px-2 py-0.5 rounded text-[10px] font-bold border border-slate-200">{{ b }}</span>
+                            {% endfor %}
+                        </div>
+                    </td>
+                    <td class="px-4 py-4 text-center font-mono">{{ format_hm(r.minutos_trabalhados) }}</td>
+                    <td class="px-4 py-4 text-center font-mono font-bold {% if r.minutos_saldo >= 0 %} text-emerald-600 {% else %} text-red-500 {% endif %}">
+                        {{ format_hm(r.minutos_saldo) }}
+                    </td>
+                    <td class="px-4 py-4 text-right">
+                        <span class="text-[10px] font-bold uppercase px-2 py-1 rounded-full 
+                            {% if r.status_dia == 'OK' %} bg-emerald-50 text-emerald-600 
+                            {% elif r.status_dia == 'Incompleto' %} bg-amber-50 text-amber-600 
+                            {% elif r.status_dia == 'Falta' %} bg-red-50 text-red-600 
+                            {% else %} bg-blue-50 text-blue-600 {% endif %}">
+                            {{ r.status_dia }}
+                        </span>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
     </div>
-    {% else %}
-    <div class="text-center py-10 text-slate-400">Sem registros.</div>
-    {% endfor %}
+</div>
+<div class="mt-4 text-center text-xs text-slate-400">
+    <i class="fas fa-info-circle mr-1"></i> Batidas ímpares são marcadas como "Incompleto" e não somam horas.
 </div>
 {% endblock %}

@@ -1,90 +1,77 @@
 from datetime import datetime, timedelta, time
-from app import db
-from app.models import User, PontoRegistro, PontoResumo
-import unicodedata
-import random
+from app.models import db, PontoRegistro, PontoResumo, User
+from app import logger
 
 def get_brasil_time():
     return datetime.utcnow() - timedelta(hours=3)
 
-def data_por_extenso(data_obj):
-    meses = {
-        1: 'Janeiro', 2: 'Fevereiro', 3: 'Março', 4: 'Abril',
-        5: 'Maio', 6: 'Junho', 7: 'Julho', 8: 'Agosto',
-        9: 'Setembro', 10: 'Outubro', 11: 'Novembro', 12: 'Dezembro'
-    }
-    return f"{data_obj.day} de {meses[data_obj.month]} de {data_obj.year}"
+def time_to_minutes(t):
+    if not t: return 0
+    if isinstance(t, str):
+        try:
+            h, m = map(int, t.split(':'))
+            return h * 60 + m
+        except: return 0
+    return t.hour * 60 + t.minute
 
-def remove_accents(input_str):
-    if not input_str: return ""
-    nfkd_form = unicodedata.normalize('NFKD', input_str)
-    return "".join([c for c in nfkd_form if not unicodedata.combining(c)])
-
-def gerar_login_automatico(nome_completo):
-    try:
-        clean_name = remove_accents(nome_completo).lower().strip()
-        parts = clean_name.split()
-        if not parts: return f"user.{random.randint(10,99)}"
-        primeiro = parts[0]
-        ultimo = parts[-1] if len(parts) > 1 else "colab"
-        for _ in range(10): 
-            num = random.randint(10, 99)
-            login_candidato = f"{primeiro}.{ultimo}.{num}"
-            if not User.query.filter_by(username=login_candidato).first():
-                return login_candidato
-        return f"{primeiro}.{random.randint(1000,9999)}"
-    except:
-        return f"user.{random.randint(1000,9999)}"
-
-def time_to_min(t_input):
-    if not t_input: return 0
-    try:
-        if isinstance(t_input, time): return t_input.hour * 60 + t_input.minute
-        h, m = map(int, str(t_input).split(':')[:2]); return h * 60 + m
-    except: return 0
+def format_minutes_to_hm(total_minutes):
+    sinal = "" if total_minutes >= 0 else "-"
+    total_minutes = abs(total_minutes)
+    h = total_minutes // 60
+    m = total_minutes % 60
+    return f"{sinal}{h:02d}:{m:02d}"
 
 def calcular_dia(user_id, data_ref):
+    from app.models import User, PontoRegistro, PontoResumo
     user = User.query.get(user_id)
-    if not user: return
+    registros = PontoRegistro.query.filter_by(user_id=user_id, data_registro=data_ref).order_by(PontoRegistro.hora_registro).all()
     
-    dia_trabalho = True
-    if user.escala == '5x2' and data_ref.weekday() >= 5: dia_trabalho = False
-    elif user.escala == '12x36' and user.data_inicio_escala:
-        if (data_ref - user.data_inicio_escala).days % 2 != 0: dia_trabalho = False
-            
-    if dia_trabalho:
-        m_ent = time_to_min(user.horario_entrada)
-        m_alm_ini = time_to_min(user.horario_almoco_inicio)
-        m_alm_fim = time_to_min(user.horario_almoco_fim)
-        m_sai = time_to_min(user.horario_saida)
-        jornada_esperada = max(0, m_alm_ini - m_ent) + max(0, m_sai - m_alm_fim)
-        if jornada_esperada <= 0: jornada_esperada = 480
-    else: jornada_esperada = 0
+    # Horários previstos em minutos
+    ent_prev = time_to_minutes(user.horario_entrada)
+    sai_prev = time_to_minutes(user.horario_saida)
+    alm_ini_prev = time_to_minutes(user.horario_almoco_inicio)
+    alm_fim_prev = time_to_minutes(user.horario_almoco_fim)
+    
+    minutos_esperados = (sai_prev - ent_prev) - (alm_fim_prev - alm_ini_prev)
+    if minutos_esperados < 0: minutos_esperados = 0
+    
+    # Se for fim de semana e escala não for Livre/Final de Semana, esperado é 0
+    if data_ref.weekday() >= 5 and user.escala != 'Livre':
+        minutos_esperados = 0
 
-    pontos = PontoRegistro.query.filter_by(user_id=user_id, data_registro=data_ref).order_by(PontoRegistro.hora_registro).all()
-    trabalhado_minutos = 0
-    status = "OK"
-    saldo = 0
+    trabalhado_total = 0
+    # Lógica de pares de batidas (Entrada 1 -> Saída 1, Entrada 2 -> Saída 2)
+    for i in range(0, len(registros), 2):
+        if i + 1 < len(registros):
+            inicio = time_to_minutes(registros[i].hora_registro)
+            fim = time_to_minutes(registros[i+1].hora_registro)
+            trabalhado_total += (fim - inicio)
+
+    saldo = trabalhado_total - minutos_esperados
     
-    if len(pontos) < 2:
-        if len(pontos) == 0:
-            if dia_trabalho: status = "Falta"; saldo = -jornada_esperada
-            else: status = "Folga"; saldo = 0
-    else:
-        loops = len(pontos)
-        if loops % 2 != 0: status = "Erro: Ímpar"; loops -= 1
-        for i in range(0, loops, 2):
-            p_ent = time_to_min(pontos[i].hora_registro)
-            p_sai = time_to_min(pontos[i+1].hora_registro)
-            trabalhado_minutos += (p_sai - p_ent)
-        saldo = trabalhado_minutos - jornada_esperada
-        if not dia_trabalho and trabalhado_minutos > 0: status = "Hora Extra (Folga)"; saldo = trabalhado_minutos
-        else:
-            if abs(saldo) <= 10: saldo = 0; status = "Normal"
-            elif saldo > 0: status = "Hora Extra"
-            elif saldo < 0: status = "Atraso/Débito"
+    status = "OK"
+    if len(registros) % 2 != 0: status = "Incompleto"
+    elif trabalhado_total == 0 and minutos_esperados > 0: status = "Falta"
+    elif saldo > 0: status = "Hora Extra"
+    elif saldo < 0: status = "Débito"
 
     resumo = PontoResumo.query.filter_by(user_id=user_id, data_referencia=data_ref).first()
-    if not resumo: resumo = PontoResumo(user_id=user_id, data_referencia=data_ref); db.session.add(resumo)
-    resumo.minutos_trabalhados = trabalhado_minutos; resumo.minutos_esperados = jornada_esperada; resumo.minutos_saldo = saldo; resumo.status_dia = status
-    db.session.commit()
+    if not resumo:
+        resumo = PontoResumo(user_id=user_id, data_referencia=data_ref)
+        db.session.add(resumo)
+    
+    resumo.minutos_trabalhados = trabalhado_total
+    resumo.minutos_esperados = minutos_esperados
+    resumo.minutos_saldo = saldo
+    resumo.status_dia = status
+    
+    try:
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Erro ao salvar resumo: {e}")
+
+def remove_accents(txt):
+    if not txt: return ""
+    import unicodedata
+    return "".join(c for c in unicodedata.normalize('NFD', txt) if unicodedata.category(c) != 'Mn')
