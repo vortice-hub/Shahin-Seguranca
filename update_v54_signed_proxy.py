@@ -1,3 +1,14 @@
+import os
+import shutil
+import subprocess
+import sys
+
+# --- CONFIGURAÇÕES ---
+PROJECT_NAME = "Shahin Gestão"
+COMMIT_MSG = "V54: Fix Holerite 401 - Geracao de URL Assinada para Download Seguro"
+
+# --- APP/ROUTES/HOLERITES.PY (Download com Assinatura) ---
+FILE_BP_HOLERITES = """
 from flask import Blueprint, render_template, request, redirect, url_for, flash, send_file, make_response
 from flask_login import login_required, current_user
 from app import db
@@ -173,3 +184,34 @@ def baixar_holerite(id):
         logger.error(f"Exceção Download: {e}")
         flash("Erro interno ao baixar documento.")
         return redirect(url_for('holerite.meus_holerites'))
+"""
+
+# --- FUNÇÕES ---
+def write_file(path, content):
+    os.makedirs(os.path.dirname(path) if os.path.dirname(path) else '.', exist_ok=True)
+    with open(path, 'w', encoding='utf-8') as f:
+        f.write(content.strip())
+    print(f"Atualizado: {path}")
+
+def git_update():
+    try:
+        subprocess.run(["git", "add", "."], check=True)
+        subprocess.run(["git", "commit", "-m", COMMIT_MSG], check=False)
+        subprocess.run(["git", "push"], check=True)
+        print("\n>>> SUCESSO V54! URL ASSINADA <<<")
+    except Exception as e: print(f"Git: {e}")
+
+def self_destruct():
+    try: os.remove(os.path.abspath(__file__))
+    except: pass
+
+def main():
+    print(f"--- UPDATE V54 SIGNED PROXY: {PROJECT_NAME} ---")
+    write_file("app/routes/holerites.py", FILE_BP_HOLERITES)
+    git_update()
+    self_destruct()
+
+if __name__ == "__main__":
+    main()
+
+
