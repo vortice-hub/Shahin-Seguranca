@@ -5,11 +5,11 @@ import sys
 
 # --- CONFIGURAÇÕES ---
 PROJECT_NAME = "Shahin Gestão"
-COMMIT_MSG = "V48: Fix Holerite 401 (Raw Resource) e Tabela de Auditoria para Master"
+COMMIT_MSG = "V49: Fix Holerite - Forcar Resource Type RAW e Limpeza de Testes"
 
-# --- 1. APP/ROUTES/HOLERITES.PY (Upload corrigido e Auditoria) ---
+# --- 1. APP/ROUTES/HOLERITES.PY (Ajuste Cloudinary) ---
 FILE_BP_HOLERITES = """
-from flask import Blueprint, render_template, request, redirect, url_for, flash
+from flask import Blueprint, render_template, request, redirect, url_for, flash, send_file
 from flask_login import login_required, current_user
 from app import db
 from app.models import User, Holerite
@@ -19,11 +19,9 @@ import cloudinary.uploader
 import re
 import io
 from pypdf import PdfReader, PdfWriter
-from sqlalchemy import desc
 
 holerite_bp = Blueprint('holerite', __name__, url_prefix='/holerites')
 
-# Configuração de Fallback (Garante que funcione mesmo sem ENV)
 try:
     if not cloudinary.config().cloud_name:
         cloudinary.config(
@@ -39,7 +37,6 @@ def encontrar_usuario_por_nome(texto_pagina):
     candidatos = []
     for user in users:
         nome_user_limpo = remove_accents(user.real_name).upper().strip()
-        # Verifica se o nome tem pelo menos 2 partes para evitar falsos positivos com nomes curtos
         if len(nome_user_limpo.split()) > 1 and nome_user_limpo in texto_limpo:
             candidatos.append(user)
     if len(candidatos) == 1: return candidatos[0]
@@ -51,6 +48,18 @@ def admin_importar():
     if current_user.role != 'Master': return redirect(url_for('main.dashboard'))
     
     if request.method == 'POST':
+        # --- LÓGICA DE LIMPEZA (NOVO BOTAO) ---
+        if request.form.get('acao') == 'limpar_tudo':
+            try:
+                Holerite.query.delete()
+                db.session.commit()
+                flash('Todos os holerites antigos foram apagados.')
+            except Exception as e:
+                db.session.rollback()
+                flash(f'Erro ao limpar: {e}')
+            return redirect(url_for('holerite.admin_importar'))
+
+        # --- LÓGICA DE UPLOAD ---
         file = request.files.get('arquivo_pdf')
         mes_ref = request.form.get('mes_ref')
         
@@ -74,23 +83,20 @@ def admin_importar():
                     writer.write(output_stream)
                     output_stream.seek(0)
                     
-                    # Nome do arquivo único
-                    # Adiciona .pdf no final para garantir extensao no raw
+                    # Nome com extensao .pdf explicita
                     filename = f"holerite_{user.id}_{mes_ref}_{int(get_brasil_time().timestamp())}.pdf"
                     
-                    # Upload CORRIGIDO (Raw para evitar processamento de imagem e erro 401)
+                    # --- CORREÇÃO PRINCIPAL: resource_type='raw' ---
                     upload = cloudinary.uploader.upload(
                         output_stream, 
                         public_id=filename, 
-                        resource_type="raw", # Mudança chave: RAW trata como arquivo genérico
-                        folder="holerites_shahin",
-                        access_mode="public"
+                        resource_type="raw", 
+                        folder="holerites_shahin"
                     )
                     
                     url = upload.get('secure_url')
                     pid = upload.get('public_id')
                     
-                    # Salva no Banco
                     existente = Holerite.query.filter_by(user_id=user.id, mes_referencia=mes_ref).first()
                     if existente:
                         existente.url_arquivo = url
@@ -106,15 +112,13 @@ def admin_importar():
                     falha += 1
             
             db.session.commit()
-            flash(f'Importação Finalizada: {sucesso} enviados. {falha} páginas não identificadas.')
+            flash(f'Processado: {sucesso} enviados. {falha} não identificados.')
             
         except Exception as e:
             db.session.rollback()
-            flash(f'Erro crítico: {str(e)}')
+            flash(f'Erro: {str(e)}')
 
-    # Busca histórico de uploads recentes para mostrar ao Master (Feedback Visual)
     ultimos_uploads = Holerite.query.join(User).order_by(Holerite.enviado_em.desc()).limit(50).all()
-            
     return render_template('admin_upload_holerite.html', uploads=ultimos_uploads)
 
 @holerite_bp.route('/meus-documentos')
@@ -138,17 +142,24 @@ def confirmar_recebimento(id):
     return redirect(doc.url_arquivo)
 """
 
-# --- 2. TEMPLATE ADMIN UPLOAD (Com Tabela de Auditoria) ---
+# --- 2. TEMPLATE ADMIN (COM BOTAO LIMPAR) ---
 FILE_TPL_ADMIN = """
 {% extends 'base.html' %}
 {% block content %}
 <div class="max-w-4xl mx-auto">
-    <div class="mb-6">
-        <h2 class="text-2xl font-bold text-slate-800">Importação de Holerites</h2>
-        <p class="text-sm text-slate-500">Envie o PDF da folha. O sistema corta e distribui.</p>
+    <div class="mb-6 flex justify-between items-center">
+        <div>
+            <h2 class="text-2xl font-bold text-slate-800">Importação de Holerites</h2>
+            <p class="text-sm text-slate-500">Envie o PDF da folha.</p>
+        </div>
+        
+        <!-- Botao Limpar Testes -->
+        <form action="/holerites/admin/importar" method="POST" onsubmit="return confirm('Isso apagará TODOS os holerites enviados até agora. Use apenas para limpar testes quebrados. Continuar?')">
+            <input type="hidden" name="acao" value="limpar_tudo">
+            <button type="submit" class="text-xs text-red-500 hover:text-red-700 underline font-bold">Limpar Histórico de Testes</button>
+        </form>
     </div>
 
-    <!-- Área de Upload -->
     <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-8 mb-8">
         <form action="/holerites/admin/importar" method="POST" enctype="multipart/form-data" class="space-y-6">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -161,14 +172,13 @@ FILE_TPL_ADMIN = """
                     <input type="file" name="arquivo_pdf" accept=".pdf" class="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100" required>
                 </div>
             </div>
-            <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-lg shadow-md transition flex items-center justify-center gap-2" onclick="this.innerHTML='<i class=\\'fas fa-spinner fa-spin\\'></i> Processando (Pode demorar)...';">
+            <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-lg shadow-md transition flex items-center justify-center gap-2" onclick="this.innerHTML='<i class=\\'fas fa-spinner fa-spin\\'></i> Processando...';">
                 <i class="fas fa-cloud-upload-alt"></i> PROCESSAR E DISTRIBUIR
             </button>
         </form>
     </div>
 
-    <!-- Tabela de Auditoria (Visualização do Master) -->
-    <h3 class="text-lg font-bold text-slate-700 mb-4 px-2">Últimos Envios (Auditoria)</h3>
+    <h3 class="text-lg font-bold text-slate-700 mb-4 px-2">Últimos Envios</h3>
     <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
         <div class="overflow-x-auto">
             <table class="w-full text-left text-sm text-slate-600">
@@ -199,9 +209,7 @@ FILE_TPL_ADMIN = """
                         </td>
                     </tr>
                     {% else %}
-                    <tr>
-                        <td colspan="5" class="px-6 py-8 text-center text-slate-400">Nenhum envio registrado recentemente.</td>
-                    </tr>
+                    <tr><td colspan="5" class="px-6 py-8 text-center text-slate-400">Nenhum envio recente.</td></tr>
                     {% endfor %}
                 </tbody>
             </table>
@@ -223,7 +231,7 @@ def git_update():
         subprocess.run(["git", "add", "."], check=True)
         subprocess.run(["git", "commit", "-m", COMMIT_MSG], check=False)
         subprocess.run(["git", "push"], check=True)
-        print("\n>>> SUCESSO V48! <<<")
+        print("\n>>> SUCESSO V49! <<<")
     except Exception as e: print(f"Git: {e}")
 
 def self_destruct():
@@ -231,7 +239,7 @@ def self_destruct():
     except: pass
 
 def main():
-    print(f"--- UPDATE V48 HOLERITES: {PROJECT_NAME} ---")
+    print(f"--- UPDATE V49 FIX RAW: {PROJECT_NAME} ---")
     write_file("app/routes/holerites.py", FILE_BP_HOLERITES)
     write_file("app/templates/admin_upload_holerite.html", FILE_TPL_ADMIN)
     git_update()
