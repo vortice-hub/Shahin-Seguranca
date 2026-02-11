@@ -2,12 +2,63 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash
 from flask_login import login_required, current_user
 from app import db
 from app.models import User, PreCadastro, PontoResumo, PontoAjuste, PontoRegistro
-from app.utils import calcular_dia
+from app.utils import calcular_dia, get_brasil_time
 import secrets
+import csv
+import io
 from datetime import datetime, time
 from sqlalchemy import func
 
 admin_bp = Blueprint('admin', __name__, url_prefix='/admin')
+
+@admin_bp.route('/usuarios/importar-csv', methods=['GET', 'POST'])
+@login_required
+def importar_csv():
+    if current_user.role != 'Master': return redirect(url_for('main.dashboard'))
+    
+    if request.method == 'POST':
+        file = request.files.get('arquivo_csv')
+        if not file:
+            flash('Selecione um arquivo CSV.')
+            return redirect(url_for('admin.importar_csv'))
+            
+        try:
+            stream = io.StringIO(file.stream.read().decode("UTF8"), newline=None)
+            csv_reader = csv.DictReader(stream, delimiter=';') # Padrão Excel BR
+            
+            count = 0
+            for row in csv_reader:
+                # Espera colunas: Nome;CPF;Cargo;Salario;Entrada;Saida
+                cpf_limpo = row.get('CPF', '').replace('.', '').replace('-', '').strip()
+                if not cpf_limpo: continue
+                
+                # Verifica duplicidade
+                if PreCadastro.query.filter_by(cpf=cpf_limpo).first() or User.query.filter_by(cpf=cpf_limpo).first():
+                    continue
+                    
+                pre = PreCadastro(
+                    cpf=cpf_limpo,
+                    nome_previsto=row.get('Nome', 'Funcionario Importado'),
+                    cargo=row.get('Cargo', 'Colaborador'),
+                    salario=float(row.get('Salario', 0).replace(',', '.') or 0),
+                    horario_entrada=row.get('Entrada', '07:12'),
+                    horario_saida=row.get('Saida', '17:00'),
+                    # Defaults
+                    horario_almoco_inicio='12:00',
+                    horario_almoco_fim='13:00',
+                    escala='5x2'
+                )
+                db.session.add(pre)
+                count += 1
+                
+            db.session.commit()
+            flash(f'Importação concluída! {count} novos CPFs liberados na lista de espera.')
+            return redirect(url_for('admin.gerenciar_usuarios'))
+            
+        except Exception as e:
+            flash(f'Erro ao ler CSV: {e}')
+            
+    return render_template('admin_importar_csv.html')
 
 @admin_bp.route('/usuarios')
 @login_required
@@ -24,10 +75,8 @@ def novo_usuario():
         try:
             cpf = request.form.get('cpf').replace('.', '').replace('-', '').strip()
             if User.query.filter_by(cpf=cpf).first(): flash('Erro: CPF já existe.'); return redirect(url_for('admin.novo_usuario'))
-            
             dt_escala = None
             if request.form.get('dt_escala'): dt_escala = datetime.strptime(request.form.get('dt_escala'), '%Y-%m-%d').date()
-            
             pre = PreCadastro(cpf=cpf, nome_previsto=request.form.get('real_name'), cargo=request.form.get('role'), salario=float(request.form.get('salario') or 0), horario_entrada=request.form.get('h_ent'), horario_almoco_inicio=request.form.get('h_alm_ini'), horario_almoco_fim=request.form.get('h_alm_fim'), horario_saida=request.form.get('h_sai'), escala=request.form.get('escala'), data_inicio_escala=dt_escala)
             db.session.add(pre); db.session.commit()
             return render_template('sucesso_usuario.html', nome_real=request.form.get('real_name'), cpf=cpf)
