@@ -26,13 +26,13 @@ def encontrar_usuario_por_nome(texto_pagina):
 def admin_importar():
     if current_user.role != 'Master': return redirect(url_for('main.dashboard'))
     
-    # REPARO DE EMERGENCIA: Garante que a coluna existe no Postgres
+    # MIGRAÇÃO DE BANCO: Remove a obrigatoriedade da coluna url_arquivo
     try:
-        db.session.execute(text("ALTER TABLE holerites ADD COLUMN IF NOT EXISTS conteudo_pdf BYTEA"))
+        db.session.execute(text("ALTER TABLE holerites ALTER COLUMN url_arquivo DROP NOT NULL"))
         db.session.commit()
     except Exception as e:
         db.session.rollback()
-        logger.error(f"Erro ao reparar coluna: {e}")
+        logger.warning(f"Aviso de migracao: {e}")
 
     if request.method == 'POST':
         if request.form.get('acao') == 'limpar_tudo':
@@ -55,14 +55,15 @@ def admin_importar():
                     existente = Holerite.query.filter_by(user_id=user.id, mes_referencia=mes_ref).first()
                     if existente:
                         existente.conteudo_pdf = binary_data
+                        existente.url_arquivo = None # Forçamos nulo aqui
                         existente.enviado_em = get_brasil_time()
                         existente.visualizado = False
                     else:
-                        novo = Holerite(user_id=user.id, mes_referencia=mes_ref, conteudo_pdf=binary_data)
+                        novo = Holerite(user_id=user.id, mes_referencia=mes_ref, conteudo_pdf=binary_data, url_arquivo=None)
                         db.session.add(novo)
                     sucesso += 1
             db.session.commit()
-            flash(f'Sucesso: {sucesso} holerites processados.')
+            flash(f'Sucesso: {sucesso} holerites guardados no banco de dados.')
         except Exception as e:
             db.session.rollback(); flash(f'Erro no processamento: {e}')
 
@@ -79,7 +80,6 @@ def meus_holerites():
 @login_required
 def baixar_holerite(id):
     doc = Holerite.query.get_or_404(id)
-    # Master pode baixar qualquer um, Funcionario só o dele
     if current_user.role != 'Master' and doc.user_id != current_user.id: 
         return redirect(url_for('main.dashboard'))
     
@@ -87,7 +87,7 @@ def baixar_holerite(id):
         doc.visualizado = True; doc.visualizado_em = get_brasil_time(); db.session.commit()
         
     if not doc.conteudo_pdf:
-        flash("Conteúdo do arquivo não encontrado."); return redirect(url_for('holerite.meus_holerites'))
+        flash("Arquivo não encontrado."); return redirect(url_for('holerite.meus_holerites'))
         
     return send_file(
         io.BytesIO(doc.conteudo_pdf),
