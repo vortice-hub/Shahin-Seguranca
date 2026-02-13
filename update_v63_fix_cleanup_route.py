@@ -1,3 +1,14 @@
+import os
+import shutil
+import subprocess
+import sys
+
+# --- CONFIGURAÇÕES ---
+PROJECT_NAME = "Shahin Gestão"
+COMMIT_MSG = "V63: Fix Cleanup - Ativando a rota de limpeza no admin.py"
+
+# --- 1. APP/ROUTES/ADMIN.PY (COMPLETO COM ROTA DE LIMPEZA) ---
+FILE_BP_ADMIN = """
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from flask_login import login_required, current_user
 from app import db
@@ -124,3 +135,33 @@ def editar_usuario(id):
             db.session.commit(); flash('Salvo.'); return redirect(url_for('admin.gerenciar_usuarios'))
         except Exception as e: flash(f'Erro: {e}')
     return render_template('editar_usuario.html', user=user)
+"""
+
+# --- FUNÇÕES ---
+def write_file(path, content):
+    os.makedirs(os.path.dirname(path) if os.path.dirname(path) else '.', exist_ok=True)
+    with open(path, 'w', encoding='utf-8') as f: f.write(content.strip())
+    print(f"Atualizado: {path}")
+
+def git_update():
+    try:
+        subprocess.run(["git", "add", "."], check=True)
+        subprocess.run(["git", "commit", "-m", COMMIT_MSG], check=False)
+        subprocess.run(["git", "push"], check=True)
+        print("\n>>> SUCESSO V63! ROTA DE LIMPEZA ATIVADA <<<")
+    except Exception as e: print(f"Git: {e}")
+
+def self_destruct():
+    try: os.remove(os.path.abspath(__file__))
+    except: pass
+
+def main():
+    print(f"--- UPDATE V63 FIX: {PROJECT_NAME} ---")
+    write_file("app/routes/admin.py", FILE_BP_ADMIN)
+    git_update()
+    self_destruct()
+
+if __name__ == "__main__":
+    main()
+
+
