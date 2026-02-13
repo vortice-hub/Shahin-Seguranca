@@ -1,0 +1,31 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="max-w-2xl mx-auto">
+    <div class="mb-8">
+        <h2 class="text-2xl font-bold text-slate-800">Limpeza de Pré-Lançamento</h2>
+        <p class="text-slate-500 text-sm">Use estas ferramentas para apagar os dados de teste antes de importar os funcionários reais.</p>
+    </div>
+
+    <div class="space-y-4">
+        <div class="bg-white p-6 rounded-xl border border-red-100 shadow-sm">
+            <h3 class="font-bold text-red-600 mb-2">1. Resetar Funcionários</h3>
+            <p class="text-xs text-slate-500 mb-4">Apaga todos os funcionários cadastrados e pré-cadastros (Exceto Thaynara Master).</p>
+            <form action="" method="POST">
+                <input type="hidden" name="acao" value="limpar_usuarios_nao_master">
+                <button type="submit" class="bg-red-50 text-red-600 px-4 py-2 rounded-lg text-sm font-bold border border-red-200 hover:bg-red-100 transition w-full" onclick="return confirm('ATENÇÃO: Isso apagará todos os funcionários. Confirma?')">APAGAR USUÁRIOS DE TESTE</button>
+            </form>
+        </div>
+
+        <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+            <h3 class="font-bold text-slate-800 mb-2">2. Limpar Holerites</h3>
+            <p class="text-xs text-slate-500 mb-4">Apaga todos os PDFs salvos no banco de dados para liberar espaço.</p>
+            <form action="" method="POST">
+                <input type="hidden" name="acao" value="limpar_holerites">
+                <button type="submit" class="bg-slate-50 text-slate-600 px-4 py-2 rounded-lg text-sm font-bold border border-slate-200 hover:bg-slate-100 transition w-full">LIMPAR PDFs</button>
+            </form>
+        </div>
+        
+        <a href="/admin/usuarios" class="block text-center text-sm text-blue-600 font-bold mt-6 underline">Voltar para Gerenciar Usuários</a>
+    </div>
+</div>
+{% endblock %}
