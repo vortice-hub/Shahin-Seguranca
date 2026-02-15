@@ -1,61 +1,184 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app
 from flask_login import login_required, current_user
 from app.extensions import db
 from app.models import PontoRegistro, PontoResumo, User, PontoAjuste
-from app.utils import get_brasil_time, calcular_dia, format_minutes_to_hm
+from app.utils import get_brasil_time, calcular_dia, format_minutes_to_hm, data_por_extenso
 from datetime import datetime, date
 from sqlalchemy import func
+from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadSignature
 
 ponto_bp = Blueprint('ponto', __name__, template_folder='templates', url_prefix='/ponto')
+
+# --- 1. API PARA O QR CODE (GERAÇÃO E LEITURA) ---
+
+@ponto_bp.route('/api/gerar-token', methods=['GET'])
+@login_required
+def gerar_token_qrcode():
+    # Terminal não gera token, apenas lê
+    if current_user.role == 'Terminal': 
+        return jsonify({'error': 'Terminal não gera token'}), 403
+    
+    s = URLSafeTimedSerializer(current_app.secret_key)
+    # Token válido por 30s contendo o ID do usuário
+    token = s.dumps({'user_id': current_user.id, 'timestamp': get_brasil_time().timestamp()})
+    return jsonify({'token': token})
+
+@ponto_bp.route('/api/registrar-leitura', methods=['POST'])
+@login_required
+def registrar_leitura_terminal():
+    # Apenas Terminal ou Master podem ler QR Codes
+    if current_user.role != 'Terminal' and current_user.role != 'Master': 
+        return jsonify({'error': 'Acesso negado.'}), 403
+    
+    data = request.json
+    token = data.get('token')
+    
+    if not token: 
+        return jsonify({'error': 'Token vazio'}), 400
+    
+    s = URLSafeTimedSerializer(current_app.secret_key)
+    try:
+        # Tenta decifrar o token (máximo 35 segundos de idade)
+        dados = s.loads(token, max_age=35)
+        user_alvo = User.query.get(dados['user_id'])
+        
+        if not user_alvo: 
+            return jsonify({'error': 'Usuário inválido'}), 404
+        
+        hoje = get_brasil_time().date()
+        pontos_hoje = PontoRegistro.query.filter_by(user_id=user_alvo.id, data_registro=hoje).order_by(PontoRegistro.hora_registro).all()
+        
+        # Define o tipo de batida automaticamente
+        proxima = "Entrada"
+        if len(pontos_hoje) == 1: proxima = "Ida Almoço"
+        elif len(pontos_hoje) == 2: proxima = "Volta Almoço"
+        elif len(pontos_hoje) == 3: proxima = "Saída"
+        elif len(pontos_hoje) >= 4: proxima = "Extra"
+        
+        # Registra o ponto
+        novo = PontoRegistro(
+            user_id=user_alvo.id, 
+            data_registro=hoje, 
+            hora_registro=get_brasil_time().time(), 
+            tipo=proxima, 
+            latitude='QR-Code', 
+            longitude='Presencial'
+        )
+        db.session.add(novo)
+        db.session.commit()
+        
+        # Recalcula o saldo do dia
+        calcular_dia(user_alvo.id, hoje)
+        
+        return jsonify({
+            'success': True, 
+            'message': f'Ponto registrado: {proxima}', 
+            'funcionario': user_alvo.real_name, 
+            'hora': novo.hora_registro.strftime('%H:%M')
+        })
+
+    except SignatureExpired: 
+        return jsonify({'error': 'QR Code expirado.'}), 400
+    except BadSignature: 
+        return jsonify({'error': 'QR Code inválido.'}), 400
+    except Exception as e: 
+        return jsonify({'error': f'Erro interno: {str(e)}'}), 500
+
+
+# --- 2. ROTA DO SCANNER (TERMINAL) ---
+
+@ponto_bp.route('/scanner')
+@login_required
+def terminal_scanner():
+    # Rota exclusiva para o Terminal
+    if current_user.role != 'Terminal' and current_user.role != 'Master':
+        flash('Acesso restrito ao Terminal de Ponto.')
+        return redirect(url_for('main.dashboard'))
+    
+    return render_template('ponto/terminal_leitura.html')
+
+
+# --- 3. ROTA DE REGISTRO (FUNCIONÁRIO - TELA DO QR CODE) ---
 
 @ponto_bp.route('/registrar', methods=['GET', 'POST'])
 @login_required
 def registrar_ponto():
-    hoje = get_brasil_time().date()
-    if request.method == 'POST':
-        tipo = request.form.get('tipo')
-        lat = request.form.get('lat')
-        lon = request.form.get('lon')
-        
-        # Validação simples
-        if not tipo:
-            flash('Selecione um tipo de registro.', 'error')
-            return redirect(url_for('ponto.registrar_ponto'))
+    # Se o usuário for Terminal, manda pro Scanner, não pro QR Code
+    if current_user.role == 'Terminal': 
+        return redirect(url_for('ponto.terminal_scanner'))
 
-        novo = PontoRegistro(
+    hoje = get_brasil_time().date()
+    # Corrige a falta da variável 'hoje_extenso'
+    hoje_extenso = data_por_extenso(hoje)
+    
+    # Lógica de Bloqueio de Escala
+    bloqueado = False
+    motivo = ""
+    
+    if current_user.escala == '5x2' and hoje.weekday() >= 5: 
+        bloqueado = True
+        motivo = "Não é possível realizar a marcação de ponto (Fim de Semana)."
+    elif current_user.escala == '12x36' and current_user.data_inicio_escala:
+        if (hoje - current_user.data_inicio_escala).days % 2 != 0: 
+            bloqueado = True
+            motivo = "Não é possível realizar a marcação de ponto (Dia de Folga)."
+
+    # Busca histórico do dia
+    pontos = PontoRegistro.query.filter_by(user_id=current_user.id, data_registro=hoje).order_by(PontoRegistro.hora_registro).all()
+    
+    # Define próxima ação para exibir na tela
+    prox = "Entrada"
+    if len(pontos) == 1: prox = "Ida Almoço"
+    elif len(pontos) == 2: prox = "Volta Almoço"
+    elif len(pontos) == 3: prox = "Saída"
+    elif len(pontos) >= 4: prox = "Extra"
+
+    # POST (Mantido para compatibilidade caso use botão, mas o foco é QR)
+    if request.method == 'POST':
+        if bloqueado: 
+            flash('Ação Bloqueada pela Escala.'); 
+            return redirect(url_for('main.dashboard'))
+        
+        db.session.add(PontoRegistro(
             user_id=current_user.id, 
             data_registro=hoje, 
-            tipo=tipo, 
-            latitude=lat, 
-            longitude=lon
-        )
-        db.session.add(novo)
-        try:
-            db.session.commit()
-            calcular_dia(current_user.id, hoje)
-            flash(f'Ponto de {tipo} registrado com sucesso!', 'success')
-        except Exception as e:
-            db.session.rollback()
-            flash(f'Erro ao registrar: {str(e)}', 'error')
-            
+            hora_registro=get_brasil_time().time(), 
+            tipo=prox, 
+            latitude=request.form.get('latitude'), 
+            longitude=request.form.get('longitude')
+        ))
+        db.session.commit()
+        calcular_dia(current_user.id, hoje)
         return redirect(url_for('main.dashboard'))
     
-    # Busca histórico do dia para exibir
-    registros = PontoRegistro.query.filter_by(user_id=current_user.id, data_registro=hoje).order_by(PontoRegistro.hora_registro).all()
-    return render_template('ponto/registro.html', registros=registros)
+    # CORREÇÃO PRINCIPAL: Passando 'hoje', 'pontos' e 'hoje_extenso' para o template
+    return render_template('ponto/registro.html', 
+                         proxima_acao=prox, 
+                         hoje_extenso=hoje_extenso, 
+                         pontos=pontos, 
+                         bloqueado=bloqueado, 
+                         motivo=motivo, 
+                         hoje=hoje)
+
+
+# --- 4. ROTA DE ESPELHO DE PONTO ---
 
 @ponto_bp.route('/espelho')
 @login_required
 def espelho_ponto():
     target_user_id = request.args.get('user_id', type=int) or current_user.id
+    
+    # Segurança: Usuário comum só vê o próprio espelho
     if target_user_id != current_user.id and current_user.role != 'Master':
         return redirect(url_for('main.dashboard'))
     
     user = User.query.get_or_404(target_user_id)
+    
+    # Filtro de Data
     mes_ref = request.args.get('mes_ref') or get_brasil_time().strftime('%Y-%m')
-    try:
+    try: 
         ano, mes = map(int, mes_ref.split('-'))
-    except:
+    except: 
         hoje = get_brasil_time()
         ano, mes = hoje.year, hoje.month
         mes_ref = hoje.strftime('%Y-%m')
@@ -71,7 +194,6 @@ def espelho_ponto():
         batidas = PontoRegistro.query.filter_by(user_id=target_user_id, data_registro=r.data_referencia).order_by(PontoRegistro.hora_registro).all()
         detalhes[r.id] = [b.hora_registro.strftime('%H:%M') for b in batidas]
 
-    # Dicionário de Tradução dos Dias (Fix para idioma Inglês no Server)
     dias_semana = {0: 'Seg', 1: 'Ter', 2: 'Qua', 3: 'Qui', 4: 'Sex', 5: 'Sáb', 6: 'Dom'}
 
     return render_template('ponto/ponto_espelho.html', 
@@ -82,54 +204,56 @@ def espelho_ponto():
                          mes_ref=mes_ref,
                          dias_semana=dias_semana)
 
+
+# --- 5. ROTA DE SOLICITAÇÃO DE AJUSTE ---
+
 @ponto_bp.route('/solicitar-ajuste', methods=['GET', 'POST'])
 @login_required
 def solicitar_ajuste():
-    data_sel = None
-    pontos = []
+    pontos_dia = []
+    data_selecionada = None
+    
+    # Histórico de Ajustes
+    meus_ajustes = PontoAjuste.query.filter_by(user_id=current_user.id).order_by(PontoAjuste.created_at.desc()).limit(20).all()
     
     if request.method == 'POST':
-        acao = request.form.get('acao')
-        
-        if acao == 'buscar':
-            data_busca = request.form.get('data_busca')
-            if data_busca:
-                try:
-                    data_sel = datetime.strptime(data_busca, '%Y-%m-%d').date()
-                    pontos = PontoRegistro.query.filter_by(user_id=current_user.id, data_registro=data_sel).order_by(PontoRegistro.hora_registro).all()
-                except:
-                    flash('Data inválida.', 'error')
-        
-        elif acao == 'enviar':
+        if request.form.get('acao') == 'buscar':
+            try: 
+                data_selecionada = datetime.strptime(request.form.get('data_busca'), '%Y-%m-%d').date()
+                pontos_dia = PontoRegistro.query.filter_by(user_id=current_user.id, data_registro=data_selecionada).order_by(PontoRegistro.hora_registro).all()
+            except: 
+                flash('Data inválida.', 'error')
+                
+        elif request.form.get('acao') == 'enviar':
             try:
-                # Logica simplificada de ajuste (expansível)
-                ajuste = PontoAjuste(
-                    user_id=current_user.id,
-                    data_referencia=request.form.get('data_ref'),
-                    ponto_original_id=request.form.get('ponto_id') or None,
-                    novo_horario=request.form.get('novo_horario'),
-                    tipo_batida=request.form.get('tipo_batida'),
-                    tipo_solicitacao=request.form.get('tipo_solicitacao'),
+                dt_obj = datetime.strptime(request.form.get('data_ref'), '%Y-%m-%d').date()
+                p_id = int(request.form.get('ponto_id')) if request.form.get('ponto_id') else None
+                
+                solic = PontoAjuste(
+                    user_id=current_user.id, 
+                    data_referencia=dt_obj, 
+                    ponto_original_id=p_id, 
+                    novo_horario=request.form.get('novo_horario'), 
+                    tipo_batida=request.form.get('tipo_batida'), 
+                    tipo_solicitacao=request.form.get('tipo_solicitacao'), 
                     justificativa=request.form.get('justificativa')
                 )
-                db.session.add(ajuste)
+                db.session.add(solic)
                 db.session.commit()
                 flash('Solicitação enviada!', 'success')
                 return redirect(url_for('ponto.solicitar_ajuste'))
-            except Exception as e:
-                db.session.rollback()
-                flash(f'Erro: {e}', 'error')
-
-    # Histórico de Ajustes
-    meus_ajustes = PontoAjuste.query.filter_by(user_id=current_user.id).order_by(PontoAjuste.created_at.desc()).limit(10).all()
-    extras = {}
-    for a in meus_ajustes:
-        if a.ponto_original_id:
-            p = PontoRegistro.query.get(a.ponto_original_id)
-            if p: extras[a.id] = f"{p.hora_registro.strftime('%H:%M')} ({p.tipo})"
-    
+            except: pass
+            
+    dados_extras = {}
+    for p in meus_ajustes:
+        if p.ponto_original_id:
+            original = PontoRegistro.query.get(p.ponto_original_id)
+            if original: dados_extras[p.id] = original.hora_registro.strftime('%H:%M')
+            
     return render_template('ponto/solicitar_ajuste.html', 
-                         data_sel=data_sel, 
-                         pontos=pontos, 
+                         pontos=pontos_dia, 
+                         data_sel=data_selecionada, 
                          meus_ajustes=meus_ajustes, 
-                         extras=extras)
+                         extras=dados_extras)
+
+
