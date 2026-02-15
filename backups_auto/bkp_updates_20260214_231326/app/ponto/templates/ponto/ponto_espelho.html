@@ -26,13 +26,7 @@
             <tbody class="divide-y divide-slate-100">
                 {% for r in resumos %}
                 <tr class="hover:bg-slate-50 transition cursor-help" onclick="toggleDetails('det-{{ r.id }}')">
-                    <!-- DATA TRADUZIDA AQUI -->
-                    <td class="px-4 py-4 font-medium text-slate-700">
-                        {{ r.data_referencia.strftime('%d/%m') }} 
-                        <span class="text-slate-400 text-xs uppercase ml-1">
-                            ({{ dias_semana[r.data_referencia.weekday()] }})
-                        </span>
-                    </td>
+                    <td class="px-4 py-4 font-medium text-slate-700">{{ r.data_referencia.strftime('%d/%m (%a)') }}</td>
                     <td class="px-4 py-4">
                         <div class="flex flex-wrap gap-1">
                             {% for b in detalhes[r.id] %}

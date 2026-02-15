@@ -1,7 +1,10 @@
 {% extends 'base.html' %}
 {% block content %}
 <div class="max-w-md mx-auto text-center">
-    <div class="mb-8"><h2 class="text-2xl font-bold text-slate-800">Registrar Ponto</h2><p class="text-sm text-slate-500">Confirme sua localização.</p></div>
+    <div class="mb-8">
+        <h2 class="text-2xl font-bold text-slate-800">Registrar Ponto</h2>
+        <p class="text-sm text-slate-500">Confirme sua localização.</p>
+    </div>
 
     {% if bloqueado %}
     <div class="bg-red-50 border-l-4 border-red-500 p-6 rounded-r-xl shadow-md text-left mb-8">
@@ -11,39 +14,102 @@
     {% else %}
     <div class="bg-slate-900 text-white rounded-2xl p-8 shadow-2xl mb-8 border border-slate-700 relative overflow-hidden">
         <div class="text-5xl font-mono font-bold tracking-widest mb-2" id="relogio">--:--:--</div>
-        <div class="text-sm text-slate-400 uppercase tracking-widest">{{ hoje_extenso }}</div>
-        <div class="mt-6 inline-block bg-blue-600 text-xs font-bold px-4 py-1 rounded-full uppercase tracking-wide shadow-lg">Próximo: {{ proxima_acao }}</div>
+        <div class="text-sm text-slate-400 uppercase tracking-widest" id="data-hoje">...</div>
+        <div class="mt-6 inline-block bg-blue-600 text-xs font-bold px-4 py-1 rounded-full uppercase tracking-wide shadow-lg animate-pulse">
+            Localizando...
+        </div>
     </div>
+    
     <form action="/ponto/registrar" method="POST" id="formPonto">
+        <!-- TOKEN CSRF OBRIGATÓRIO -->
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-        <input type="hidden" name="latitude" id="lat"><input type="hidden" name="longitude" id="lon">
-        <button type="button" onclick="getLocationAndSubmit()" id="btnRegistrar" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-5 rounded-xl shadow-xl transition transform active:scale-95 flex items-center justify-center gap-3 text-lg"><i class="fas fa-fingerprint text-2xl"></i> REGISTRAR</button>
-        <p id="geoStatus" class="text-xs text-slate-400 mt-4 h-4"></p>
+        
+        <input type="hidden" name="tipo" id="inputTipo">
+        <input type="hidden" name="lat" id="lat">
+        <input type="hidden" name="lon" id="lon">
+        
+        <div class="grid grid-cols-2 gap-4 mb-4">
+            <button type="button" onclick="submitPonto('Entrada')" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-4 rounded-xl shadow-lg transition transform active:scale-95">
+                <i class="fas fa-sign-in-alt mb-1 block text-2xl"></i> ENTRADA
+            </button>
+            <button type="button" onclick="submitPonto('Saída')" class="bg-red-600 hover:bg-red-700 text-white font-bold py-4 rounded-xl shadow-lg transition transform active:scale-95">
+                <i class="fas fa-sign-out-alt mb-1 block text-2xl"></i> SAÍDA
+            </button>
+            <button type="button" onclick="submitPonto('Ida Almoço')" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl shadow-lg transition transform active:scale-95">
+                <i class="fas fa-utensils mb-1 block text-2xl"></i> IDA ALMOÇO
+            </button>
+            <button type="button" onclick="submitPonto('Volta Almoço')" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl shadow-lg transition transform active:scale-95">
+                <i class="fas fa-undo mb-1 block text-2xl"></i> VOLTA ALMOÇO
+            </button>
+        </div>
+        <p id="geoStatus" class="text-xs text-slate-400 mt-2 h-4"></p>
     </form>
     {% endif %}
 
+    <!-- HISTÓRICO DO DIA (SOLICITADO) -->
     <div class="mt-8 text-left">
         <h3 class="text-xs font-bold text-slate-400 uppercase mb-3 ml-1">Histórico de Hoje</h3>
         <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden divide-y divide-slate-100">
-            {% for p in pontos %}
-            <div class="px-4 py-3 flex justify-between items-center"><span class="text-sm font-bold text-slate-700">{{ p.tipo }}</span><span class="text-sm font-mono text-slate-500">{{ p.hora_registro.strftime('%H:%M') }}</span></div>
-            {% else %}<div class="p-4 text-center text-xs text-slate-400">Nenhum registro hoje.</div>{% endfor %}
+            {% for p in registros %}
+            <div class="px-4 py-3 flex justify-between items-center hover:bg-slate-50 transition">
+                <span class="text-sm font-bold text-slate-700 flex items-center gap-2">
+                    <i class="fas fa-circle text-[8px] {% if 'Entrada' in p.tipo or 'Volta' in p.tipo %}text-emerald-500{% else %}text-red-500{% endif %}"></i>
+                    {{ p.tipo }}
+                </span>
+                <span class="text-sm font-mono text-slate-500 font-bold bg-slate-100 px-2 py-1 rounded">{{ p.hora_registro.strftime('%H:%M') }}</span>
+            </div>
+            {% else %}
+            <div class="p-6 text-center text-xs text-slate-400 flex flex-col items-center">
+                <i class="fas fa-clock text-2xl mb-2 opacity-30"></i>
+                Nenhum registro hoje.
+            </div>
+            {% endfor %}
         </div>
     </div>
 </div>
+
 <script>
-    function updateTime() { document.getElementById('relogio').innerText = new Date().toLocaleTimeString('pt-BR'); }
+    function updateTime() { 
+        const now = new Date();
+        document.getElementById('relogio').innerText = now.toLocaleTimeString('pt-BR'); 
+        document.getElementById('data-hoje').innerText = now.toLocaleDateString('pt-BR', {weekday: 'long', day: 'numeric', month: 'long'});
+    }
     setInterval(updateTime, 1000); updateTime();
-    function getLocationAndSubmit() {
-        const btn = document.getElementById('btnRegistrar');
+
+    function submitPonto(tipo) {
+        const btn = event.currentTarget;
         const st = document.getElementById('geoStatus');
-        btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Obtendo...';
+        const form = document.getElementById('formPonto');
+        
+        document.getElementById('inputTipo').value = tipo;
+        
+        // Bloqueia botões
+        const btns = document.querySelectorAll('button');
+        btns.forEach(b => b.disabled = true);
+        st.innerText = "Obtendo localização GPS...";
+        st.className = "text-xs text-blue-500 mt-2 h-4 animate-pulse font-bold";
+
         if (navigator.geolocation) {
             navigator.geolocation.getCurrentPosition(
-                (p) => { document.getElementById('lat').value = p.coords.latitude; document.getElementById('lon').value = p.coords.longitude; document.getElementById('formPonto').submit(); },
-                (e) => { alert("Erro GPS."); btn.disabled = false; btn.innerHTML = 'TENTAR NOVAMENTE'; }
+                (p) => { 
+                    document.getElementById('lat').value = p.coords.latitude; 
+                    document.getElementById('lon').value = p.coords.longitude; 
+                    st.innerText = "Localização obtida! Enviando...";
+                    st.className = "text-xs text-emerald-600 mt-2 h-4 font-bold";
+                    form.submit(); 
+                },
+                (e) => { 
+                    alert("Erro ao obter GPS: " + e.message); 
+                    st.innerText = "Erro no GPS.";
+                    st.className = "text-xs text-red-500 mt-2 h-4";
+                    btns.forEach(b => b.disabled = false);
+                },
+                { enableHighAccuracy: true, timeout: 10000 }
             );
-        } else alert("Sem suporte GPS.");
+        } else {
+            alert("Seu dispositivo não suporta GPS.");
+            btns.forEach(b => b.disabled = false);
+        }
     }
 </script>
 {% endblock %}
