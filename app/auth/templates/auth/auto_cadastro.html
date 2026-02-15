@@ -8,6 +8,7 @@
         <h2 class="text-xl font-bold text-slate-800 mb-2">Primeiro Acesso</h2>
         <p class="text-sm text-slate-500 mb-6">Digite seu CPF para localizar seu cadastro.</p>
         <form action="/cadastrar" method="POST" class="space-y-4">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
             <input type="hidden" name="step" value="1">
             <div>
                 <label class="block text-xs font-bold text-slate-400 uppercase mb-2">CPF (Somente Números)</label>
@@ -22,6 +23,7 @@
         <h2 class="text-xl font-bold text-emerald-700 mb-2">Bem-vindo(a), {{ nome }}!</h2>
         <p class="text-sm text-slate-500 mb-6">Confirme seus dados e crie uma senha segura.</p>
         <form action="/cadastrar" method="POST" class="space-y-4">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
             <input type="hidden" name="step" value="2">
             <input type="hidden" name="cpf" value="{{ cpf }}">
             

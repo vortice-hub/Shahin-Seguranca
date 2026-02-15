@@ -5,6 +5,7 @@
         <h2 class="text-xl font-bold text-slate-800 mb-2">Primeiro Acesso</h2>
         <p class="text-sm text-slate-500 mb-6">Por segurança, você deve definir uma nova senha pessoal.</p>
         <form action="/primeiro-acesso" method="POST" class="space-y-4">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
             <div>
                 <label class="block text-xs font-bold text-slate-400 uppercase mb-2">Nova Senha</label>
                 <input type="password" name="nova_senha" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 focus:outline-none focus:border-yellow-500" required>
