@@ -1,26 +1,33 @@
 import os
 import shutil
 import subprocess
-import sys
 from datetime import datetime
 
 # ================= CONFIGURAÇÕES =================
 PROJECT_DIR = os.getcwd()
 BACKUP_ROOT = os.path.join(PROJECT_DIR, "backups_auto")
 TIMESTAMP = datetime.now().strftime("%Y%m%d_%H%M%S")
-CURRENT_BACKUP_DIR = os.path.join(BACKUP_ROOT, f"bkp_ux_{TIMESTAMP}")
+CURRENT_BACKUP_DIR = os.path.join(BACKUP_ROOT, f"bkp_fix_ux_{TIMESTAMP}")
 
+# Caminhos corrigidos baseados na estrutura de Blueprints
 FILES_TO_MODIFY = [
-    "app/templates/base.html",
-    "app/main/routes.py",
-    "app/templates/main/dashboard.html"
+    "app/templates/base.html",           # Template Global
+    "app/main/routes.py",                # Rota do Blueprint Main
+    "app/main/templates/main/dashboard.html" # Caminho correto do Template Local
 ]
 
 def log(msg):
-    print(f"\033[96m[UX-SCRIPT]\033[0m {msg}")
+    print(f"\033[96m[FIX-SCRIPT]\033[0m {msg}")
+
+def ensure_dir_exists(file_path):
+    """Cria o diretório pai se não existir para evitar FileNotFoundError"""
+    directory = os.path.dirname(file_path)
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+        log(f"Diretório criado: {directory}")
 
 def create_backup():
-    log("Criando backup dos arquivos de interface...")
+    log("Criando backup de segurança...")
     if not os.path.exists(CURRENT_BACKUP_DIR):
         os.makedirs(CURRENT_BACKUP_DIR)
     
@@ -28,14 +35,16 @@ def create_backup():
         full_path = os.path.join(PROJECT_DIR, file_path)
         if os.path.exists(full_path):
             dest_path = os.path.join(CURRENT_BACKUP_DIR, file_path)
-            os.makedirs(os.path.dirname(dest_path), exist_ok=True)
+            ensure_dir_exists(dest_path)
             shutil.copy2(full_path, dest_path)
+        else:
+            log(f"Arquivo não encontrado para backup (será criado): {file_path}")
 
-def apply_ux_changes():
-    log("Aplicando melhorias de UX (Gráficos e Toasts)...")
+def apply_fixes():
+    log("Aplicando correções de UX no caminho correto...")
 
     # ---------------------------------------------------------
-    # 1. BASE.HTML (Adicionando Toastify e removendo alertas antigos)
+    # 1. BASE.HTML (Toastify e UI)
     # ---------------------------------------------------------
     content_base = """<!DOCTYPE html>
 <html lang="pt-br">
@@ -49,7 +58,7 @@ def apply_ux_changes():
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
-    <!-- Toastify CSS (Notificações) -->
+    <!-- Toastify CSS -->
     <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
     
     <style>
@@ -116,7 +125,6 @@ def apply_ux_changes():
         
         <div class="flex-1 h-full overflow-y-auto bg-slate-50 relative w-full">
             <div class="max-w-5xl mx-auto p-4 md:p-8 pb-20">
-                <!-- Conteúdo Principal -->
                 {% block content %}{% endblock %}
             </div>
             {% if current_user.is_authenticated and not current_user.is_first_access %}
@@ -128,7 +136,6 @@ def apply_ux_changes():
     <!-- Toastify JS -->
     <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
     <script>
-        // Logica para exibir notificações Flask como Toasts
         document.addEventListener('DOMContentLoaded', function() {
             {% with messages = get_flashed_messages(with_categories=true) %}
                 {% if messages %}
@@ -156,11 +163,13 @@ def apply_ux_changes():
 </body>
 </html>
 """
-    with open(os.path.join(PROJECT_DIR, "app/templates/base.html"), "w", encoding="utf-8") as f:
+    fpath_base = os.path.join(PROJECT_DIR, "app/templates/base.html")
+    ensure_dir_exists(fpath_base)
+    with open(fpath_base, "w", encoding="utf-8") as f:
         f.write(content_base)
 
     # ---------------------------------------------------------
-    # 2. MAIN ROUTES (Adicionando lógica de dados para o dashboard)
+    # 2. MAIN ROUTES (Lógica de Gráficos)
     # ---------------------------------------------------------
     content_routes = """from flask import Blueprint, render_template
 from flask_login import login_required, current_user
@@ -176,7 +185,7 @@ def dashboard():
     hoje = get_brasil_time()
     hoje_date = hoje.date()
     
-    # Lógica Padrão (Funcionário)
+    # Lógica Padrão
     pontos = PontoRegistro.query.filter_by(user_id=current_user.id, data_registro=hoje_date).count()
     status = "Não Iniciado"
     if pontos == 1: status = "Trabalhando"
@@ -188,12 +197,10 @@ def dashboard():
     dados_graficos = None
     
     if current_user.role == 'Master':
-        # 1. Estoque Baixo (Top 5 itens críticos)
         estoque_critico = ItemEstoque.query.filter(
             ItemEstoque.quantidade <= ItemEstoque.estoque_minimo
         ).order_by(ItemEstoque.quantidade).limit(5).all()
         
-        # 2. Resumo de Presença do Mês Atual
         resumos_mes = db_resumos_mes(hoje.year, hoje.month)
         
         dados_graficos = {
@@ -205,7 +212,6 @@ def dashboard():
     return render_template('main/dashboard.html', status_ponto=status, dados_graficos=dados_graficos)
 
 def db_resumos_mes(ano, mes):
-    # Agrega status do ponto (OK, Falta, Atraso, etc)
     stats = PontoResumo.query.with_entities(
         PontoResumo.status_dia, func.count(PontoResumo.id)
     ).filter(
@@ -213,27 +219,27 @@ def db_resumos_mes(ano, mes):
         extract('month', PontoResumo.data_referencia) == mes
     ).group_by(PontoResumo.status_dia).all()
     
-    # Formata para dicionário simples
     resultado = {'OK': 0, 'Falta': 0, 'Incompleto': 0, 'Hora Extra': 0, 'Débito': 0}
     for s, qtd in stats:
         if s in resultado:
             resultado[s] = qtd
         else:
-            # Agrupa outros status eventuais
             resultado['Incompleto'] += qtd
             
     return resultado
 """
-    with open(os.path.join(PROJECT_DIR, "app/main/routes.py"), "w", encoding="utf-8") as f:
+    fpath_routes = os.path.join(PROJECT_DIR, "app/main/routes.py")
+    ensure_dir_exists(fpath_routes)
+    with open(fpath_routes, "w", encoding="utf-8") as f:
         f.write(content_routes)
 
     # ---------------------------------------------------------
-    # 3. DASHBOARD.HTML (Inserindo Chart.js e Canvas)
+    # 3. DASHBOARD.HTML (Chart.js no Caminho Correto)
     # ---------------------------------------------------------
     content_dashboard = """{% extends 'base.html' %}
 {% block content %}
 
-<!-- Widget de Ponto (Para Todos) -->
+<!-- Widget de Ponto -->
 <div class="bg-gradient-to-r from-blue-900 to-slate-900 rounded-2xl p-6 text-white shadow-xl mb-8 flex justify-between items-center relative overflow-hidden transition transform hover:scale-[1.01]">
     <div class="absolute top-0 right-0 -mr-4 -mt-4 w-24 h-24 bg-white opacity-10 rounded-full blur-xl"></div>
     <div>
@@ -276,35 +282,31 @@ def db_resumos_mes(ano, mes):
     {% endif %}
 </div>
 
-<!-- DASHBOARD MASTER: GRÁFICOS -->
+<!-- GRÁFICOS MASTER -->
 {% if current_user.role == 'Master' and dados_graficos %}
-<h3 class="text-lg font-bold text-slate-800 mb-4 px-2">Visão Geral da Empresa</h3>
+<h3 class="text-lg font-bold text-slate-800 mb-4 px-2">Visão Geral</h3>
 <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12">
-    
-    <!-- Gráfico 1: Estoque Crítico -->
+    <!-- Gráfico 1 -->
     <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-        <h4 class="text-xs font-bold text-red-500 uppercase mb-4">Estoque Crítico (Baixo)</h4>
+        <h4 class="text-xs font-bold text-red-500 uppercase mb-4">Estoque Crítico</h4>
         {% if dados_graficos.estoque_labels %}
             <canvas id="chartEstoque"></canvas>
         {% else %}
-            <div class="h-40 flex items-center justify-center text-slate-400 text-sm">Tudo certo no estoque!</div>
+            <div class="h-40 flex items-center justify-center text-slate-400 text-sm">Estoque saudável.</div>
         {% endif %}
     </div>
 
-    <!-- Gráfico 2: Pontualidade -->
+    <!-- Gráfico 2 -->
     <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-        <h4 class="text-xs font-bold text-blue-500 uppercase mb-4">Frequência (Mês Atual)</h4>
+        <h4 class="text-xs font-bold text-blue-500 uppercase mb-4">Pontualidade (Mês)</h4>
         <div class="h-48">
             <canvas id="chartPonto"></canvas>
         </div>
     </div>
 </div>
 
-<!-- Chart.js CDN -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
 <script>
-    // Gráfico de Estoque (Barras)
     {% if dados_graficos.estoque_labels %}
     const ctxEstoque = document.getElementById('chartEstoque');
     new Chart(ctxEstoque, {
@@ -318,15 +320,10 @@ def db_resumos_mes(ano, mes):
                 borderRadius: 4
             }]
         },
-        options: {
-            responsive: true,
-            plugins: { legend: { display: false } },
-            scales: { y: { beginAtZero: true } }
-        }
+        options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
     });
     {% endif %}
 
-    // Gráfico de Ponto (Rosca)
     const ctxPonto = document.getElementById('chartPonto');
     const dadosPonto = {{ dados_graficos.ponto_status | tojson }};
     new Chart(ctxPonto, {
@@ -339,45 +336,42 @@ def db_resumos_mes(ano, mes):
                 borderWidth: 0
             }]
         },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: { 
-                legend: { position: 'right', labels: { font: { size: 10 }, boxWidth: 10 } } 
-            }
-        }
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { boxWidth: 10 } } } }
     });
 </script>
 {% endif %}
 
 {% endblock %}
 """
-    with open(os.path.join(PROJECT_DIR, "app/templates/main/dashboard.html"), "w", encoding="utf-8") as f:
+    # FIX: Caminho correto app/main/templates/main/dashboard.html
+    fpath_dashboard = os.path.join(PROJECT_DIR, "app/main/templates/main/dashboard.html")
+    ensure_dir_exists(fpath_dashboard)
+    with open(fpath_dashboard, "w", encoding="utf-8") as f:
         f.write(content_dashboard)
 
-    log("Arquivos atualizados.")
+    log("Arquivos criados/atualizados com sucesso.")
 
 def git_operations():
-    log("Executando Git Push automático...")
+    log("Enviando alterações para o Git...")
     try:
         subprocess.run(["git", "add", "."], check=True)
-        subprocess.run(["git", "commit", "-m", "UX Upgrade: Added Toastify notifications and Master Dashboard charts"], check=True)
+        subprocess.run(["git", "commit", "-m", "UX Upgrade: Fix path for dashboard and add charts"], check=True)
         subprocess.run(["git", "push"], check=True)
-        log("Código enviado para o repositório.")
+        log("Código enviado.")
     except subprocess.CalledProcessError as e:
         log(f"\033[91mErro no Git: {e}\033[0m")
 
 def self_destruct():
-    log("Iniciando auto-destruição...")
+    log("Auto-destruindo script...")
     try:
         os.remove(__file__)
-        log("Script deletado.")
-    except Exception as e:
-        log(f"Erro ao deletar script: {e}")
+        log("Limpo.")
+    except:
+        pass
 
 if __name__ == "__main__":
     create_backup()
-    apply_ux_changes()
+    apply_fixes()
     git_operations()
     self_destruct()
 

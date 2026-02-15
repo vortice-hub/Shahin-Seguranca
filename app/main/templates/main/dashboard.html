@@ -2,10 +2,10 @@
 {% block content %}
 
 <!-- Widget de Ponto -->
-<div class="bg-gradient-to-r from-blue-900 to-slate-900 rounded-2xl p-6 text-white shadow-xl mb-8 flex justify-between items-center relative overflow-hidden">
+<div class="bg-gradient-to-r from-blue-900 to-slate-900 rounded-2xl p-6 text-white shadow-xl mb-8 flex justify-between items-center relative overflow-hidden transition transform hover:scale-[1.01]">
     <div class="absolute top-0 right-0 -mr-4 -mt-4 w-24 h-24 bg-white opacity-10 rounded-full blur-xl"></div>
     <div>
-        <p class="text-xs font-bold text-blue-300 uppercase tracking-widest mb-1">Status do Ponto</p>
+        <p class="text-xs font-bold text-blue-300 uppercase tracking-widest mb-1">Status Hoje</p>
         <h2 class="text-2xl font-bold mb-1">{{ status_ponto }}</h2>
         <p class="text-xs opacity-70">{{ current_user.real_name }}</p>
     </div>
@@ -14,18 +14,93 @@
     </a>
 </div>
 
-<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-    <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-        <h3 class="font-bold text-slate-700 mb-2">Acesso Rápido</h3>
-        <p class="text-sm text-slate-500 mb-4">Use o menu lateral para acessar o histórico ou solicitar ajustes.</p>
-        <a href="/ponto/solicitar-ajuste" class="text-blue-600 text-sm font-bold hover:underline">Esqueceu de bater o ponto? Clique aqui.</a>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+    <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition">
+        <h3 class="font-bold text-slate-700 mb-2"><i class="fas fa-bolt text-yellow-500 mr-2"></i>Acesso Rápido</h3>
+        <div class="flex flex-col gap-2 mt-4">
+             <a href="/ponto/espelho" class="text-sm text-slate-600 hover:text-blue-600 flex items-center gap-2"><i class="fas fa-calendar-alt w-5"></i> Ver meu Espelho</a>
+             <a href="/holerites/meus-documentos" class="text-sm text-slate-600 hover:text-blue-600 flex items-center gap-2"><i class="fas fa-file-invoice w-5"></i> Meus Holerites</a>
+             <a href="/ponto/solicitar-ajuste" class="text-sm text-slate-600 hover:text-blue-600 flex items-center gap-2"><i class="fas fa-exclamation-circle w-5"></i> Ajustar Ponto</a>
+        </div>
     </div>
     
+    {% if current_user.role != 'Master' %}
+    <div class="bg-blue-50 p-6 rounded-xl border border-blue-100 shadow-sm flex items-center justify-center text-center">
+        <div>
+            <div class="text-blue-200 text-4xl mb-2"><i class="fas fa-quote-left"></i></div>
+            <p class="text-blue-800 font-medium italic text-sm">"O sucesso é a soma de pequenos esforços repetidos dia após dia."</p>
+        </div>
+    </div>
+    {% endif %}
+
     {% if current_user.role == 'Master' %}
-    <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm border-l-4 border-l-purple-500">
-        <h3 class="font-bold text-slate-700 mb-2">Área Master</h3>
-        <p class="text-sm text-slate-500">Você tem acesso administrativo.</p>
+    <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm border-l-4 border-l-purple-500 hover:shadow-md transition">
+        <h3 class="font-bold text-slate-700 mb-2"><i class="fas fa-crown text-purple-500 mr-2"></i>Área Master</h3>
+        <div class="grid grid-cols-2 gap-2 mt-4">
+            <a href="/admin/usuarios" class="bg-slate-50 hover:bg-slate-100 p-2 rounded text-center text-xs font-bold text-slate-600 border border-slate-200">Funcionários</a>
+            <a href="/admin/solicitacoes" class="bg-slate-50 hover:bg-slate-100 p-2 rounded text-center text-xs font-bold text-slate-600 border border-slate-200">Solicitações</a>
+        </div>
     </div>
     {% endif %}
 </div>
+
+<!-- GRÁFICOS MASTER -->
+{% if current_user.role == 'Master' and dados_graficos %}
+<h3 class="text-lg font-bold text-slate-800 mb-4 px-2">Visão Geral</h3>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12">
+    <!-- Gráfico 1 -->
+    <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+        <h4 class="text-xs font-bold text-red-500 uppercase mb-4">Estoque Crítico</h4>
+        {% if dados_graficos.estoque_labels %}
+            <canvas id="chartEstoque"></canvas>
+        {% else %}
+            <div class="h-40 flex items-center justify-center text-slate-400 text-sm">Estoque saudável.</div>
+        {% endif %}
+    </div>
+
+    <!-- Gráfico 2 -->
+    <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+        <h4 class="text-xs font-bold text-blue-500 uppercase mb-4">Pontualidade (Mês)</h4>
+        <div class="h-48">
+            <canvas id="chartPonto"></canvas>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    {% if dados_graficos.estoque_labels %}
+    const ctxEstoque = document.getElementById('chartEstoque');
+    new Chart(ctxEstoque, {
+        type: 'bar',
+        data: {
+            labels: {{ dados_graficos.estoque_labels | tojson }},
+            datasets: [{
+                label: 'Qtd Atual',
+                data: {{ dados_graficos.estoque_data | tojson }},
+                backgroundColor: '#ef4444',
+                borderRadius: 4
+            }]
+        },
+        options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+    });
+    {% endif %}
+
+    const ctxPonto = document.getElementById('chartPonto');
+    const dadosPonto = {{ dados_graficos.ponto_status | tojson }};
+    new Chart(ctxPonto, {
+        type: 'doughnut',
+        data: {
+            labels: ['OK', 'Falta', 'Hora Extra', 'Débito'],
+            datasets: [{
+                data: [dadosPonto['OK'], dadosPonto['Falta'], dadosPonto['Hora Extra'], dadosPonto['Débito']],
+                backgroundColor: ['#10b981', '#ef4444', '#3b82f6', '#f59e0b'],
+                borderWidth: 0
+            }]
+        },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { boxWidth: 10 } } } }
+    });
+</script>
+{% endif %}
+
 {% endblock %}
