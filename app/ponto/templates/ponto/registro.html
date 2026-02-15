@@ -1,48 +1,39 @@
 {% extends 'base.html' %}
 {% block content %}
-<!-- Biblioteca QR Code (Leve e rapida via CDN) -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 
 <div class="max-w-md mx-auto text-center">
     
-    <!-- Cabeçalho -->
-    <div class="mb-6">
+    <div class="mb-4">
         <h2 class="text-2xl font-bold text-slate-800">Meu Ponto</h2>
         <p class="text-sm text-slate-500">Aproxime este código do Terminal na portaria.</p>
     </div>
 
     {% if bloqueado %}
-    <!-- Bloqueio de Escala (Mantido da V26) -->
     <div class="bg-red-50 border-l-4 border-red-500 p-6 rounded-r-xl shadow-md text-left mb-8">
-        <h3 class="text-lg font-bold text-red-700 flex items-center gap-2"><i class="fas fa-ban"></i> ACESSO NEGADO</h3>
+        <h3 class="text-lg font-bold text-red-700 flex items-center gap-2"><i class="fas fa-ban"></i> AÇÃO BLOQUEADA</h3>
         <p class="text-sm text-red-600 mt-2">{{ motivo }}</p>
     </div>
     {% else %}
     
-    <!-- Área do QR Code -->
     <div class="bg-white rounded-3xl shadow-xl border border-slate-200 p-8 relative overflow-hidden">
-        
-        <!-- Faixa Decorativa -->
         <div class="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-blue-500 to-purple-600"></div>
 
-        <!-- Dados do Usuário -->
-        <div class="mb-6">
+        <div class="mb-4">
             <h3 class="text-xl font-bold text-slate-800">{{ current_user.real_name }}</h3>
             <p class="text-xs text-slate-400 font-mono uppercase">{{ current_user.role }}</p>
         </div>
 
-        <!-- O QR Code (Container) -->
+        <!-- QR Code Gigante -->
         <div class="flex justify-center mb-6">
-            <div id="qrcode" class="p-2 border-4 border-slate-100 rounded-xl"></div>
+            <div id="qrcode" class="p-2 border-4 border-slate-900 rounded-xl bg-white"></div>
         </div>
 
-        <!-- Barra de Tempo de Vida -->
         <div class="w-full bg-slate-100 rounded-full h-2.5 mb-2">
             <div id="progressBar" class="bg-blue-600 h-2.5 rounded-full transition-all duration-1000 ease-linear" style="width: 100%"></div>
         </div>
         <p class="text-xs text-slate-400 font-mono" id="statusToken">Atualizando em <span id="countdown">30</span>s...</p>
 
-        <!-- Status do Dia -->
         <div class="mt-6 pt-6 border-t border-slate-100 flex justify-between items-center">
             <div class="text-left">
                 <span class="block text-[10px] font-bold text-slate-400 uppercase">Próximo Ponto</span>
@@ -56,7 +47,6 @@
     </div>
     {% endif %}
 
-    <!-- Histórico Rápido -->
     <div class="mt-8 text-left">
         <h3 class="text-xs font-bold text-slate-400 uppercase mb-3 ml-1">Batidas de Hoje</h3>
         <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden divide-y divide-slate-100">
@@ -66,15 +56,10 @@
                     <i class="fas fa-circle text-[6px] {% if 'Entrada' in p.tipo %}text-emerald-500{% else %}text-amber-500{% endif %}"></i>
                     {{ p.tipo }}
                 </span>
-                <span class="text-sm font-mono text-slate-500 font-bold bg-slate-50 px-2 py-1 rounded">
-                    {{ p.hora_registro.strftime('%H:%M') }}
-                </span>
+                <span class="text-sm font-mono text-slate-500 font-bold bg-slate-50 px-2 py-1 rounded">{{ p.hora_registro.strftime('%H:%M') }}</span>
             </div>
             {% else %}
-            <div class="p-6 text-center text-xs text-slate-400">
-                <i class="far fa-clock text-xl mb-2 opacity-30 block"></i>
-                Ainda não iniciou a jornada.
-            </div>
+            <div class="p-6 text-center text-xs text-slate-400">Ainda não iniciou a jornada.</div>
             {% endfor %}
         </div>
     </div>
@@ -82,11 +67,10 @@
 
 <script>
     let timerInterval;
-    const TIME_LIMIT = 30; // Segundos de validade
+    const TIME_LIMIT = 30; 
     let timeLeft = TIME_LIMIT;
 
     function generateQRCode() {
-        // 1. Pede um novo token seguro para o servidor
         fetch('/ponto/api/gerar-token')
             .then(response => response.json())
             .then(data => {
@@ -94,65 +78,61 @@
                     document.getElementById('qrcode').innerHTML = `<p class="text-red-500 text-xs">${data.error}</p>`;
                     return;
                 }
-
-                // 2. Limpa o QR anterior
                 const container = document.getElementById("qrcode");
                 container.innerHTML = "";
-
-                // 3. Desenha o novo
+                // AUMENTADO PARA 260px (Mais facil de ler)
                 new QRCode(container, {
                     text: data.token,
-                    width: 180,
-                    height: 180,
-                    colorDark : "#1e293b",
+                    width: 260,
+                    height: 260,
+                    colorDark : "#000000",
                     colorLight : "#ffffff",
-                    correctLevel : QRCode.CorrectLevel.M
+                    correctLevel : QRCode.CorrectLevel.L // Low correction = menos pixels = mais facil ler
                 });
-
-                // 4. Reinicia o contador visual
                 resetTimer();
             })
-            .catch(err => {
-                console.error("Erro ao gerar token:", err);
-                document.getElementById("statusToken").innerText = "Erro de conexão. Tentando...";
-            });
+            .catch(err => { console.error("Erro:", err); });
     }
 
     function resetTimer() {
         timeLeft = TIME_LIMIT;
         clearInterval(timerInterval);
-        
         const bar = document.getElementById("progressBar");
         const text = document.getElementById("countdown");
 
         timerInterval = setInterval(() => {
             timeLeft--;
             text.innerText = timeLeft;
-            
-            // Calcula porcentagem
             const pct = (timeLeft / TIME_LIMIT) * 100;
             bar.style.width = pct + "%";
-
-            // Muda cor se estiver acabando
-            if (timeLeft < 5) {
-                bar.classList.remove('bg-blue-600');
-                bar.classList.add('bg-red-500');
-            } else {
-                bar.classList.add('bg-blue-600');
-                bar.classList.remove('bg-red-500');
-            }
-
-            if (timeLeft <= 0) {
-                generateQRCode(); // Gera novo automaticamente
-            }
+            if (timeLeft <= 0) generateQRCode();
         }, 1000);
     }
-
-    // Inicia ao carregar
-    document.addEventListener("DOMContentLoaded", () => {
+    
+    // Polling: Verifica se o ponto foi batido a cada 2 segundos
+    setInterval(() => {
         {% if not bloqueado %}
-            generateQRCode();
+        fetch('/ponto/api/check-status')
+            .then(r => r.json())
+            .then(data => {
+                if (data.marcado) {
+                    // Feedback Visual e Redirect
+                    document.body.innerHTML = `
+                        <div class="flex h-screen items-center justify-center bg-emerald-600 text-white flex-col">
+                            <i class="fas fa-check-circle text-6xl mb-4 animate-bounce"></i>
+                            <h1 class="text-3xl font-bold">PONTO REGISTRADO!</h1>
+                            <p class="text-lg mt-2">${data.tipo} às ${data.hora}</p>
+                            <p class="text-sm mt-4 opacity-80">Redirecionando...</p>
+                        </div>
+                    `;
+                    setTimeout(() => { window.location.href = '/'; }, 3000);
+                }
+            });
         {% endif %}
+    }, 2000);
+
+    document.addEventListener("DOMContentLoaded", () => {
+        {% if not bloqueado %} generateQRCode(); {% endif %}
     });
 </script>
 {% endblock %}

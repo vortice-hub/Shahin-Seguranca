@@ -3,44 +3,104 @@
 <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
 <style>
     .terminal-mode { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #0f172a; z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; color: white; }
-    #reader { width: 100%; max-width: 500px; border-radius: 20px; overflow: hidden; border: 4px solid #3b82f6; background: black; }
-    .status-box { margin-top: 20px; padding: 20px; border-radius: 15px; width: 90%; max-width: 500px; text-align: center; background: #1e293b; border: 1px solid #334155; transition: all 0.3s ease; }
-    .status-success { background: #064e3b; border-color: #10b981; }
-    .status-error { background: #7f1d1d; border-color: #ef4444; }
-    .last-scans { margin-top: 20px; width: 90%; max-width: 500px; height: 150px; overflow-y: auto; background: rgba(255,255,255,0.05); border-radius: 10px; padding: 10px; }
-    .scan-item { font-size: 0.8rem; padding: 8px; border-bottom: 1px solid rgba(255,255,255,0.1); display: flex; justify-content: space-between; }
+    #reader { width: 100%; max-width: 600px; border-radius: 20px; overflow: hidden; border: 4px solid #3b82f6; background: black; }
+    
+    /* MODAL OVERLAY */
+    #successModal {
+        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(0,0,0,0.9);
+        display: flex; align-items: center; justify-content: center;
+        z-index: 10000;
+        opacity: 0; pointer-events: none; transition: opacity 0.3s;
+    }
+    #successModal.active { opacity: 1; pointer-events: all; }
+    
+    .modal-content {
+        background: #064e3b; /* Emerald 900 */
+        padding: 40px; border-radius: 20px; text-align: center;
+        border: 2px solid #10b981;
+        box-shadow: 0 0 50px rgba(16, 185, 129, 0.5);
+        max-width: 90%;
+    }
+    .modal-content h2 { font-size: 2rem; font-weight: bold; color: white; margin-bottom: 10px; }
+    .modal-content p { font-size: 1.5rem; color: #a7f3d0; margin-bottom: 30px; }
+    .btn-next {
+        background: white; color: #064e3b; font-size: 1.2rem; font-weight: bold;
+        padding: 15px 40px; border-radius: 50px; border: none; cursor: pointer;
+        display: inline-flex; align-items: center; gap: 10px;
+    }
 </style>
+
 <div class="terminal-mode">
-    <div class="mb-4 text-center"><h1 class="text-2xl font-bold tracking-widest text-blue-400">SHAHIN GESTÃO</h1><p class="text-xs text-slate-400">TERMINAL DE PONTO</p></div>
+    <div class="mb-4 text-center"><h1 class="text-3xl font-bold tracking-widest text-blue-400">SHAHIN GESTÃO</h1><p class="text-sm text-slate-400">TERMINAL DE PONTO</p></div>
     <div id="reader"></div>
-    <div id="statusBox" class="status-box"><h2 id="statusTitle" class="text-xl font-bold">Aguardando...</h2><p id="statusMsg" class="text-sm text-slate-400">Aproxime o QR Code do celular</p></div>
-    <div class="last-scans" id="historyLog"></div>
     <div class="mt-4"><a href="/logout" class="text-xs text-slate-600 hover:text-slate-400">Sair do Modo Terminal</a></div>
 </div>
+
+<!-- Modal de Sucesso -->
+<div id="successModal">
+    <div class="modal-content">
+        <i class="fas fa-check-circle text-6xl text-emerald-400 mb-4"></i>
+        <h2 id="modalTitle">REGISTRADO!</h2>
+        <p id="modalMsg">Fulano de Tal<br>14:30</p>
+        <button class="btn-next" onclick="resetScanner()">
+            <i class="fas fa-redo"></i> PRÓXIMO
+        </button>
+    </div>
+</div>
+
 <script>
     const html5QrCode = new Html5Qrcode("reader");
     let isScanning = true;
-    const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+    
+    // Configuração para QR Code denso
+    const config = { fps: 10, qrbox: { width: 300, height: 300 } };
+    
     html5QrCode.start({ facingMode: "environment" }, config, onScanSuccess, onScanFailure);
+
     function onScanSuccess(decodedText, decodedResult) {
         if (!isScanning) return;
         isScanning = false;
-        processarPonto(decodedText);
-        setTimeout(() => { isScanning = true; }, 3000);
-    }
-    function onScanFailure(error) {}
-    function processarPonto(token) {
-        const box = document.getElementById('statusBox'); const title = document.getElementById('statusTitle'); const msg = document.getElementById('statusMsg');
-        box.className = "status-box"; title.innerText = "Processando...";
-        fetch('/ponto/api/registrar-leitura', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ token: token }) })
+        
+        // Som de Beep
+        try { new Audio("https://actions.google.com/sounds/v1/alarms/beep_short.ogg").play(); } catch(e){}
+
+        fetch('/ponto/api/registrar-leitura', { 
+            method: 'POST', 
+            headers: {'Content-Type': 'application/json'}, 
+            body: JSON.stringify({ token: decodedText }) 
+        })
         .then(response => response.json())
         .then(data => {
-            if (data.success) { box.classList.add('status-success'); title.innerText = "REGISTRADO!"; msg.innerText = `${data.funcionario} às ${data.hora}`; addToHistory(data.funcionario, data.hora); } 
-            else { box.classList.add('status-error'); title.innerText = "ERRO"; msg.innerText = data.error; }
+            if (data.success) {
+                showModal(data.funcionario, data.hora, data.tipo);
+            } else {
+                alert("ERRO: " + data.error);
+                setTimeout(() => { isScanning = true; }, 2000);
+            }
         })
-        .catch(err => { box.classList.add('status-error'); title.innerText = "ERRO"; msg.innerText = "Falha de conexão"; })
-        .finally(() => { setTimeout(() => { box.className = "status-box"; title.innerText = "Aguardando..."; msg.innerText = "Aproxime o QR Code"; }, 2500); });
+        .catch(err => {
+            alert("Erro de conexão.");
+            setTimeout(() => { isScanning = true; }, 2000);
+        });
     }
-    function addToHistory(nome, hora) { const log = document.getElementById('historyLog'); log.innerHTML = `<div class="scan-item"><span class="text-emerald-400">${nome}</span> <span>${hora}</span></div>` + log.innerHTML; }
+
+    function onScanFailure(error) {}
+
+    function showModal(nome, hora, tipo) {
+        document.getElementById('modalTitle').innerText = tipo.toUpperCase() + " REGISTRADA";
+        document.getElementById('modalMsg').innerHTML = `<strong>${nome}</strong><br>${hora}`;
+        document.getElementById('successModal').classList.add('active');
+        
+        // Auto-fechar em 4s se ninguem clicar
+        setTimeout(() => {
+            if(document.getElementById('successModal').classList.contains('active')) resetScanner();
+        }, 4000);
+    }
+
+    function resetScanner() {
+        document.getElementById('successModal').classList.remove('active');
+        isScanning = true;
+    }
 </script>
 {% endblock %}

@@ -1,15 +1,16 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app
 from flask_login import login_required, current_user
-from app.extensions import db
+from app import db
 from app.models import PontoRegistro, PontoResumo, User, PontoAjuste
 from app.utils import get_brasil_time, calcular_dia, format_minutes_to_hm, data_por_extenso
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from sqlalchemy import func
 from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadSignature
 
 ponto_bp = Blueprint('ponto', __name__, template_folder='templates', url_prefix='/ponto')
 
-# --- 1. API QR CODE (NECESSÁRIA PARA O TEMPLATE REGISTRO.HTML) ---
+# --- APIS DO SISTEMA DE PONTO ---
+
 @ponto_bp.route('/api/gerar-token', methods=['GET'])
 @login_required
 def gerar_token_qrcode():
@@ -17,6 +18,32 @@ def gerar_token_qrcode():
     s = URLSafeTimedSerializer(current_app.secret_key)
     token = s.dumps({'user_id': current_user.id, 'timestamp': get_brasil_time().timestamp()})
     return jsonify({'token': token})
+
+@ponto_bp.route('/api/check-status', methods=['GET'])
+@login_required
+def check_status_ponto():
+    # Verifica se houve um ponto registrado nos ultimos 10 segundos
+    # Isso permite que o celular do funcionario saiba que o terminal leu o codigo
+    if current_user.role == 'Terminal': return jsonify({'status': 'ignorar'})
+    
+    agora = get_brasil_time()
+    # Busca ultimo ponto do usuario
+    ultimo_ponto = PontoRegistro.query.filter_by(user_id=current_user.id).order_by(PontoRegistro.id.desc()).first()
+    
+    if ultimo_ponto:
+        # Pega data/hora do ponto
+        dt_ponto = datetime.combine(ultimo_ponto.data_registro, ultimo_ponto.hora_registro)
+        # Se foi registrado ha menos de 10 segundos
+        diferenca = (agora - dt_ponto).total_seconds()
+        
+        if diferenca < 15: # Janela de tempo para notificar
+            return jsonify({
+                'marcado': True, 
+                'tipo': ultimo_ponto.tipo, 
+                'hora': ultimo_ponto.hora_registro.strftime('%H:%M')
+            })
+            
+    return jsonify({'marcado': False})
 
 @ponto_bp.route('/api/registrar-leitura', methods=['POST'])
 @login_required
@@ -32,6 +59,15 @@ def registrar_leitura_terminal():
         if not user_alvo: return jsonify({'error': 'Usuário inválido'}), 404
         
         hoje = get_brasil_time().date()
+        
+        # Verifica duplicidade imediata (evita leitura dupla em 1 min)
+        ultimo = PontoRegistro.query.filter_by(user_id=user_alvo.id, data_registro=hoje).order_by(PontoRegistro.hora_registro.desc()).first()
+        if ultimo:
+            agora_time = get_brasil_time()
+            dt_ultimo = datetime.combine(hoje, ultimo.hora_registro)
+            if (agora_time - dt_ultimo).total_seconds() < 60:
+                 return jsonify({'error': f'Ponto já registrado há instantes ({ultimo.hora_registro.strftime("%H:%M")}). Aguarde.'}), 400
+
         pontos_hoje = PontoRegistro.query.filter_by(user_id=user_alvo.id, data_registro=hoje).order_by(PontoRegistro.hora_registro).all()
         
         proxima = "Entrada"
@@ -43,12 +79,13 @@ def registrar_leitura_terminal():
         novo = PontoRegistro(user_id=user_alvo.id, data_registro=hoje, hora_registro=get_brasil_time().time(), tipo=proxima, latitude='QR-Code', longitude='Presencial')
         db.session.add(novo); db.session.commit(); calcular_dia(user_alvo.id, hoje)
         
-        return jsonify({'success': True, 'message': f'Ponto registrado: {proxima}', 'funcionario': user_alvo.real_name, 'hora': novo.hora_registro.strftime('%H:%M')})
+        return jsonify({'success': True, 'message': f'Ponto registrado: {proxima}', 'funcionario': user_alvo.real_name, 'hora': novo.hora_registro.strftime('%H:%M'), 'tipo': proxima})
     except SignatureExpired: return jsonify({'error': 'QR Code expirado.'}), 400
     except BadSignature: return jsonify({'error': 'QR Code inválido.'}), 400
     except Exception as e: return jsonify({'error': f'Erro interno: {str(e)}'}), 500
 
-# --- 2. ROTA SCANNER (RESTAURADA) ---
+# --- ROTAS DE INTERFACE ---
+
 @ponto_bp.route('/scanner')
 @login_required
 def terminal_scanner():
@@ -57,48 +94,34 @@ def terminal_scanner():
         return redirect(url_for('main.dashboard'))
     return render_template('ponto/terminal_leitura.html')
 
-# --- 3. ROTA REGISTRAR (CORRIGIDA PARA ENVIAR VARIÁVEIS) ---
 @ponto_bp.route('/registrar', methods=['GET', 'POST'])
 @login_required
 def registrar_ponto():
-    # Redireciona terminal para scanner
     if current_user.role == 'Terminal': return redirect(url_for('ponto.terminal_scanner'))
 
     hoje = get_brasil_time().date()
     hoje_extenso = data_por_extenso(hoje)
     
-    # Lógica de Bloqueio
     bloqueado = False; motivo = ""
     if current_user.escala == '5x2' and hoje.weekday() >= 5: bloqueado = True; motivo = "Não é possível realizar a marcação de ponto."
     elif current_user.escala == '12x36' and current_user.data_inicio_escala:
         if (hoje - current_user.data_inicio_escala).days % 2 != 0: bloqueado = True; motivo = "Não é possível realizar a marcação de ponto."
 
     pontos = PontoRegistro.query.filter_by(user_id=current_user.id, data_registro=hoje).order_by(PontoRegistro.hora_registro).all()
-    
-    # Lógica de Proxima Ação (Para exibição no card)
     prox = "Entrada"
     if len(pontos) == 1: prox = "Ida Almoço"
     elif len(pontos) == 2: prox = "Volta Almoço"
     elif len(pontos) == 3: prox = "Saída"
     elif len(pontos) >= 4: prox = "Extra"
 
-    # POST mantido para compatibilidade, mas o foco é o QR Code
     if request.method == 'POST':
         if bloqueado: flash('Bloqueado'); return redirect(url_for('main.dashboard'))
         db.session.add(PontoRegistro(user_id=current_user.id, data_registro=hoje, hora_registro=get_brasil_time().time(), tipo=prox, latitude=request.form.get('latitude'), longitude=request.form.get('longitude')))
         db.session.commit(); calcular_dia(current_user.id, hoje)
         return redirect(url_for('main.dashboard'))
     
-    # AQUI ESTAVA O ERRO: Agora passamos 'hoje' e todas as outras variaveis
-    return render_template('ponto/registro.html', 
-                         proxima_acao=prox, 
-                         hoje_extenso=hoje_extenso, 
-                         pontos=pontos, # Template usa 'pontos'
-                         bloqueado=bloqueado, 
-                         motivo=motivo, 
-                         hoje=hoje) # Variavel que faltava
+    return render_template('ponto/registro.html', proxima_acao=prox, hoje_extenso=hoje_extenso, pontos=pontos, bloqueado=bloqueado, motivo=motivo, hoje=hoje)
 
-# --- 4. ESPELHO ---
 @ponto_bp.route('/espelho')
 @login_required
 def espelho_ponto():
@@ -121,7 +144,7 @@ def espelho_ponto():
     for r in resumos:
         batidas = PontoRegistro.query.filter_by(user_id=target_user_id, data_registro=r.data_referencia).order_by(PontoRegistro.hora_registro).all()
         detalhes[r.id] = [b.hora_registro.strftime('%H:%M') for b in batidas]
-    
+
     dias_semana = {0: 'Seg', 1: 'Ter', 2: 'Qua', 3: 'Qui', 4: 'Sex', 5: 'Sáb', 6: 'Dom'}
 
     return render_template('ponto/ponto_espelho.html', 
