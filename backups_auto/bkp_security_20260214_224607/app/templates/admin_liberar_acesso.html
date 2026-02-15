@@ -12,7 +12,6 @@
             <p class="text-xs text-blue-600">O funcionário só poderá criar conta se o CPF estiver aqui.</p>
         </div>
         <form action="/admin/liberar-acesso" method="POST" class="p-6 space-y-4">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
             <!-- Dados Basicos -->
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>

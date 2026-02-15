@@ -7,6 +7,3 @@ werkzeug
 cloudinary
 pypdf
 requests
-python-dotenv
-Flask-WTF
-email_validator

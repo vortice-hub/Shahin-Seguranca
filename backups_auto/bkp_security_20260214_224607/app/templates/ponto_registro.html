@@ -15,7 +15,6 @@
         <div class="mt-6 inline-block bg-blue-600 text-xs font-bold px-4 py-1 rounded-full uppercase tracking-wide shadow-lg">Próximo: {{ proxima_acao }}</div>
     </div>
     <form action="/ponto/registrar" method="POST" id="formPonto">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
         <input type="hidden" name="latitude" id="lat"><input type="hidden" name="longitude" id="lon">
         <button type="button" onclick="getLocationAndSubmit()" id="btnRegistrar" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-5 rounded-xl shadow-xl transition transform active:scale-95 flex items-center justify-center gap-3 text-lg"><i class="fas fa-fingerprint text-2xl"></i> REGISTRAR</button>
         <p id="geoStatus" class="text-xs text-slate-400 mt-4 h-4"></p>
