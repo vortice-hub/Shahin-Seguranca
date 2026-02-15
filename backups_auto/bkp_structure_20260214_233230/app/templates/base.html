@@ -13,7 +13,12 @@
     <!-- Toastify CSS -->
     <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
     
-    
+    <style>
+        body { font-family: 'Inter', sans-serif; } 
+        .sidebar { transition: transform 0.3s ease-in-out; } 
+        .animate-fade-in { animation: fadeIn 0.5s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
     
     <script>
         function toggleSidebar() {
@@ -23,7 +28,6 @@
             else { sb.classList.add('-translate-x-full'); ov.classList.add('hidden'); }
         }
     </script>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body class="bg-slate-50 text-slate-800">
     {% if current_user.is_authenticated and not current_user.is_first_access %}

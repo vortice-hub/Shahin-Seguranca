@@ -43,13 +43,13 @@ def novo_usuario():
             )
             db.session.add(novo_pre)
             db.session.commit()
-            return render_template('admin/sucesso_usuario.html', nome_real=real_name, cpf=cpf)
+            return render_template('sucesso_usuario.html', nome_real=real_name, cpf=cpf)
             
         except Exception as e:
             db.session.rollback()
             flash(f'Erro ao criar: {str(e)}', 'error')
             
-    return render_template('admin/novo_usuario.html')
+    return render_template('novo_usuario.html')
 
 @admin_bp.route('/solicitacoes', methods=['GET', 'POST'])
 @login_required
@@ -76,12 +76,12 @@ def admin_solicitacoes():
             
     solicitacoes = PontoAjuste.query.filter_by(status='Pendente').order_by(PontoAjuste.created_at.desc()).all()
     extras = {} # Dicionário para dados auxiliares se necessário
-    return render_template('admin/solicitacoes.html', solicitacoes=solicitacoes, extras=extras)
+    return render_template('admin_solicitacoes.html', solicitacoes=solicitacoes, extras=extras)
 
 @admin_bp.route('/liberar-acesso', methods=['POST'])
 @login_required
 def liberar_acesso():
-    # Rota auxiliar para processar o formulário da página 'admin/liberar_acesso.html'
+    # Rota auxiliar para processar o formulário da página 'admin_liberar_acesso.html'
     if current_user.role != 'Master': return redirect(url_for('main.dashboard'))
     
     try:

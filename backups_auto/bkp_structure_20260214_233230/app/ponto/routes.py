@@ -42,7 +42,7 @@ def registrar_ponto():
     
     # Busca histórico do dia para exibir
     registros = PontoRegistro.query.filter_by(user_id=current_user.id, data_registro=hoje).order_by(PontoRegistro.hora_registro).all()
-    return render_template('ponto/registro.html', registros=registros)
+    return render_template('ponto_registro.html', registros=registros)
 
 @ponto_bp.route('/espelho')
 @login_required
