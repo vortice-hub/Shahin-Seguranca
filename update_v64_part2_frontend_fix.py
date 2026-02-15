@@ -1,3 +1,13 @@
+import os
+import sys
+import subprocess # Adicionado a importação que faltava
+
+# --- CONFIGURAÇÕES ---
+PROJECT_NAME = "Shahin Gestão"
+COMMIT_MSG = "V64 Part 2: Frontend QR Code - Tela de Cracha Digital Dinamico"
+
+# --- 1. ATUALIZAR TEMPLATE REGISTRO.HTML (Substituir botões por QR Code) ---
+FILE_PONTO_REGISTRO = """
 {% extends 'base.html' %}
 {% block content %}
 <!-- Biblioteca QR Code (Leve e rapida via CDN) -->
@@ -156,3 +166,33 @@
     });
 </script>
 {% endblock %}
+"""
+
+# --- FUNÇÕES ---
+def write_file(path, content):
+    os.makedirs(os.path.dirname(path) if os.path.dirname(path) else '.', exist_ok=True)
+    with open(path, 'w', encoding='utf-8') as f: f.write(content.strip())
+    print(f"Atualizado: {path}")
+
+def git_update():
+    try:
+        subprocess.run(["git", "add", "."], check=True)
+        subprocess.run(["git", "commit", "-m", COMMIT_MSG], check=False)
+        subprocess.run(["git", "push"], check=True)
+        print("\n>>> SUCESSO V64 PARTE 2! FRONTEND DO CRACHÁ ATIVO <<<")
+    except Exception as e: print(f"Git: {e}")
+
+def self_destruct():
+    try: os.remove(os.path.abspath(__file__))
+    except: pass
+
+def main():
+    print(f"--- UPDATE V64 PARTE 2 FIX (FRONTEND): {PROJECT_NAME} ---")
+    write_file("app/ponto/templates/ponto/registro.html", FILE_PONTO_REGISTRO)
+    git_update()
+    self_destruct()
+
+if __name__ == "__main__":
+    main()
+
+
