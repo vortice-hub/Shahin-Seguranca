@@ -1,15 +1,15 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app
 from flask_login import login_required, current_user
-from app import db
+from app.extensions import db
 from app.models import PontoRegistro, PontoResumo, User, PontoAjuste
 from app.utils import get_brasil_time, calcular_dia, format_minutes_to_hm, data_por_extenso
 from datetime import datetime, date
 from sqlalchemy import func
 from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadSignature
 
-ponto_bp = Blueprint('ponto', __name__, url_prefix='/ponto')
+ponto_bp = Blueprint('ponto', __name__, template_folder='templates', url_prefix='/ponto')
 
-# --- 1. API QR CODE (BACKEND) ---
+# --- API QR CODE (RESTAURADA) ---
 @ponto_bp.route('/api/gerar-token', methods=['GET'])
 @login_required
 def gerar_token_qrcode():
@@ -48,35 +48,33 @@ def registrar_leitura_terminal():
     except BadSignature: return jsonify({'error': 'QR Code inválido.'}), 400
     except Exception as e: return jsonify({'error': f'Erro interno: {str(e)}'}), 500
 
-# --- 2. ROTA SCANNER (VISUAL TERMINAL) ---
+# --- ROTA SCANNER (RESTAURADA) ---
 @ponto_bp.route('/scanner')
 @login_required
 def terminal_scanner():
-    # Rota exclusiva para o Terminal ler os códigos
     if current_user.role != 'Terminal' and current_user.role != 'Master':
-        flash('Acesso restrito ao Terminal de Ponto.')
+        flash('Acesso restrito.')
         return redirect(url_for('main.dashboard'))
-    # Garante que o template existe (vamos recriar no script se precisar)
     return render_template('ponto/terminal_leitura.html')
 
-# --- 3. REGISTRO MANUAL/QR CODE (FUNCIONARIO) ---
+# --- ROTA REGISTRAR (CORRIGIDA) ---
 @ponto_bp.route('/registrar', methods=['GET', 'POST'])
 @login_required
 def registrar_ponto():
-    # Se o usuario Terminal tentar acessar o registro manual, joga ele pro scanner
-    if current_user.role == 'Terminal':
-        return redirect(url_for('ponto.terminal_scanner'))
+    if current_user.role == 'Terminal': return redirect(url_for('ponto.terminal_scanner'))
 
     hoje = get_brasil_time().date()
     hoje_extenso = data_por_extenso(hoje)
     
+    # Lógica de Bloqueio (Restaurada)
     bloqueado = False; motivo = ""
-    
     if current_user.escala == '5x2' and hoje.weekday() >= 5: bloqueado = True; motivo = "Não é possível realizar a marcação de ponto."
     elif current_user.escala == '12x36' and current_user.data_inicio_escala:
         if (hoje - current_user.data_inicio_escala).days % 2 != 0: bloqueado = True; motivo = "Não é possível realizar a marcação de ponto."
 
     pontos = PontoRegistro.query.filter_by(user_id=current_user.id, data_registro=hoje).order_by(PontoRegistro.hora_registro).all()
+    
+    # Lógica de Próxima Ação (Restaurada)
     prox = "Entrada"
     if len(pontos) == 1: prox = "Ida Almoço"
     elif len(pontos) == 2: prox = "Volta Almoço"
@@ -89,10 +87,15 @@ def registrar_ponto():
         db.session.commit(); calcular_dia(current_user.id, hoje)
         return redirect(url_for('main.dashboard'))
     
-    # CORREÇÃO CRÍTICA: Passando 'hoje' explicitamente
-    return render_template('ponto/registro.html', proxima_acao=prox, hoje_extenso=hoje_extenso, pontos=pontos, bloqueado=bloqueado, motivo=motivo, hoje=hoje)
+    # FIX: Passando todas as variáveis necessárias e corrigindo o nome da lista para 'pontos'
+    return render_template('ponto/registro.html', 
+                         proxima_acao=prox, 
+                         hoje_extenso=hoje_extenso, 
+                         pontos=pontos, # Template usa 'pontos', não 'registros'
+                         bloqueado=bloqueado, 
+                         motivo=motivo, 
+                         hoje=hoje) # FIX: Passando a variavel hoje que faltava
 
-# --- 4. ESPELHO DE PONTO ---
 @ponto_bp.route('/espelho')
 @login_required
 def espelho_ponto():
@@ -126,7 +129,6 @@ def espelho_ponto():
                          mes_ref=mes_ref,
                          dias_semana=dias_semana)
 
-# --- 5. SOLICITAR AJUSTE ---
 @ponto_bp.route('/solicitar-ajuste', methods=['GET', 'POST'])
 @login_required
 def solicitar_ajuste():

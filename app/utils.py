@@ -1,9 +1,18 @@
 from datetime import datetime, timedelta, time
+from app.models import db, PontoRegistro, PontoResumo, User
 import unicodedata
 import re
 
 def get_brasil_time():
     return datetime.utcnow() - timedelta(hours=3)
+
+def data_por_extenso(data_obj):
+    meses = {
+        1: 'Janeiro', 2: 'Fevereiro', 3: 'Março', 4: 'Abril',
+        5: 'Maio', 6: 'Junho', 7: 'Julho', 8: 'Agosto',
+        9: 'Setembro', 10: 'Outubro', 11: 'Novembro', 12: 'Dezembro'
+    }
+    return f"{data_obj.day} de {meses[data_obj.month]} de {data_obj.year}"
 
 def remove_accents(txt):
     if not txt: return ""
@@ -32,7 +41,6 @@ def format_minutes_to_hm(total_minutes):
     return f"{sinal}{h:02d}:{m:02d}"
 
 def calcular_dia(user_id, data_ref):
-    from app import db
     from app.models import User, PontoRegistro, PontoResumo
     user = User.query.get(user_id)
     if not user: return
@@ -74,6 +82,7 @@ def calcular_dia(user_id, data_ref):
     resumo.minutos_esperados = minutos_esperados
     resumo.minutos_saldo = saldo
     resumo.status_dia = status
+    
     try:
         db.session.commit()
     except:
