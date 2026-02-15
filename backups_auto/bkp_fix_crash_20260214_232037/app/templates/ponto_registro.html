@@ -1,43 +1,4 @@
-import os
-import shutil
-import subprocess
-from datetime import datetime
-
-# ================= CONFIGURAÇÕES =================
-PROJECT_DIR = os.getcwd()
-BACKUP_ROOT = os.path.join(PROJECT_DIR, "backups_auto")
-TIMESTAMP = datetime.now().strftime("%Y%m%d_%H%M%S")
-CURRENT_BACKUP_DIR = os.path.join(BACKUP_ROOT, f"bkp_fix_crash_{TIMESTAMP}")
-
-FILES_TO_MODIFY = [
-    "app/templates/ponto_registro.html"
-]
-
-def log(msg):
-    print(f"\033[96m[FIX-SCRIPT]\033[0m {msg}")
-
-def ensure_dir_exists(file_path):
-    directory = os.path.dirname(file_path)
-    if not os.path.exists(directory):
-        os.makedirs(directory)
-
-def create_backup():
-    log("Criando backup de segurança...")
-    if not os.path.exists(CURRENT_BACKUP_DIR):
-        os.makedirs(CURRENT_BACKUP_DIR)
-    
-    for file_path in FILES_TO_MODIFY:
-        full_path = os.path.join(PROJECT_DIR, file_path)
-        if os.path.exists(full_path):
-            dest_path = os.path.join(CURRENT_BACKUP_DIR, file_path)
-            ensure_dir_exists(dest_path)
-            shutil.copy2(full_path, dest_path)
-
-def apply_fixes():
-    log("Aplicando correção no template de registro...")
-
-    # Correção: Adiciona verificação 'if p.tipo' antes de tentar ler o conteúdo
-    content_registro = """{% extends 'base.html' %}
+{% extends 'base.html' %}
 {% block content %}
 <div class="max-w-md mx-auto text-center">
     <div class="mb-8">
@@ -60,7 +21,9 @@ def apply_fixes():
     </div>
     
     <form action="/ponto/registrar" method="POST" id="formPonto">
+        <!-- TOKEN CSRF OBRIGATÓRIO -->
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        
         <input type="hidden" name="tipo" id="inputTipo">
         <input type="hidden" name="lat" id="lat">
         <input type="hidden" name="lon" id="lon">
@@ -83,19 +46,17 @@ def apply_fixes():
     </form>
     {% endif %}
 
+    <!-- HISTÓRICO DO DIA (SOLICITADO) -->
     <div class="mt-8 text-left">
         <h3 class="text-xs font-bold text-slate-400 uppercase mb-3 ml-1">Histórico de Hoje</h3>
         <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden divide-y divide-slate-100">
             {% for p in registros %}
             <div class="px-4 py-3 flex justify-between items-center hover:bg-slate-50 transition">
                 <span class="text-sm font-bold text-slate-700 flex items-center gap-2">
-                    <!-- FIX: Verifica se p.tipo existe antes de verificar 'in' -->
-                    <i class="fas fa-circle text-[8px] {% if p.tipo and ('Entrada' in p.tipo or 'Volta' in p.tipo) %}text-emerald-500{% else %}text-red-500{% endif %}"></i>
-                    {{ p.tipo or 'N/A' }}
+                    <i class="fas fa-circle text-[8px] {% if 'Entrada' in p.tipo or 'Volta' in p.tipo %}text-emerald-500{% else %}text-red-500{% endif %}"></i>
+                    {{ p.tipo }}
                 </span>
-                <span class="text-sm font-mono text-slate-500 font-bold bg-slate-100 px-2 py-1 rounded">
-                    {% if p.hora_registro %}{{ p.hora_registro.strftime('%H:%M') }}{% else %}--:--{% endif %}
-                </span>
+                <span class="text-sm font-mono text-slate-500 font-bold bg-slate-100 px-2 py-1 rounded">{{ p.hora_registro.strftime('%H:%M') }}</span>
             </div>
             {% else %}
             <div class="p-6 text-center text-xs text-slate-400 flex flex-col items-center">
@@ -119,8 +80,10 @@ def apply_fixes():
         const btn = event.currentTarget;
         const st = document.getElementById('geoStatus');
         const form = document.getElementById('formPonto');
+        
         document.getElementById('inputTipo').value = tipo;
         
+        // Bloqueia botões
         const btns = document.querySelectorAll('button');
         btns.forEach(b => b.disabled = true);
         st.innerText = "Obtendo localização GPS...";
@@ -136,7 +99,7 @@ def apply_fixes():
                     form.submit(); 
                 },
                 (e) => { 
-                    alert("Erro GPS: " + e.message); 
+                    alert("Erro ao obter GPS: " + e.message); 
                     st.innerText = "Erro no GPS.";
                     st.className = "text-xs text-red-500 mt-2 h-4";
                     btns.forEach(b => b.disabled = false);
@@ -144,39 +107,9 @@ def apply_fixes():
                 { enableHighAccuracy: true, timeout: 10000 }
             );
         } else {
-            alert("Sem suporte GPS.");
+            alert("Seu dispositivo não suporta GPS.");
             btns.forEach(b => b.disabled = false);
         }
     }
 </script>
 {% endblock %}
-"""
-    fpath = os.path.join(PROJECT_DIR, "app/templates/ponto_registro.html")
-    with open(fpath, "w", encoding="utf-8") as f:
-        f.write(content_registro)
-
-    log("Template corrigido.")
-
-def git_operations():
-    log("Enviando correção Git...")
-    try:
-        subprocess.run(["git", "add", "."], check=True)
-        subprocess.run(["git", "commit", "-m", "Fix: Handle NoneType in ponto_registro.html"], check=True)
-        subprocess.run(["git", "push"], check=True)
-        log("Código enviado.")
-    except Exception as e:
-        log(f"Erro Git: {e}")
-
-def self_destruct():
-    try:
-        os.remove(__file__)
-        log("Script limpo.")
-    except: pass
-
-if __name__ == "__main__":
-    create_backup()
-    apply_fixes()
-    git_operations()
-    self_destruct()
-
-

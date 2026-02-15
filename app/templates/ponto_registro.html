@@ -21,9 +21,7 @@
     </div>
     
     <form action="/ponto/registrar" method="POST" id="formPonto">
-        <!-- TOKEN CSRF OBRIGATÓRIO -->
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-        
         <input type="hidden" name="tipo" id="inputTipo">
         <input type="hidden" name="lat" id="lat">
         <input type="hidden" name="lon" id="lon">
@@ -46,17 +44,19 @@
     </form>
     {% endif %}
 
-    <!-- HISTÓRICO DO DIA (SOLICITADO) -->
     <div class="mt-8 text-left">
         <h3 class="text-xs font-bold text-slate-400 uppercase mb-3 ml-1">Histórico de Hoje</h3>
         <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden divide-y divide-slate-100">
             {% for p in registros %}
             <div class="px-4 py-3 flex justify-between items-center hover:bg-slate-50 transition">
                 <span class="text-sm font-bold text-slate-700 flex items-center gap-2">
-                    <i class="fas fa-circle text-[8px] {% if 'Entrada' in p.tipo or 'Volta' in p.tipo %}text-emerald-500{% else %}text-red-500{% endif %}"></i>
-                    {{ p.tipo }}
+                    <!-- FIX: Verifica se p.tipo existe antes de verificar 'in' -->
+                    <i class="fas fa-circle text-[8px] {% if p.tipo and ('Entrada' in p.tipo or 'Volta' in p.tipo) %}text-emerald-500{% else %}text-red-500{% endif %}"></i>
+                    {{ p.tipo or 'N/A' }}
                 </span>
-                <span class="text-sm font-mono text-slate-500 font-bold bg-slate-100 px-2 py-1 rounded">{{ p.hora_registro.strftime('%H:%M') }}</span>
+                <span class="text-sm font-mono text-slate-500 font-bold bg-slate-100 px-2 py-1 rounded">
+                    {% if p.hora_registro %}{{ p.hora_registro.strftime('%H:%M') }}{% else %}--:--{% endif %}
+                </span>
             </div>
             {% else %}
             <div class="p-6 text-center text-xs text-slate-400 flex flex-col items-center">
@@ -80,10 +80,8 @@
         const btn = event.currentTarget;
         const st = document.getElementById('geoStatus');
         const form = document.getElementById('formPonto');
-        
         document.getElementById('inputTipo').value = tipo;
         
-        // Bloqueia botões
         const btns = document.querySelectorAll('button');
         btns.forEach(b => b.disabled = true);
         st.innerText = "Obtendo localização GPS...";
@@ -99,7 +97,7 @@
                     form.submit(); 
                 },
                 (e) => { 
-                    alert("Erro ao obter GPS: " + e.message); 
+                    alert("Erro GPS: " + e.message); 
                     st.innerText = "Erro no GPS.";
                     st.className = "text-xs text-red-500 mt-2 h-4";
                     btns.forEach(b => b.disabled = false);
@@ -107,7 +105,7 @@
                 { enableHighAccuracy: true, timeout: 10000 }
             );
         } else {
-            alert("Seu dispositivo não suporta GPS.");
+            alert("Sem suporte GPS.");
             btns.forEach(b => b.disabled = false);
         }
     }
