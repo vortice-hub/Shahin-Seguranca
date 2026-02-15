@@ -1,105 +1,13 @@
 import os
-import sys
+import shutil
 import subprocess
+import sys
 
 # --- CONFIGURAÇÕES ---
 PROJECT_NAME = "Shahin Gestão"
-COMMIT_MSG = "V70: Fix Critical - Restaurando Scanner, Variaveis de Template e Logica de Ponto"
+COMMIT_MSG = "V71: Fix Critical - Sincronizacao Rota Ponto com Template QR Code e Scanner"
 
-# --- 1. APP/UTILS.PY (Garantindo funções de data) ---
-FILE_UTILS = """
-from datetime import datetime, timedelta, time
-from app.models import db, PontoRegistro, PontoResumo, User
-import unicodedata
-import re
-
-def get_brasil_time():
-    return datetime.utcnow() - timedelta(hours=3)
-
-def data_por_extenso(data_obj):
-    meses = {
-        1: 'Janeiro', 2: 'Fevereiro', 3: 'Março', 4: 'Abril',
-        5: 'Maio', 6: 'Junho', 7: 'Julho', 8: 'Agosto',
-        9: 'Setembro', 10: 'Outubro', 11: 'Novembro', 12: 'Dezembro'
-    }
-    return f"{data_obj.day} de {meses[data_obj.month]} de {data_obj.year}"
-
-def remove_accents(txt):
-    if not txt: return ""
-    return "".join(c for c in unicodedata.normalize('NFD', txt) if unicodedata.category(c) != 'Mn')
-
-def gerar_login_automatico(nome_completo):
-    if not nome_completo: return "user"
-    partes = nome_completo.split()
-    primeiro_nome = remove_accents(partes[0]).lower()
-    return re.sub(r'[^a-z]', '', primeiro_nome)
-
-def time_to_minutes(t):
-    if not t: return 0
-    if isinstance(t, str):
-        try:
-            h, m = map(int, t.split(':'))
-            return h * 60 + m
-        except: return 0
-    return t.hour * 60 + t.minute
-
-def format_minutes_to_hm(total_minutes):
-    sinal = "" if total_minutes >= 0 else "-"
-    total_minutes = abs(total_minutes)
-    h = total_minutes // 60
-    m = total_minutes % 60
-    return f"{sinal}{h:02d}:{m:02d}"
-
-def calcular_dia(user_id, data_ref):
-    from app.models import User, PontoRegistro, PontoResumo
-    user = User.query.get(user_id)
-    if not user: return
-
-    registros = PontoRegistro.query.filter_by(user_id=user_id, data_registro=data_ref).order_by(PontoRegistro.hora_registro).all()
-    
-    ent_prev = time_to_minutes(user.horario_entrada)
-    sai_prev = time_to_minutes(user.horario_saida)
-    alm_ini_prev = time_to_minutes(user.horario_almoco_inicio)
-    alm_fim_prev = time_to_minutes(user.horario_almoco_fim)
-    
-    minutos_esperados = (sai_prev - ent_prev) - (alm_fim_prev - alm_ini_prev)
-    if minutos_esperados < 0: minutos_esperados = 0
-    
-    if data_ref.weekday() >= 5 and user.escala != 'Livre':
-        minutos_esperados = 0
-
-    trabalhado_total = 0
-    for i in range(0, len(registros), 2):
-        if i + 1 < len(registros):
-            inicio = time_to_minutes(registros[i].hora_registro)
-            fim = time_to_minutes(registros[i+1].hora_registro)
-            trabalhado_total += (fim - inicio)
-
-    saldo = trabalhado_total - minutos_esperados
-    
-    status = "OK"
-    if len(registros) == 0 and minutos_esperados > 0: status = "Falta"
-    elif len(registros) % 2 != 0: status = "Incompleto"
-    elif saldo > 0: status = "Hora Extra"
-    elif saldo < 0: status = "Débito"
-
-    resumo = PontoResumo.query.filter_by(user_id=user_id, data_referencia=data_ref).first()
-    if not resumo:
-        resumo = PontoResumo(user_id=user_id, data_referencia=data_ref)
-        db.session.add(resumo)
-    
-    resumo.minutos_trabalhados = trabalhado_total
-    resumo.minutos_esperados = minutos_esperados
-    resumo.minutos_saldo = saldo
-    resumo.status_dia = status
-    
-    try:
-        db.session.commit()
-    except:
-        db.session.rollback()
-"""
-
-# --- 2. APP/ROUTES/PONTO.PY (Completo com Scanner e API) ---
+# --- 1. APP/ROUTES/PONTO.PY (CORRETO E COMPLETO) ---
 FILE_BP_PONTO = """
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app
 from flask_login import login_required, current_user
@@ -112,7 +20,7 @@ from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadSignature
 
 ponto_bp = Blueprint('ponto', __name__, template_folder='templates', url_prefix='/ponto')
 
-# --- API QR CODE (RESTAURADA) ---
+# --- 1. API QR CODE (NECESSÁRIA PARA O TEMPLATE REGISTRO.HTML) ---
 @ponto_bp.route('/api/gerar-token', methods=['GET'])
 @login_required
 def gerar_token_qrcode():
@@ -151,7 +59,7 @@ def registrar_leitura_terminal():
     except BadSignature: return jsonify({'error': 'QR Code inválido.'}), 400
     except Exception as e: return jsonify({'error': f'Erro interno: {str(e)}'}), 500
 
-# --- ROTA SCANNER (RESTAURADA) ---
+# --- 2. ROTA SCANNER (RESTAURADA) ---
 @ponto_bp.route('/scanner')
 @login_required
 def terminal_scanner():
@@ -160,16 +68,17 @@ def terminal_scanner():
         return redirect(url_for('main.dashboard'))
     return render_template('ponto/terminal_leitura.html')
 
-# --- ROTA REGISTRAR (CORRIGIDA) ---
+# --- 3. ROTA REGISTRAR (CORRIGIDA PARA ENVIAR VARIÁVEIS) ---
 @ponto_bp.route('/registrar', methods=['GET', 'POST'])
 @login_required
 def registrar_ponto():
+    # Redireciona terminal para scanner
     if current_user.role == 'Terminal': return redirect(url_for('ponto.terminal_scanner'))
 
     hoje = get_brasil_time().date()
     hoje_extenso = data_por_extenso(hoje)
     
-    # Lógica de Bloqueio (Restaurada)
+    # Lógica de Bloqueio
     bloqueado = False; motivo = ""
     if current_user.escala == '5x2' and hoje.weekday() >= 5: bloqueado = True; motivo = "Não é possível realizar a marcação de ponto."
     elif current_user.escala == '12x36' and current_user.data_inicio_escala:
@@ -177,28 +86,30 @@ def registrar_ponto():
 
     pontos = PontoRegistro.query.filter_by(user_id=current_user.id, data_registro=hoje).order_by(PontoRegistro.hora_registro).all()
     
-    # Lógica de Próxima Ação (Restaurada)
+    # Lógica de Proxima Ação (Para exibição no card)
     prox = "Entrada"
     if len(pontos) == 1: prox = "Ida Almoço"
     elif len(pontos) == 2: prox = "Volta Almoço"
     elif len(pontos) == 3: prox = "Saída"
     elif len(pontos) >= 4: prox = "Extra"
 
+    # POST mantido para compatibilidade, mas o foco é o QR Code
     if request.method == 'POST':
         if bloqueado: flash('Bloqueado'); return redirect(url_for('main.dashboard'))
         db.session.add(PontoRegistro(user_id=current_user.id, data_registro=hoje, hora_registro=get_brasil_time().time(), tipo=prox, latitude=request.form.get('latitude'), longitude=request.form.get('longitude')))
         db.session.commit(); calcular_dia(current_user.id, hoje)
         return redirect(url_for('main.dashboard'))
     
-    # FIX: Passando todas as variáveis necessárias e corrigindo o nome da lista para 'pontos'
+    # AQUI ESTAVA O ERRO: Agora passamos 'hoje' e todas as outras variaveis
     return render_template('ponto/registro.html', 
                          proxima_acao=prox, 
                          hoje_extenso=hoje_extenso, 
-                         pontos=pontos, # Template usa 'pontos', não 'registros'
+                         pontos=pontos, # Template usa 'pontos'
                          bloqueado=bloqueado, 
                          motivo=motivo, 
-                         hoje=hoje) # FIX: Passando a variavel hoje que faltava
+                         hoje=hoje) # Variavel que faltava
 
+# --- 4. ESPELHO ---
 @ponto_bp.route('/espelho')
 @login_required
 def espelho_ponto():
@@ -221,7 +132,7 @@ def espelho_ponto():
     for r in resumos:
         batidas = PontoRegistro.query.filter_by(user_id=target_user_id, data_registro=r.data_referencia).order_by(PontoRegistro.hora_registro).all()
         detalhes[r.id] = [b.hora_registro.strftime('%H:%M') for b in batidas]
-
+    
     dias_semana = {0: 'Seg', 1: 'Ter', 2: 'Qua', 3: 'Qui', 4: 'Sex', 5: 'Sáb', 6: 'Dom'}
 
     return render_template('ponto/ponto_espelho.html', 
@@ -257,6 +168,56 @@ def solicitar_ajuste():
     return render_template('ponto/solicitar_ajuste.html', pontos=pontos_dia, data_sel=data_selecionada, meus_ajustes=meus_ajustes, extras=dados_extras)
 """
 
+# --- 2. GARANTIA: TEMPLATE SCANNER (Caso tenha sumido) ---
+FILE_TERMINAL_HTML = """
+{% extends 'base.html' %}
+{% block content %}
+<script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+<style>
+    .terminal-mode { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #0f172a; z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; color: white; }
+    #reader { width: 100%; max-width: 500px; border-radius: 20px; overflow: hidden; border: 4px solid #3b82f6; background: black; }
+    .status-box { margin-top: 20px; padding: 20px; border-radius: 15px; width: 90%; max-width: 500px; text-align: center; background: #1e293b; border: 1px solid #334155; transition: all 0.3s ease; }
+    .status-success { background: #064e3b; border-color: #10b981; }
+    .status-error { background: #7f1d1d; border-color: #ef4444; }
+    .last-scans { margin-top: 20px; width: 90%; max-width: 500px; height: 150px; overflow-y: auto; background: rgba(255,255,255,0.05); border-radius: 10px; padding: 10px; }
+    .scan-item { font-size: 0.8rem; padding: 8px; border-bottom: 1px solid rgba(255,255,255,0.1); display: flex; justify-content: space-between; }
+</style>
+<div class="terminal-mode">
+    <div class="mb-4 text-center"><h1 class="text-2xl font-bold tracking-widest text-blue-400">SHAHIN GESTÃO</h1><p class="text-xs text-slate-400">TERMINAL DE PONTO</p></div>
+    <div id="reader"></div>
+    <div id="statusBox" class="status-box"><h2 id="statusTitle" class="text-xl font-bold">Aguardando...</h2><p id="statusMsg" class="text-sm text-slate-400">Aproxime o QR Code do celular</p></div>
+    <div class="last-scans" id="historyLog"></div>
+    <div class="mt-4"><a href="/logout" class="text-xs text-slate-600 hover:text-slate-400">Sair do Modo Terminal</a></div>
+</div>
+<script>
+    const html5QrCode = new Html5Qrcode("reader");
+    let isScanning = true;
+    const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+    html5QrCode.start({ facingMode: "environment" }, config, onScanSuccess, onScanFailure);
+    function onScanSuccess(decodedText, decodedResult) {
+        if (!isScanning) return;
+        isScanning = false;
+        processarPonto(decodedText);
+        setTimeout(() => { isScanning = true; }, 3000);
+    }
+    function onScanFailure(error) {}
+    function processarPonto(token) {
+        const box = document.getElementById('statusBox'); const title = document.getElementById('statusTitle'); const msg = document.getElementById('statusMsg');
+        box.className = "status-box"; title.innerText = "Processando...";
+        fetch('/ponto/api/registrar-leitura', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ token: token }) })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) { box.classList.add('status-success'); title.innerText = "REGISTRADO!"; msg.innerText = `${data.funcionario} às ${data.hora}`; addToHistory(data.funcionario, data.hora); } 
+            else { box.classList.add('status-error'); title.innerText = "ERRO"; msg.innerText = data.error; }
+        })
+        .catch(err => { box.classList.add('status-error'); title.innerText = "ERRO"; msg.innerText = "Falha de conexão"; })
+        .finally(() => { setTimeout(() => { box.className = "status-box"; title.innerText = "Aguardando..."; msg.innerText = "Aproxime o QR Code"; }, 2500); });
+    }
+    function addToHistory(nome, hora) { const log = document.getElementById('historyLog'); log.innerHTML = `<div class="scan-item"><span class="text-emerald-400">${nome}</span> <span>${hora}</span></div>` + log.innerHTML; }
+</script>
+{% endblock %}
+"""
+
 # --- FUNÇÕES ---
 def write_file(path, content):
     os.makedirs(os.path.dirname(path) if os.path.dirname(path) else '.', exist_ok=True)
@@ -268,7 +229,7 @@ def git_update():
         subprocess.run(["git", "add", "."], check=True)
         subprocess.run(["git", "commit", "-m", COMMIT_MSG], check=False)
         subprocess.run(["git", "push"], check=True)
-        print("\n>>> SUCESSO V70! PONTO E SCANNER REPARADOS <<<")
+        print("\n>>> SUCESSO V71! ERRO 500 E 404 CORRIGIDOS <<<")
     except Exception as e: print(f"Git: {e}")
 
 def self_destruct():
@@ -276,9 +237,9 @@ def self_destruct():
     except: pass
 
 def main():
-    print(f"--- UPDATE V70 FIX PONTO: {PROJECT_NAME} ---")
-    write_file("app/utils.py", FILE_UTILS)
+    print(f"--- UPDATE V71 SYNC PONTO: {PROJECT_NAME} ---")
     write_file("app/routes/ponto.py", FILE_BP_PONTO)
+    write_file("app/ponto/templates/ponto/terminal_leitura.html", FILE_TERMINAL_HTML)
     git_update()
     self_destruct()
 

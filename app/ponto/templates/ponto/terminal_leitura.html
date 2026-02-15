@@ -30,28 +30,17 @@
     }
     function onScanFailure(error) {}
     function processarPonto(token) {
-        const box = document.getElementById('statusBox');
-        const title = document.getElementById('statusTitle');
-        const msg = document.getElementById('statusMsg');
+        const box = document.getElementById('statusBox'); const title = document.getElementById('statusTitle'); const msg = document.getElementById('statusMsg');
         box.className = "status-box"; title.innerText = "Processando...";
         fetch('/ponto/api/registrar-leitura', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ token: token }) })
         .then(response => response.json())
         .then(data => {
-            if (data.success) {
-                box.classList.add('status-success'); title.innerText = "REGISTRADO!"; msg.innerText = `${data.funcionario} às ${data.hora}`; addToHistory(data.funcionario, data.hora, "ok");
-            } else {
-                box.classList.add('status-error'); title.innerText = "NÃO REGISTRADO"; msg.innerText = data.error;
-            }
+            if (data.success) { box.classList.add('status-success'); title.innerText = "REGISTRADO!"; msg.innerText = `${data.funcionario} às ${data.hora}`; addToHistory(data.funcionario, data.hora); } 
+            else { box.classList.add('status-error'); title.innerText = "ERRO"; msg.innerText = data.error; }
         })
-        .catch(err => { box.classList.add('status-error'); title.innerText = "ERRO DE REDE"; msg.innerText = "Verifique a conexão."; })
+        .catch(err => { box.classList.add('status-error'); title.innerText = "ERRO"; msg.innerText = "Falha de conexão"; })
         .finally(() => { setTimeout(() => { box.className = "status-box"; title.innerText = "Aguardando..."; msg.innerText = "Aproxime o QR Code"; }, 2500); });
     }
-    function addToHistory(nome, hora, status) {
-        const log = document.getElementById('historyLog');
-        const item = document.createElement('div');
-        item.className = "scan-item";
-        item.innerHTML = `<span class="text-emerald-400">${nome}</span> <span>${hora}</span>`;
-        log.prepend(item);
-    }
+    function addToHistory(nome, hora) { const log = document.getElementById('historyLog'); log.innerHTML = `<div class="scan-item"><span class="text-emerald-400">${nome}</span> <span>${hora}</span></div>` + log.innerHTML; }
 </script>
 {% endblock %}

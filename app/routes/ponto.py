@@ -9,7 +9,7 @@ from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadSignature
 
 ponto_bp = Blueprint('ponto', __name__, template_folder='templates', url_prefix='/ponto')
 
-# --- API QR CODE (RESTAURADA) ---
+# --- 1. API QR CODE (NECESSÁRIA PARA O TEMPLATE REGISTRO.HTML) ---
 @ponto_bp.route('/api/gerar-token', methods=['GET'])
 @login_required
 def gerar_token_qrcode():
@@ -48,7 +48,7 @@ def registrar_leitura_terminal():
     except BadSignature: return jsonify({'error': 'QR Code inválido.'}), 400
     except Exception as e: return jsonify({'error': f'Erro interno: {str(e)}'}), 500
 
-# --- ROTA SCANNER (RESTAURADA) ---
+# --- 2. ROTA SCANNER (RESTAURADA) ---
 @ponto_bp.route('/scanner')
 @login_required
 def terminal_scanner():
@@ -57,16 +57,17 @@ def terminal_scanner():
         return redirect(url_for('main.dashboard'))
     return render_template('ponto/terminal_leitura.html')
 
-# --- ROTA REGISTRAR (CORRIGIDA) ---
+# --- 3. ROTA REGISTRAR (CORRIGIDA PARA ENVIAR VARIÁVEIS) ---
 @ponto_bp.route('/registrar', methods=['GET', 'POST'])
 @login_required
 def registrar_ponto():
+    # Redireciona terminal para scanner
     if current_user.role == 'Terminal': return redirect(url_for('ponto.terminal_scanner'))
 
     hoje = get_brasil_time().date()
     hoje_extenso = data_por_extenso(hoje)
     
-    # Lógica de Bloqueio (Restaurada)
+    # Lógica de Bloqueio
     bloqueado = False; motivo = ""
     if current_user.escala == '5x2' and hoje.weekday() >= 5: bloqueado = True; motivo = "Não é possível realizar a marcação de ponto."
     elif current_user.escala == '12x36' and current_user.data_inicio_escala:
@@ -74,28 +75,30 @@ def registrar_ponto():
 
     pontos = PontoRegistro.query.filter_by(user_id=current_user.id, data_registro=hoje).order_by(PontoRegistro.hora_registro).all()
     
-    # Lógica de Próxima Ação (Restaurada)
+    # Lógica de Proxima Ação (Para exibição no card)
     prox = "Entrada"
     if len(pontos) == 1: prox = "Ida Almoço"
     elif len(pontos) == 2: prox = "Volta Almoço"
     elif len(pontos) == 3: prox = "Saída"
     elif len(pontos) >= 4: prox = "Extra"
 
+    # POST mantido para compatibilidade, mas o foco é o QR Code
     if request.method == 'POST':
         if bloqueado: flash('Bloqueado'); return redirect(url_for('main.dashboard'))
         db.session.add(PontoRegistro(user_id=current_user.id, data_registro=hoje, hora_registro=get_brasil_time().time(), tipo=prox, latitude=request.form.get('latitude'), longitude=request.form.get('longitude')))
         db.session.commit(); calcular_dia(current_user.id, hoje)
         return redirect(url_for('main.dashboard'))
     
-    # FIX: Passando todas as variáveis necessárias e corrigindo o nome da lista para 'pontos'
+    # AQUI ESTAVA O ERRO: Agora passamos 'hoje' e todas as outras variaveis
     return render_template('ponto/registro.html', 
                          proxima_acao=prox, 
                          hoje_extenso=hoje_extenso, 
-                         pontos=pontos, # Template usa 'pontos', não 'registros'
+                         pontos=pontos, # Template usa 'pontos'
                          bloqueado=bloqueado, 
                          motivo=motivo, 
-                         hoje=hoje) # FIX: Passando a variavel hoje que faltava
+                         hoje=hoje) # Variavel que faltava
 
+# --- 4. ESPELHO ---
 @ponto_bp.route('/espelho')
 @login_required
 def espelho_ponto():
@@ -118,7 +121,7 @@ def espelho_ponto():
     for r in resumos:
         batidas = PontoRegistro.query.filter_by(user_id=target_user_id, data_registro=r.data_referencia).order_by(PontoRegistro.hora_registro).all()
         detalhes[r.id] = [b.hora_registro.strftime('%H:%M') for b in batidas]
-
+    
     dias_semana = {0: 'Seg', 1: 'Ter', 2: 'Qua', 3: 'Qui', 4: 'Sex', 5: 'Sáb', 6: 'Dom'}
 
     return render_template('ponto/ponto_espelho.html', 
