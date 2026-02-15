@@ -1,4 +1,187 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash
+import os
+import shutil
+import subprocess
+import sys
+from datetime import datetime
+
+# ================= CONFIGURAÇÕES =================
+PROJECT_DIR = os.getcwd()
+BACKUP_ROOT = os.path.join(PROJECT_DIR, "backups_auto")
+TIMESTAMP = datetime.now().strftime("%Y%m%d_%H%M%S")
+CURRENT_BACKUP_DIR = os.path.join(BACKUP_ROOT, f"bkp_{TIMESTAMP}")
+
+# Arquivos que serão modificados
+FILES_TO_MODIFY = [
+    "app/__init__.py",
+    "app/ponto/routes.py",
+    "app/admin/routes.py"
+]
+
+def log(msg):
+    print(f"\033[92m[AUTO-SCRIPT]\033[0m {msg}")
+
+def create_backup():
+    log("Iniciando backup de segurança...")
+    if not os.path.exists(CURRENT_BACKUP_DIR):
+        os.makedirs(CURRENT_BACKUP_DIR)
+    
+    for file_path in FILES_TO_MODIFY:
+        full_path = os.path.join(PROJECT_DIR, file_path)
+        if os.path.exists(full_path):
+            dest_path = os.path.join(CURRENT_BACKUP_DIR, file_path)
+            os.makedirs(os.path.dirname(dest_path), exist_ok=True)
+            shutil.copy2(full_path, dest_path)
+            log(f"Arquivo salvo: {file_path}")
+        else:
+            log(f"\033[93mAlerta: Arquivo original não encontrado para backup: {file_path}\033[0m")
+
+def apply_fixes():
+    log("Aplicando correções no código...")
+
+    # ---------------------------------------------------------
+    # FIX 1: app/__init__.py (Correção do Erro SSL/DB Drop)
+    # ---------------------------------------------------------
+    content_init = """import os
+from flask import Flask
+from app.extensions import db, login_manager
+
+def create_app():
+    app = Flask(__name__)
+    app.secret_key = os.environ.get('SECRET_KEY', 'chave_secreta_padrao')
+    
+    # Configuração do Banco
+    db_url = os.environ.get('DATABASE_URL', "postgresql://neondb_owner:npg_UBg0b7YKqLPm@ep-steep-wave-aflx731c-pooler.c-2.us-west-2.aws.neon.tech/neondb?sslmode=require")
+    if db_url and db_url.startswith("postgres://"):
+        db_url = db_url.replace("postgres://", "postgresql://", 1)
+        
+    app.config['SQLALCHEMY_DATABASE_URI'] = db_url
+    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    
+    # FIX: Configurações para manter a conexão com o banco viva (evita SSL EOF Error)
+    app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+        "pool_pre_ping": True,
+        "pool_recycle": 300,
+        "pool_size": 10,
+        "max_overflow": 20,
+    }
+    
+    # Inicializa Extensões
+    db.init_app(app)
+    login_manager.init_app(app)
+    login_manager.login_view = 'auth.login'
+
+    # Registra Blueprints
+    with app.app_context():
+        from app.auth.routes import auth_bp
+        from app.admin.routes import admin_bp
+        from app.ponto.routes import ponto_bp
+        from app.estoque.routes import estoque_bp
+        from app.holerites.routes import holerite_bp
+        from app.main.routes import main_bp
+
+        app.register_blueprint(auth_bp)
+        app.register_blueprint(admin_bp)
+        app.register_blueprint(ponto_bp)
+        app.register_blueprint(estoque_bp)
+        app.register_blueprint(holerite_bp)
+        app.register_blueprint(main_bp)
+
+        try:
+            db.create_all()
+        except:
+            pass
+
+    return app
+
+app = create_app()
+"""
+    with open(os.path.join(PROJECT_DIR, "app/__init__.py"), "w", encoding="utf-8") as f:
+        f.write(content_init)
+
+    # ---------------------------------------------------------
+    # FIX 2: app/ponto/routes.py (Correção TemplateNotFound)
+    # ---------------------------------------------------------
+    content_ponto = """from flask import Blueprint, render_template, request, redirect, url_for, flash
+from flask_login import login_required, current_user
+from app.extensions import db
+from app.models import PontoRegistro, PontoResumo, User
+from app.utils import get_brasil_time, calcular_dia, format_minutes_to_hm
+from datetime import datetime, date
+from sqlalchemy import func
+
+ponto_bp = Blueprint('ponto', __name__, template_folder='templates', url_prefix='/ponto')
+
+@ponto_bp.route('/registrar', methods=['GET', 'POST'])
+@login_required
+def registrar_ponto():
+    hoje = get_brasil_time().date()
+    if request.method == 'POST':
+        tipo = request.form.get('tipo')
+        lat = request.form.get('lat')
+        lon = request.form.get('lon')
+        
+        novo = PontoRegistro(
+            user_id=current_user.id, 
+            data_registro=hoje, 
+            tipo=tipo, 
+            latitude=lat, 
+            longitude=lon
+        )
+        db.session.add(novo)
+        db.session.commit()
+        
+        # Recalcula o saldo do dia
+        calcular_dia(current_user.id, hoje)
+        
+        flash(f'Ponto de {tipo} registrado!')
+        return redirect(url_for('main.dashboard'))
+    
+    registros = PontoRegistro.query.filter_by(user_id=current_user.id, data_registro=hoje).all()
+    # FIX: Nome do template corrigido de 'registrar_ponto.html' para 'ponto_registro.html'
+    return render_template('ponto_registro.html', registros=registros)
+
+@ponto_bp.route('/espelho')
+@login_required
+def espelho_ponto():
+    target_user_id = request.args.get('user_id', type=int) or current_user.id
+    if target_user_id != current_user.id and current_user.role != 'Master':
+        return redirect(url_for('main.dashboard'))
+    
+    user = User.query.get_or_404(target_user_id)
+    mes_ref = request.args.get('mes_ref') or get_brasil_time().strftime('%Y-%m')
+    try:
+        ano, mes = map(int, mes_ref.split('-'))
+    except:
+        hoje = get_brasil_time()
+        ano, mes = hoje.year, hoje.month
+        mes_ref = hoje.strftime('%Y-%m')
+    
+    resumos = PontoResumo.query.filter(
+        PontoResumo.user_id == target_user_id,
+        func.extract('year', PontoResumo.data_referencia) == ano,
+        func.extract('month', PontoResumo.data_referencia) == mes
+    ).order_by(PontoResumo.data_referencia).all()
+    
+    detalhes = {}
+    for r in resumos:
+        batidas = PontoRegistro.query.filter_by(user_id=target_user_id, data_registro=r.data_referencia).order_by(PontoRegistro.hora_registro).all()
+        detalhes[r.id] = [b.hora_registro.strftime('%H:%M') for b in batidas]
+
+    return render_template('ponto/ponto_espelho.html', resumos=resumos, user=user, detalhes=detalhes, format_hm=format_minutes_to_hm, mes_ref=mes_ref)
+
+@ponto_bp.route('/solicitar-ajuste', methods=['GET', 'POST'])
+@login_required
+def solicitar_ajuste():
+    # Implementação futura ou placeholder para evitar erro 404 se chamado
+    return render_template('ponto/solicitar_ajuste.html', data_sel=None, meus_ajustes=[])
+"""
+    with open(os.path.join(PROJECT_DIR, "app/ponto/routes.py"), "w", encoding="utf-8") as f:
+        f.write(content_ponto)
+
+    # ---------------------------------------------------------
+    # FIX 3: app/admin/routes.py (Correção Rotas 404 e Importações)
+    # ---------------------------------------------------------
+    content_admin = """from flask import Blueprint, render_template, request, redirect, url_for, flash
 from flask_login import login_required, current_user
 from app.extensions import db
 from app.models import User, PreCadastro, PontoResumo, PontoAjuste, PontoRegistro, Holerite
@@ -236,3 +419,34 @@ def editar_usuario(id):
             db.session.commit(); flash('Salvo.'); return redirect(url_for('admin.gerenciar_usuarios'))
         except Exception as e: flash(f'Erro: {e}')
     return render_template('admin/editar_usuario.html', user=user)
+"""
+    with open(os.path.join(PROJECT_DIR, "app/admin/routes.py"), "w", encoding="utf-8") as f:
+        f.write(content_admin)
+
+    log("Correções aplicadas com sucesso.")
+
+def git_operations():
+    log("Executando Git Push automático...")
+    try:
+        subprocess.run(["git", "add", "."], check=True)
+        subprocess.run(["git", "commit", "-m", "Auto-Fix: DB connection, Template names e Rotas Admin"], check=True)
+        subprocess.run(["git", "push"], check=True)
+        log("Código enviado para o repositório.")
+    except subprocess.CalledProcessError as e:
+        log(f"\033[91mErro no Git: {e}\033[0m")
+
+def self_destruct():
+    log("Iniciando auto-destruição do script...")
+    try:
+        os.remove(__file__)
+        log("Script deletado.")
+    except Exception as e:
+        log(f"Erro ao deletar script: {e}")
+
+if __name__ == "__main__":
+    create_backup()
+    apply_fixes()
+    git_operations()
+    self_destruct()
+
+

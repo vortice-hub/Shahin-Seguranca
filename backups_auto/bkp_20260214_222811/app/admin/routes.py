@@ -2,125 +2,12 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash
 from flask_login import login_required, current_user
 from app.extensions import db
 from app.models import User, PreCadastro, PontoResumo, PontoAjuste, PontoRegistro, Holerite
-from app.utils import calcular_dia, get_brasil_time, format_minutes_to_hm, gerar_login_automatico
-from werkzeug.security import generate_password_hash
+from app.utils import calcular_dia, get_brasil_time, format_minutes_to_hm
 import csv
 import io
 from sqlalchemy import func
 
 admin_bp = Blueprint('admin', __name__, template_folder='templates', url_prefix='/admin')
-
-# --- ROTAS CORRIGIDAS/ADICIONADAS ---
-
-@admin_bp.route('/usuarios/novo', methods=['GET', 'POST'])
-@login_required
-def novo_usuario():
-    if current_user.role != 'Master': return redirect(url_for('main.dashboard'))
-    
-    if request.method == 'POST':
-        try:
-            # Criação manual de usuário ou pré-cadastro
-            real_name = request.form.get('real_name')
-            cpf = request.form.get('cpf').replace('.', '').replace('-', '').strip()
-            
-            # Verifica duplicidade
-            if User.query.filter_by(cpf=cpf).first() or PreCadastro.query.filter_by(cpf=cpf).first():
-                flash('CPF já cadastrado!', 'error')
-                return redirect(url_for('admin.novo_usuario'))
-
-            # Criação direta de PreCadastro para o fluxo "Sou Funcionário"
-            novo_pre = PreCadastro(
-                cpf=cpf,
-                nome_previsto=real_name,
-                cargo=request.form.get('role'),
-                salario=float(request.form.get('salario') or 0),
-                horario_entrada=request.form.get('h_ent'),
-                horario_almoco_inicio=request.form.get('h_alm_ini'),
-                horario_almoco_fim=request.form.get('h_alm_fim'),
-                horario_saida=request.form.get('h_sai'),
-                escala=request.form.get('escala'),
-                data_inicio_escala=request.form.get('dt_escala') if request.form.get('dt_escala') else None
-            )
-            db.session.add(novo_pre)
-            db.session.commit()
-            return render_template('sucesso_usuario.html', nome_real=real_name, cpf=cpf)
-            
-        except Exception as e:
-            db.session.rollback()
-            flash(f'Erro ao criar: {str(e)}', 'error')
-            
-    return render_template('novo_usuario.html')
-
-@admin_bp.route('/solicitacoes', methods=['GET', 'POST'])
-@login_required
-def admin_solicitacoes():
-    if current_user.role != 'Master': return redirect(url_for('main.dashboard'))
-    
-    if request.method == 'POST':
-        solic_id = request.form.get('solic_id')
-        decisao = request.form.get('decisao')
-        motivo = request.form.get('motivo_repro')
-        
-        solic = PontoAjuste.query.get(solic_id)
-        if solic:
-            if decisao == 'aprovar':
-                solic.status = 'Aprovado'
-                # Lógica para aplicar a alteração no ponto (se for edição/inclusão)
-                # ... (Implementar lógica de aplicar no PontoRegistro se necessário)
-                flash('Solicitação Aprovada.')
-            else:
-                solic.status = 'Reprovado'
-                solic.motivo_reprovacao = motivo
-                flash('Solicitação Reprovada.')
-            db.session.commit()
-            
-    solicitacoes = PontoAjuste.query.filter_by(status='Pendente').order_by(PontoAjuste.created_at.desc()).all()
-    extras = {} # Dicionário para dados auxiliares se necessário
-    return render_template('admin_solicitacoes.html', solicitacoes=solicitacoes, extras=extras)
-
-@admin_bp.route('/liberar-acesso', methods=['POST'])
-@login_required
-def liberar_acesso():
-    # Rota auxiliar para processar o formulário da página 'admin_liberar_acesso.html'
-    if current_user.role != 'Master': return redirect(url_for('main.dashboard'))
-    
-    try:
-        cpf = request.form.get('cpf').replace('.', '').replace('-', '').strip()
-        if User.query.filter_by(cpf=cpf).first() or PreCadastro.query.filter_by(cpf=cpf).first():
-            flash('CPF já existe.', 'error')
-        else:
-            novo = PreCadastro(
-                cpf=cpf,
-                nome_previsto=request.form.get('nome'),
-                cargo=request.form.get('cargo'),
-                salario=float(request.form.get('salario') or 0),
-                horario_entrada=request.form.get('h_ent'),
-                horario_almoco_inicio=request.form.get('h_alm_ini'),
-                horario_almoco_fim=request.form.get('h_alm_fim'),
-                horario_saida=request.form.get('h_sai'),
-                escala=request.form.get('escala'),
-                data_inicio_escala=request.form.get('dt_escala') if request.form.get('dt_escala') else None
-            )
-            db.session.add(novo)
-            db.session.commit()
-            flash('Acesso liberado com sucesso!', 'success')
-    except Exception as e:
-        flash(f'Erro: {e}', 'error')
-        
-    return redirect(url_for('admin.gerenciar_usuarios')) # Ou redirecionar para liberar_acesso page se houver
-
-@admin_bp.route('/liberar-acesso/excluir/<int:id>')
-@login_required
-def excluir_liberacao(id):
-    if current_user.role != 'Master': return redirect(url_for('main.dashboard'))
-    pre = PreCadastro.query.get(id)
-    if pre:
-        db.session.delete(pre)
-        db.session.commit()
-        flash('Removido da fila.')
-    return redirect(url_for('admin.gerenciar_usuarios'))
-
-# --- ROTAS EXISTENTES MANTIDAS ---
 
 @admin_bp.route('/ferramentas/limpeza', methods=['GET', 'POST'])
 @login_required
@@ -138,6 +25,7 @@ def admin_limpeza():
                 Holerite.query.delete()
                 flash('Holerites removidos do banco.')
             elif acao == 'limpar_usuarios_nao_master':
+                # Remove todos exceto Thaynara
                 User.query.filter(User.username != 'Thaynara').delete()
                 PreCadastro.query.delete()
                 flash('Usuários de teste removidos.')
