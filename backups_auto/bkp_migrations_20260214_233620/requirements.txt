@@ -10,4 +10,3 @@ requests
 python-dotenv
 Flask-WTF
 email_validator
-Flask-Migrate
