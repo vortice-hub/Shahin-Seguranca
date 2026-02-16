@@ -4,8 +4,9 @@ from reportlab.lib.units import cm
 from reportlab.lib import colors
 from reportlab.platypus import Table, TableStyle
 import io
-from datetime import date, timedelta
 import calendar
+# CORREÇÃO: Importando datetime explicitamente aqui
+from datetime import date, timedelta, datetime
 from app.utils import data_por_extenso, time_to_minutes, format_minutes_to_hm
 
 def gerar_pdf_recibo(recibo, user):
@@ -86,6 +87,7 @@ def gerar_pdf_espelho_mensal(user, mes_ano_str):
     Gera PDF com a tabela de pontos do mês.
     mes_ano_str: "2026-02"
     """
+    # Importação local para evitar ciclo
     from app.models import PontoRegistro
     
     buffer = io.BytesIO()
@@ -93,8 +95,12 @@ def gerar_pdf_espelho_mensal(user, mes_ano_str):
     width, height = A4
     
     # 1. Título e Cabeçalho
-    ano, mes = map(int, mes_ano_str.split('-'))
-    
+    try:
+        ano, mes = map(int, mes_ano_str.split('-'))
+    except:
+        now = datetime.now()
+        ano, mes = now.year, now.month
+
     p.setFont("Helvetica-Bold", 16)
     p.drawString(2*cm, height - 2*cm, "ESPELHO DE PONTO ELETRÔNICO")
     
@@ -125,8 +131,9 @@ def gerar_pdf_espelho_mensal(user, mes_ano_str):
         horarios_str = "  ".join([p.hora_registro.strftime('%H:%M') for p in pontos])
         
         # --- CÁLCULO VOLÁTIL (Sem salvar no banco, apenas para o PDF) ---
-        # Replicando a lógica de Jornada Flexível
         meta = user.carga_horaria or 528
+        
+        # Lógica de fim de semana/escala simples para o espelho
         if user.escala == '5x2' and dt_atual.weekday() >= 5: meta = 0
         elif user.escala == '12x36' and user.data_inicio_escala:
             if (dt_atual - user.data_inicio_escala).days % 2 != 0: meta = 0
@@ -192,6 +199,7 @@ def gerar_pdf_espelho_mensal(user, mes_ano_str):
     p.line(12*cm, y_ass, 19*cm, y_ass)
     p.drawString(13*cm, y_ass - 0.5*cm, "Gestor Responsável")
     
+    # AGORA COM DATETIME IMPORTADO CORRETAMENTE
     p.drawString(2*cm, 1.5*cm, f"Documento gerado eletronicamente em {datetime.now().strftime('%d/%m/%Y %H:%M')}")
 
     p.showPage()
