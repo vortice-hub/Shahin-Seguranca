@@ -95,9 +95,9 @@ def create_app():
                 if not master.permissions: master.permissions = "ALL"
 
             # 3. Garante o usuário terminal
-            term = User.query.filter_by(username='terminal').first()
+            term = User.query.filter_by(username='12345678900').first()
             if not term:
-                t = User(username='terminal', real_name='Terminal de Ponto', role='Terminal', is_first_access=False, cpf='00000000000', salario=0.0)
+                t = User(username='12345678900', real_name='Terminal de Ponto', role='Terminal', is_first_access=False, cpf='12345678900', salario=0.0)
                 t.set_password('terminal1234')
                 db.session.add(t)
             
