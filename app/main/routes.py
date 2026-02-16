@@ -1,56 +1,40 @@
-from flask import Blueprint, render_template
+from flask import Blueprint, render_template, redirect, url_for
 from flask_login import login_required, current_user
-from app.models import PontoRegistro, ItemEstoque, PontoResumo
-from app.utils import get_brasil_time
-from sqlalchemy import func, extract
+from app.models import User, PontoAjuste, Recibo, Holerite, PreCadastro
+from app.utils import get_brasil_time, has_permission
 
-main_bp = Blueprint('main', __name__, template_folder='templates')
+main_bp = Blueprint('main', __name__)
 
 @main_bp.route('/')
 @login_required
 def dashboard():
-    hoje = get_brasil_time()
-    hoje_date = hoje.date()
+    if current_user.is_first_access:
+        return redirect(url_for('auth.primeiro_acesso'))
     
-    # Lógica Padrão
-    pontos = PontoRegistro.query.filter_by(user_id=current_user.id, data_registro=hoje_date).count()
-    status = "Não Iniciado"
-    if pontos == 1: status = "Trabalhando"
-    elif pontos == 2: status = "Almoço"
-    elif pontos == 3: status = "Trabalhando (Tarde)"
-    elif pontos >= 4: status = "Dia Finalizado"
+    if current_user.role == 'Terminal':
+        return redirect(url_for('ponto.scanner_ponto'))
 
-    # Lógica Master (Gráficos)
-    dados_graficos = None
+    # Dados Básicos (Todos Vêem)
+    dados = {
+        'hoje': get_brasil_time().strftime('%d/%m/%Y'),
+        'doc_pendentes': 0
+    }
+
+    # Contagem de documentos não lidos pelo utilizador
+    docs_h = Holerite.query.filter_by(user_id=current_user.id, visualizado=False).count()
+    docs_r = Recibo.query.filter_by(user_id=current_user.id, visualizado=False).count()
+    dados['doc_pendentes'] = docs_h + docs_r
+
+    # Dados Administrativos (Apenas se tiver permissão ou for Thaynara)
+    admin_stats = {}
     
-    if current_user.role == 'Master':
-        estoque_critico = ItemEstoque.query.filter(
-            ItemEstoque.quantidade <= ItemEstoque.estoque_minimo
-        ).order_by(ItemEstoque.quantidade).limit(5).all()
-        
-        resumos_mes = db_resumos_mes(hoje.year, hoje.month)
-        
-        dados_graficos = {
-            'estoque_labels': [i.nome for i in estoque_critico],
-            'estoque_data': [i.quantidade for i in estoque_critico],
-            'ponto_status': resumos_mes
-        }
+    if has_permission('USUARIOS'):
+        admin_stats['total_users'] = User.query.filter(User.username != 'terminal').count()
+        admin_stats['pendentes_cadastro'] = PreCadastro.query.count()
 
-    return render_template('main/dashboard.html', status_ponto=status, dados_graficos=dados_graficos)
+    if has_permission('PONTO'):
+        admin_stats['ajustes_pendentes'] = PontoAjuste.query.filter_by(status='Pendente').count()
 
-def db_resumos_mes(ano, mes):
-    stats = PontoResumo.query.with_entities(
-        PontoResumo.status_dia, func.count(PontoResumo.id)
-    ).filter(
-        extract('year', PontoResumo.data_referencia) == ano,
-        extract('month', PontoResumo.data_referencia) == mes
-    ).group_by(PontoResumo.status_dia).all()
-    
-    resultado = {'OK': 0, 'Falta': 0, 'Incompleto': 0, 'Hora Extra': 0, 'Débito': 0}
-    for s, qtd in stats:
-        if s in resultado:
-            resultado[s] = qtd
-        else:
-            resultado['Incompleto'] += qtd
-            
-    return resultado
+    return render_template('main/dashboard.html', dados=dados, admin=admin_stats)
+
+

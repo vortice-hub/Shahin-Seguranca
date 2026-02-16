@@ -1,0 +1,85 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="mb-8">
+    <h2 class="text-3xl font-bold text-slate-800">Início</h2>
+    <p class="text-slate-500">Bem-vindo ao painel operacional, {{ current_user.real_name.split()[0] }}.</p>
+</div>
+
+<!-- GRID DE ACÇÕES RÁPIDAS (ÁREA DO FUNCIONÁRIO) -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+    <a href="/ponto/registrar" class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition group">
+        <div class="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center text-purple-600 mb-4 group-hover:bg-purple-600 group-hover:text-white transition-colors">
+            <i class="fas fa-fingerprint text-xl"></i>
+        </div>
+        <h3 class="font-bold text-slate-800">Bater Ponto</h3>
+        <p class="text-xs text-slate-400 mt-1">Registe a sua entrada ou saída agora.</p>
+    </a>
+
+    <a href="/documentos/meus-documentos" class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition group relative">
+        <div class="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center text-blue-600 mb-4 group-hover:bg-blue-600 group-hover:text-white transition-colors">
+            <i class="fas fa-file-contract text-xl"></i>
+        </div>
+        {% if dados.doc_pendentes > 0 %}
+        <span class="absolute top-6 right-6 bg-red-500 text-white text-[10px] font-bold px-2 py-1 rounded-full">{{ dados.doc_pendentes }}</span>
+        {% endif %}
+        <h3 class="font-bold text-slate-800">Documentos</h3>
+        <p class="text-xs text-slate-400 mt-1">Holerites, recibos e espelhos assinados.</p>
+    </a>
+
+    <a href="/ponto/espelho" class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition group">
+        <div class="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center text-emerald-600 mb-4 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
+            <i class="fas fa-calendar-check text-xl"></i>
+        </div>
+        <h3 class="font-bold text-slate-800">Meu Espelho</h3>
+        <p class="text-xs text-slate-400 mt-1">Consulte o seu histórico de horas.</p>
+    </a>
+
+    <div class="bg-slate-900 p-6 rounded-2xl shadow-lg flex flex-col justify-between">
+        <div class="text-slate-400 text-xs font-bold uppercase tracking-wider">Data de Hoje</div>
+        <div class="text-white text-2xl font-bold mt-2">{{ dados.hoje }}</div>
+        <div class="text-blue-400 text-[10px] mt-2 font-mono uppercase">Sincronizado via GPS</div>
+    </div>
+</div>
+
+<!-- SECÇÃO ADMINISTRATIVA (SÓ APARECE SE TIVER PERMISSÕES) -->
+{% if admin.total_users is defined or admin.ajustes_pendentes is defined %}
+<div class="pt-6 border-t border-slate-200 mt-10">
+    <h3 class="text-sm font-bold text-slate-400 uppercase tracking-widest mb-6">Gestão Administrativa</h3>
+    
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        
+        {% if has_permission('USUARIOS') %}
+        <div class="bg-white p-6 rounded-xl border-l-4 border-blue-500 shadow-sm">
+            <div class="text-xs font-bold text-slate-400 uppercase">Funcionários Ativos</div>
+            <div class="text-3xl font-black text-slate-800 mt-1">{{ admin.total_users }}</div>
+            {% if admin.pendentes_cadastro > 0 %}
+            <div class="mt-2 text-[10px] bg-blue-50 text-blue-600 py-1 px-2 rounded inline-block font-bold">
+                {{ admin.pendentes_cadastro }} AGUARDANDO PRIMEIRO ACESSO
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        {% if has_permission('PONTO') %}
+        <div class="bg-white p-6 rounded-xl border-l-4 border-emerald-500 shadow-sm">
+            <div class="text-xs font-bold text-slate-400 uppercase">Solicitações de Ajuste</div>
+            <div class="text-3xl font-black text-slate-800 mt-1">{{ admin.ajustes_pendentes }}</div>
+            <a href="/admin/solicitacoes" class="text-[10px] text-emerald-600 font-bold hover:underline mt-2 block uppercase">Revisar Agora →</a>
+        </div>
+        {% endif %}
+
+        {% if has_permission('DOCUMENTOS') %}
+        <div class="bg-white p-6 rounded-xl border-l-4 border-orange-500 shadow-sm">
+            <div class="text-xs font-bold text-slate-400 uppercase">Central de RH</div>
+            <div class="text-sm font-bold text-slate-700 mt-2 italic">Acesso Rápido Disponível</div>
+            <a href="/documentos/admin" class="text-[10px] text-orange-600 font-bold hover:underline mt-2 block uppercase">Abrir Módulo de Documentos →</a>
+        </div>
+        {% endif %}
+
+    </div>
+</div>
+{% endif %}
+
+{% endblock %}
+
+

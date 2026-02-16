@@ -1,14 +1,13 @@
 <!DOCTYPE html>
-<html lang="pt-br">
+<html lang="pt-pt">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Shahin Gestão</title>
+    <title>Shahin Gestão - Operacional</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <style>body { font-family: 'Inter', sans-serif; } .sidebar { transition: transform 0.3s ease-in-out; }</style>
     <script>
         function toggleSidebar() {
@@ -28,6 +27,7 @@
     </div>
     <div id="overlay" onclick="toggleSidebar()" class="fixed inset-0 bg-black bg-opacity-50 z-40 hidden md:hidden"></div>
     {% endif %}
+
     <div class="{% if current_user.is_authenticated and not current_user.is_first_access %}flex h-screen overflow-hidden{% endif %}">
         {% if current_user.is_authenticated and not current_user.is_first_access %}
         <aside id="sidebar" class="sidebar fixed inset-y-0 left-0 z-50 w-64 bg-slate-900 text-slate-300 transform -translate-x-full md:translate-x-0 md:static md:flex-shrink-0 flex flex-col shadow-2xl h-full">
@@ -35,37 +35,52 @@
                 <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold text-lg mr-3">S</div>
                 <span class="font-bold text-xl text-white tracking-tight">Shahin</span>
             </div>
+            
             <div class="p-6 border-b border-slate-800">
-                <div class="text-xs font-bold text-slate-500 uppercase mb-1">Olá,</div>
+                <div class="text-xs font-bold text-slate-500 uppercase mb-1">Utilizador</div>
                 <div class="text-sm font-bold text-white truncate">{{ current_user.real_name }}</div>
+                <div class="text-[10px] text-blue-400 font-mono mt-1 uppercase">{{ current_user.role }}</div>
             </div>
+
             <nav class="flex-1 overflow-y-auto py-4">
                 <ul class="space-y-1">
-                    
                     {% if current_user.role == 'Terminal' %}
-                         <li class="pt-4 pb-2 px-6 text-[10px] font-bold uppercase text-slate-600">Terminal Fixo</li>
                          <li><a href="/ponto/scanner" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-qrcode w-6 text-center mr-2 text-blue-500"></i><span class="font-medium">Abrir Leitor</span></a></li>
-                         <li><a href="/logout" class="flex items-center px-6 py-3 hover:bg-red-900/20 hover:text-red-400 transition group mt-8"><i class="fas fa-sign-out-alt w-6 text-center mr-2 text-slate-500 group-hover:text-red-400"></i><span class="font-medium">Sair</span></a></li>
-                    
                     {% else %}
                         <li><a href="/" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-home w-6 text-center mr-2 text-slate-500 group-hover:text-blue-500"></i><span class="font-medium">Início</span></a></li>
                         
-                        <li class="pt-4 pb-2 px-6 text-[10px] font-bold uppercase text-slate-600">Minha Área</li>
-                        <li><a href="/ponto/registrar" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-fingerprint w-6 text-center mr-2 text-slate-500 group-hover:text-purple-500"></i><span class="font-medium">Registrar Ponto</span></a></li>
+                        <li class="pt-4 pb-2 px-6 text-[10px] font-bold uppercase text-slate-600">Área Pessoal</li>
+                        <li><a href="/ponto/registrar" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-fingerprint w-6 text-center mr-2 text-slate-500 group-hover:text-purple-500"></i><span class="font-medium">Registar Ponto</span></a></li>
                         <li><a href="/ponto/espelho" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-calendar-alt w-6 text-center mr-2 text-slate-500"></i><span class="font-medium">Espelho de Ponto</span></a></li>
                         <li><a href="/documentos/meus-documentos" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-folder-open w-6 text-center mr-2 text-slate-500 group-hover:text-yellow-400"></i><span class="font-medium">Meus Documentos</span></a></li>
-                        <li><a href="/ponto/solicitar-ajuste" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-edit w-6 text-center mr-2 text-slate-500"></i><span class="font-medium">Solicitar Ajuste</span></a></li>
                         
-                        {% if current_user.role == 'Master' %}
-                        <li class="pt-4 pb-2 px-6 text-[10px] font-bold uppercase text-slate-600">Gestão Master</li>
-                        <li><a href="/documentos/admin" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-file-contract w-6 text-center mr-2 text-slate-500 group-hover:text-pink-400"></i><span class="font-medium">Central Documentos</span></a></li>
-                        <li><a href="/controle-uniforme" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-tshirt w-6 text-center mr-2 text-slate-500 group-hover:text-yellow-500"></i><span class="font-medium">Controle de Uniforme</span></a></li>
-                        <li><a href="/admin/solicitacoes" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-check-double w-6 text-center mr-2 text-slate-500 group-hover:text-emerald-500"></i><span class="font-medium">Ajustes de Ponto</span></a></li>
-                        <li><a href="/admin/usuarios" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-users-cog w-6 text-center mr-2 text-blue-400"></i><span class="font-medium">Funcionários</span></a></li>
+                        <!-- SECÇÃO ADMINISTRATIVA DINÂMICA -->
+                        {% set perms = current_user.permissions or "" %}
+                        {% set is_master = current_user.username == 'Thaynara' %}
+
+                        {% if is_master or 'DOCUMENTOS' in perms or 'PONTO' in perms or 'ESTOQUE' in perms or 'USUARIOS' in perms %}
+                        <li class="pt-6 pb-2 px-6 text-[10px] font-bold uppercase text-slate-600 border-t border-slate-800/50 mt-4">Administração</li>
+                        
+                        {% if is_master or 'DOCUMENTOS' in perms %}
+                        <li><a href="/documentos/admin" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-file-contract w-6 text-center mr-2 text-slate-500 group-hover:text-pink-400"></i><span class="font-medium">Documentos & RH</span></a></li>
+                        {% endif %}
+
+                        {% if is_master or 'ESTOQUE' in perms %}
+                        <li><a href="/controle-uniforme" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-tshirt w-6 text-center mr-2 text-slate-500 group-hover:text-yellow-500"></i><span class="font-medium">Uniformes/Estoque</span></a></li>
+                        {% endif %}
+
+                        {% if is_master or 'PONTO' in perms %}
+                        <li><a href="/admin/solicitacoes" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-check-double w-6 text-center mr-2 text-slate-500 group-hover:text-emerald-500"></i><span class="font-medium">Gestão de Ponto</span></a></li>
+                        {% endif %}
+
+                        {% if is_master or 'USUARIOS' in perms %}
+                        <li><a href="/admin/usuarios" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-users-cog w-6 text-center mr-2 text-slate-500 group-hover:text-blue-400"></i><span class="font-medium">Funcionários</span></a></li>
                         {% endif %}
                         
-                        <li><a href="/logout" class="flex items-center px-6 py-3 hover:bg-red-900/20 hover:text-red-400 transition group mt-8"><i class="fas fa-sign-out-alt w-6 text-center mr-2 text-slate-500 group-hover:text-red-400"></i><span class="font-medium">Sair</span></a></li>
+                        {% endif %}
                     {% endif %}
+                    
+                    <li><a href="/logout" class="flex items-center px-6 py-3 hover:bg-red-900/20 hover:text-red-400 transition group mt-8"><i class="fas fa-sign-out-alt w-6 text-center mr-2 text-slate-500 group-hover:text-red-400"></i><span class="font-medium">Sair</span></a></li>
                 </ul>
             </nav>
         </aside>
@@ -83,7 +98,7 @@
                 {% block content %}{% endblock %}
             </div>
             {% if current_user.is_authenticated and not current_user.is_first_access %}
-            <footer class="py-6 text-center text-xs text-slate-400">&copy; 2026 Vortice Company</footer>
+            <footer class="py-6 text-center text-xs text-slate-400">&copy; 2026 Shahin Gestão</footer>
             {% endif %}
         </div>
     </div>
@@ -96,13 +111,12 @@
                 const cat = el.getAttribute('data-cat');
                 Toastify({
                     text: msg, duration: 4000, close: true, gravity: "top", position: "right", 
-                    style: { background: cat === 'error' ? "linear-gradient(to right, #ef4444, #b91c1c)" : "linear-gradient(to right, #059669, #047857)", borderRadius: "8px", fontSize: "14px" },
+                    style: { background: cat === 'error' ? "linear-gradient(to right, #ef4444, #b91c1c)" : "linear-gradient(to right, #3b82f6, #2563eb)", borderRadius: "8px", fontSize: "14px" },
                 }).showToast();
             });
         });
     </script>
 </body>
 </html>
-
 
 

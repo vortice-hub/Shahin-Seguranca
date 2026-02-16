@@ -28,6 +28,12 @@ def create_app():
     
     login_manager.login_view = 'auth.login'
 
+    # --- REGISTO DE FUNÇÕES PARA O HTML ---
+    @app.context_processor
+    def inject_permissions():
+        from app.utils import has_permission
+        return dict(has_permission=has_permission)
+
     with app.app_context():
         from app.auth.routes import auth_bp
         from app.admin.routes import admin_bp
@@ -46,22 +52,17 @@ def create_app():
         try:
             db.create_all()
             
-            # --- PATCH AUTOMÁTICO DE BANCO (PERMISSÕES) ---
             try:
                 with db.engine.connect() as connection:
-                    # Adiciona coluna permissions na tabela users
                     connection.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS permissions VARCHAR(255) DEFAULT '';"))
                     connection.commit()
                 logger.info(">>> PATCH DE BANCO (PERMISSÕES) APLICADO <<<")
             except Exception as e:
                 logger.warning(f"Info Patch Banco: {e}")
-            # -----------------------------------------------
 
             from app.models import User
-            
             master = User.query.filter_by(username='Thaynara').first()
             if not master:
-                # Master absoluto: permissions não importa para ele no código
                 m = User(username='Thaynara', real_name='Thaynara Master', role='Master', is_first_access=False, permissions="ALL")
                 m.set_password('1855')
                 db.session.add(m)
@@ -76,7 +77,6 @@ def create_app():
                 db.session.add(t)
             
             db.session.commit()
-            
         except Exception as e:
             logger.error(f"Erro no boot do DB: {e}")
 
