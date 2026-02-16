@@ -1,0 +1,58 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="mb-6 flex justify-between items-center">
+    <div>
+        <h2 class="text-2xl font-bold text-slate-800">Auditoria de Assinaturas</h2>
+        <p class="text-sm text-slate-500">Rastreabilidade forense de entrega de documentos.</p>
+    </div>
+    <a href="/documentos/admin" class="text-sm font-bold text-slate-500 hover:text-slate-800">Voltar</a>
+</div>
+
+<div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+    <div class="overflow-x-auto">
+        <table class="w-full text-left text-sm text-slate-600">
+            <thead class="bg-slate-50 text-xs uppercase text-slate-400 font-bold border-b border-slate-100">
+                <tr>
+                    <th class="px-6 py-4">Data / Hora</th>
+                    <th class="px-6 py-4">Funcionário</th>
+                    <th class="px-6 py-4">Documento</th>
+                    <th class="px-6 py-4">IP / Dispositivo</th>
+                    <th class="px-6 py-4 text-right">Comprovante</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+                {% for ass in assinaturas %}
+                <tr class="hover:bg-slate-50 transition">
+                    <td class="px-6 py-4">
+                        <div class="font-bold text-slate-800">{{ ass.data_assinatura.strftime('%d/%m/%Y') }}</div>
+                        <div class="text-xs text-slate-400">{{ ass.data_assinatura.strftime('%H:%M:%S') }}</div>
+                    </td>
+                    <td class="px-6 py-4 font-bold text-blue-700">
+                        {{ ass.user.real_name }}
+                    </td>
+                    <td class="px-6 py-4">
+                        <span class="bg-slate-100 text-slate-600 px-2 py-1 rounded text-[10px] font-bold uppercase border border-slate-200">
+                            {{ ass.tipo_documento }}
+                        </span>
+                        <div class="text-[10px] text-slate-400 mt-1 font-mono">Hash: {{ ass.hash_arquivo[:8] }}...</div>
+                    </td>
+                    <td class="px-6 py-4 text-xs">
+                        <div class="font-mono text-emerald-600">{{ ass.ip_address }}</div>
+                        <div class="text-slate-400 truncate w-32" title="{{ ass.user_agent }}">{{ ass.user_agent[:20] }}...</div>
+                    </td>
+                    <td class="px-6 py-4 text-right">
+                        <a href="/documentos/admin/auditoria/certificado/{{ ass.id }}" target="_blank" class="bg-slate-800 text-white px-3 py-2 rounded-lg text-xs font-bold hover:bg-black transition shadow-sm">
+                            <i class="fas fa-certificate mr-1"></i> Certificado
+                        </a>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="5" class="px-6 py-12 text-center text-slate-400 italic">Nenhuma assinatura registrada ainda.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+

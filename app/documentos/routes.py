@@ -1,9 +1,9 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, send_file, jsonify
 from flask_login import login_required, current_user
 from app.extensions import db
-from app.models import User, Holerite, Recibo, EspelhoPontoDoc
-from app.utils import get_brasil_time, remove_accents, master_required
-from app.documentos.utils import gerar_pdf_recibo, gerar_pdf_espelho_mensal
+from app.models import User, Holerite, Recibo, EspelhoPontoDoc, AssinaturaDigital
+from app.utils import get_brasil_time, remove_accents, master_required, get_client_ip, calcular_hash_arquivo
+from app.documentos.utils import gerar_pdf_recibo, gerar_pdf_espelho_mensal, gerar_certificado_entrega
 import io
 from pypdf import PdfReader, PdfWriter
 from datetime import datetime
@@ -17,16 +17,29 @@ documentos_bp = Blueprint('documentos', __name__, template_folder='templates', u
 @master_required
 def dashboard_documentos():
     ultimos_recibos = Recibo.query.order_by(Recibo.created_at.desc()).limit(50).all()
-    # Adicionado: Histórico de disparos de espelho (pega os ultimos criados)
     ultimos_espelhos = EspelhoPontoDoc.query.order_by(EspelhoPontoDoc.created_at.desc()).limit(10).all()
-    
     return render_template('documentos/dashboard.html', recibos=ultimos_recibos, espelhos=ultimos_espelhos)
+
+@documentos_bp.route('/admin/auditoria')
+@login_required
+@master_required
+def auditoria_documentos():
+    # Lista as últimas 100 assinaturas
+    assinaturas = AssinaturaDigital.query.order_by(AssinaturaDigital.data_assinatura.desc()).limit(100).all()
+    return render_template('documentos/auditoria.html', assinaturas=assinaturas)
+
+@documentos_bp.route('/admin/auditoria/certificado/<int:assinatura_id>')
+@login_required
+@master_required
+def baixar_certificado(assinatura_id):
+    ass = AssinaturaDigital.query.get_or_404(assinatura_id)
+    pdf_bytes = gerar_certificado_entrega(ass, ass.user)
+    return send_file(io.BytesIO(pdf_bytes), mimetype='application/pdf', as_attachment=True, download_name=f"Certificado_Entrega_{ass.user.username}.pdf")
 
 @documentos_bp.route('/admin/holerites', methods=['GET', 'POST'])
 @login_required
 @master_required
 def admin_holerites():
-    # ... (Código de Holerites igual ao anterior)
     if request.method == 'POST':
         if request.form.get('acao') == 'limpar_tudo':
             Holerite.query.delete()
@@ -73,7 +86,6 @@ def admin_holerites():
 @login_required
 @master_required
 def admin_novo_recibo():
-    # ... (Código Recibo Igual)
     users = User.query.filter(User.username != 'terminal').order_by(User.real_name).all()
     if request.method == 'POST':
         try:
@@ -92,78 +104,72 @@ def admin_novo_recibo():
         except Exception as e: db.session.rollback(); flash(f'Erro: {e}', 'error')
     return render_template('documentos/novo_recibo.html', users=users, hoje=get_brasil_time().strftime('%Y-%m-%d'))
 
-# --- NOVA ROTA: DISPARAR ESPELHOS ---
 @documentos_bp.route('/admin/disparar-espelhos', methods=['POST'])
 @login_required
 @master_required
 def disparar_espelhos():
-    mes_ref = request.form.get('mes_ref') # ex: 2026-02
-    if not mes_ref:
-        flash('Selecione um mês válido.', 'error')
-        return redirect(url_for('documentos.dashboard_documentos'))
-        
+    mes_ref = request.form.get('mes_ref')
+    if not mes_ref: return redirect(url_for('documentos.dashboard_documentos'))
     try:
         users = User.query.filter(User.username != 'terminal', User.username != 'Thaynara').all()
         count = 0
-        
         for user in users:
-            # Verifica se já existe, se sim, atualiza
             existente = EspelhoPontoDoc.query.filter_by(user_id=user.id, mes_referencia=mes_ref).first()
-            
             pdf_bytes = gerar_pdf_espelho_mensal(user, mes_ref)
-            
             if existente:
-                existente.conteudo_pdf = pdf_bytes
-                existente.visualizado = False
-                existente.created_at = get_brasil_time()
+                existente.conteudo_pdf = pdf_bytes; existente.visualizado = False; existente.created_at = get_brasil_time()
             else:
-                novo = EspelhoPontoDoc(
-                    user_id=user.id,
-                    mes_referencia=mes_ref,
-                    conteudo_pdf=pdf_bytes
-                )
+                novo = EspelhoPontoDoc(user_id=user.id, mes_referencia=mes_ref, conteudo_pdf=pdf_bytes)
                 db.session.add(novo)
             count += 1
-            
-        db.session.commit()
-        flash(f'Sucesso! {count} espelhos de ponto ({mes_ref}) gerados e enviados.', 'success')
-        
-    except Exception as e:
-        db.session.rollback()
-        flash(f'Erro ao gerar espelhos: {e}', 'error')
-        
+        db.session.commit(); flash(f'{count} espelhos enviados.', 'success')
+    except Exception as e: db.session.rollback(); flash(f'Erro: {e}', 'error')
     return redirect(url_for('documentos.dashboard_documentos'))
-
-# --- ROTAS DO USUÁRIO ---
 
 @documentos_bp.route('/meus-documentos')
 @login_required
 def meus_documentos():
     lista_docs = []
-    
-    # Holerites
     for h in Holerite.query.filter_by(user_id=current_user.id).all():
         lista_docs.append({'tipo': 'Holerite', 'titulo': f'Folha: {h.mes_referencia}', 'data': h.enviado_em, 'id': h.id, 'rota': 'baixar_holerite', 'visto': h.visualizado, 'icone': 'fa-file-invoice-dollar', 'cor': 'blue'})
-        
-    # Recibos
     for r in Recibo.query.filter_by(user_id=current_user.id).all():
         lista_docs.append({'tipo': 'Recibo', 'titulo': f'Recibo: R$ {r.valor:.2f}', 'data': r.created_at, 'id': r.id, 'rota': 'baixar_recibo', 'visto': r.visualizado, 'icone': 'fa-file-signature', 'cor': 'emerald'})
-        
-    # Espelhos de Ponto (NOVO)
     for e in EspelhoPontoDoc.query.filter_by(user_id=current_user.id).all():
         lista_docs.append({'tipo': 'Espelho de Ponto', 'titulo': f'Ponto: {e.mes_referencia}', 'data': e.created_at, 'id': e.id, 'rota': 'baixar_espelho', 'visto': e.visualizado, 'icone': 'fa-calendar-check', 'cor': 'purple'})
-        
     lista_docs.sort(key=lambda x: x['data'], reverse=True)
     return render_template('documentos/meus_documentos.html', docs=lista_docs)
 
-# --- DOWNLOADS ---
+# --- DOWNLOADS COM CAPTURA DE ASSINATURA ---
+
+def registrar_assinatura(doc, tipo):
+    """Função auxiliar para registrar a assinatura forense."""
+    try:
+        # Só registra se o usuário for o dono (não o Master auditando)
+        if current_user.id == doc.user_id:
+            # Verifica duplicidade no último minuto (evita flood de cliques)
+            # ou apenas confia na auditoria completa
+            
+            nova_ass = AssinaturaDigital(
+                user_id=current_user.id,
+                tipo_documento=tipo,
+                documento_id=doc.id,
+                hash_arquivo=calcular_hash_arquivo(doc.conteudo_pdf),
+                ip_address=get_client_ip(),
+                user_agent=str(request.user_agent),
+                data_assinatura=get_brasil_time()
+            )
+            db.session.add(nova_ass)
+            doc.visualizado = True
+            db.session.commit()
+    except Exception as e:
+        print(f"Erro ao registrar assinatura: {e}")
 
 @documentos_bp.route('/baixar/holerite/<int:id>', methods=['POST'])
 @login_required
 def baixar_holerite(id):
     doc = Holerite.query.get_or_404(id)
     if current_user.role != 'Master' and doc.user_id != current_user.id: return redirect(url_for('main.dashboard'))
-    if current_user.id == doc.user_id and not doc.visualizado: doc.visualizado = True; db.session.commit()
+    registrar_assinatura(doc, 'Holerite')
     return send_file(io.BytesIO(doc.conteudo_pdf), mimetype='application/pdf', as_attachment=True, download_name=f"Holerite_{doc.mes_referencia}.pdf")
 
 @documentos_bp.route('/baixar/recibo/<int:id>', methods=['POST'])
@@ -171,7 +177,7 @@ def baixar_holerite(id):
 def baixar_recibo(id):
     doc = Recibo.query.get_or_404(id)
     if current_user.role != 'Master' and doc.user_id != current_user.id: return redirect(url_for('main.dashboard'))
-    if current_user.id == doc.user_id and not doc.visualizado: doc.visualizado = True; db.session.commit()
+    registrar_assinatura(doc, 'Recibo')
     return send_file(io.BytesIO(doc.conteudo_pdf), mimetype='application/pdf', as_attachment=True, download_name=f"Recibo_{doc.id}.pdf")
 
 @documentos_bp.route('/baixar/espelho/<int:id>', methods=['POST'])
@@ -179,7 +185,7 @@ def baixar_recibo(id):
 def baixar_espelho(id):
     doc = EspelhoPontoDoc.query.get_or_404(id)
     if current_user.role != 'Master' and doc.user_id != current_user.id: return redirect(url_for('main.dashboard'))
-    if current_user.id == doc.user_id and not doc.visualizado: doc.visualizado = True; db.session.commit()
+    registrar_assinatura(doc, 'Espelho')
     return send_file(io.BytesIO(doc.conteudo_pdf), mimetype='application/pdf', as_attachment=True, download_name=f"Espelho_Ponto_{doc.mes_referencia}.pdf")
 
 @documentos_bp.route('/api/user-info/<int:user_id>')

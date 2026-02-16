@@ -1,19 +1,26 @@
 {% extends 'base.html' %}
 {% block content %}
-<div class="mb-8">
-    <h2 class="text-2xl font-bold text-slate-800">Central de Documentos</h2>
-    <p class="text-sm text-slate-500">Gerencie recibos e holerites da equipe.</p>
+<div class="mb-8 flex justify-between items-end">
+    <div>
+        <h2 class="text-2xl font-bold text-slate-800">Central de Documentos</h2>
+        <p class="text-sm text-slate-500">Gerencie recibos e holerites da equipe.</p>
+    </div>
+    <a href="/documentos/admin/auditoria" class="bg-slate-800 hover:bg-slate-900 text-white font-bold py-2 px-4 rounded-lg shadow-lg text-xs transition flex items-center gap-2">
+        <i class="fas fa-shield-alt"></i> AUDITORIA & ASSINATURAS
+    </a>
 </div>
 
 <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
     <!-- Card 1: Holerite -->
-    <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition">
+    <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition group">
         <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center text-blue-600 mb-4">
             <i class="fas fa-file-invoice text-xl"></i>
         </div>
         <h3 class="font-bold text-md text-slate-800 mb-2">Holerite em massa</h3>
-        <p class="text-xs text-slate-500 mb-4">Importe o PDF unificado. O sistema separa e envia.</p>
-        <a href="/documentos/admin/holerites" class="block w-full text-center bg-slate-50 text-blue-600 font-bold py-2 text-xs rounded border border-slate-200 hover:bg-blue-50">IMPORTAR</a>
+        <p class="text-xs text-slate-500 mb-4">Importe o PDF unificado da contabilidade. O sistema separa e envia automaticamente.</p>
+        <a href="/documentos/admin/holerites" class="block w-full text-center bg-slate-50 hover:bg-blue-50 text-blue-600 font-bold py-2 text-xs rounded border border-slate-200 hover:border-blue-200 transition">
+            IMPORTAR ARQUIVO
+        </a>
     </div>
 
     <!-- Card 2: Recibo -->
@@ -23,10 +30,12 @@
         </div>
         <h3 class="font-bold text-md text-slate-800 mb-2">Recibo Avulso</h3>
         <p class="text-xs text-slate-500 mb-4">Gere recibos de VA, VT ou Pix avulsos.</p>
-        <a href="/documentos/admin/recibo/novo" class="block w-full text-center bg-emerald-600 text-white font-bold py-2 text-xs rounded shadow hover:bg-emerald-700">NOVO RECIBO</a>
+        <a href="/documentos/admin/recibo/novo" class="block w-full text-center bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 text-xs rounded shadow transition">
+            NOVO RECIBO
+        </a>
     </div>
 
-    <!-- Card 3: Espelho de Ponto (NOVO) -->
+    <!-- Card 3: Espelho de Ponto -->
     <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition">
         <div class="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center text-purple-600 mb-4">
             <i class="fas fa-calendar-check text-xl"></i>
@@ -37,7 +46,7 @@
         <form action="/documentos/admin/disparar-espelhos" method="POST" class="flex gap-2">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
             <input type="month" name="mes_ref" class="w-full border rounded px-2 py-1 text-xs" required>
-            <button type="submit" class="bg-purple-600 text-white px-3 py-2 rounded text-xs font-bold hover:bg-purple-700" onclick="return confirm('Gerar e enviar para TODOS os funcionários?')">
+            <button type="submit" class="bg-purple-600 hover:bg-purple-700 text-white px-3 py-2 rounded text-xs font-bold transition" onclick="return confirm('Gerar e enviar para TODOS os funcionários?')">
                 <i class="fas fa-paper-plane"></i>
             </button>
         </form>
