@@ -15,7 +15,7 @@ from app.utils import (
     time_to_minutes,
     gerar_login_automatico,
     master_required,
-    permission_required # Importação do novo decorator
+    permission_required
 )
 
 admin_bp = Blueprint('admin', __name__, template_folder='templates', url_prefix='/admin')
@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 @admin_bp.route('/usuarios/novo', methods=['GET', 'POST'])
 @login_required
-@permission_required('USUARIOS') # Apenas quem tem permissão de Gestão de Utilizadores
+@permission_required('USUARIOS')
 def novo_usuario():
     if request.method == 'POST':
         try:
@@ -33,16 +33,17 @@ def novo_usuario():
             cpf = request.form.get('cpf', '').replace('.', '').replace('-', '').strip()
             
             if not real_name or not cpf:
-                flash('Nome e CPF são obrigatórios.', 'error'); return redirect(url_for('admin.novo_usuario'))
+                flash('Nome e CPF são obrigatórios.', 'error')
+                return redirect(url_for('admin.novo_usuario'))
 
             if User.query.filter_by(cpf=cpf).first() or PreCadastro.query.filter_by(cpf=cpf).first():
-                flash('CPF já cadastrado!', 'error'); return redirect(url_for('admin.novo_usuario'))
+                flash('CPF já cadastrado!', 'error')
+                return redirect(url_for('admin.novo_usuario'))
 
             carga_hm = request.form.get('carga_horaria') or '08:48'
             carga_minutos = time_to_minutes(carga_hm)
             intervalo_min = int(request.form.get('tempo_intervalo') or 60)
 
-            # REGRA: Novos utilizadores manuais sempre nascem sem permissões extras
             novo_pre = PreCadastro(
                 cpf=cpf,
                 nome_previsto=real_name,
@@ -62,20 +63,22 @@ def novo_usuario():
             return render_template('admin/sucesso_usuario.html', nome_real=real_name, cpf=cpf)
             
         except Exception as e:
-            db.session.rollback(); flash(f'Erro interno: {str(e)}', 'error')
+            db.session.rollback()
+            flash(f'Erro interno: {str(e)}', 'error')
             
     return render_template('admin/novo_usuario.html')
 
 @admin_bp.route('/usuarios')
 @login_required
 def gerenciar_usuarios():
-    # Requer que seja Master ou tenha permissão de utilizadores
     from app.utils import has_permission
     if not has_permission('USUARIOS'):
         flash('Sem acesso à gestão de utilizadores.', 'error')
         return redirect(url_for('main.dashboard'))
 
-    users = User.query.order_by(User.real_name).all()
+    # FILTRO APLICADO AQUI: Remove o Terminal (CPF e nome antigo) da lista
+    users = User.query.filter(User.username != '12345678900', User.username != 'terminal').order_by(User.real_name).all()
+    
     pendentes = PreCadastro.query.order_by(PreCadastro.nome_previsto).all()
     return render_template('admin/admin_usuarios.html', users=users, pendentes=pendentes)
 
@@ -84,7 +87,8 @@ def gerenciar_usuarios():
 def editar_usuario(id):
     from app.utils import has_permission
     if not has_permission('USUARIOS'):
-        flash('Sem acesso.', 'error'); return redirect(url_for('main.dashboard'))
+        flash('Sem acesso.', 'error')
+        return redirect(url_for('main.dashboard'))
 
     user = User.query.get_or_404(id)
     user_carga_hm = format_minutes_to_hm(user.carga_horaria or 528)
@@ -93,13 +97,16 @@ def editar_usuario(id):
         acao = request.form.get('acao')
         try:
             if acao == 'excluir':
-                if user.username == '50097952800': flash('Impossível excluir Master.', 'error')
+                # Proteção extra para o Master (CPF) e o antigo Thaynara
+                if user.username == '50097952800' or user.username == 'Thaynara': 
+                    flash('Impossível excluir Master.', 'error')
                 else: 
                     PontoRegistro.query.filter_by(user_id=user.id).delete()
                     PontoResumo.query.filter_by(user_id=user.id).delete()
                     Holerite.query.filter_by(user_id=user.id).delete()
                     Recibo.query.filter_by(user_id=user.id).delete()
-                    db.session.delete(user); db.session.commit()
+                    db.session.delete(user)
+                    db.session.commit()
                     flash('Utilizador excluído.', 'success')
                     return redirect(url_for('admin.gerenciar_usuarios'))
 
@@ -110,15 +117,13 @@ def editar_usuario(id):
                 user.razao_social_empregadora = request.form.get('razao_social')
                 user.cnpj_empregador = request.form.get('cnpj')
                 
-                # JORNADA
                 user.carga_horaria = time_to_minutes(request.form.get('carga_horaria'))
                 user.tempo_intervalo = int(request.form.get('tempo_intervalo') or 60)
                 user.inicio_jornada_ideal = request.form.get('h_ent')
                 user.escala = request.form.get('escala')
                 if request.form.get('dt_escala'): user.data_inicio_escala = request.form.get('dt_escala')
 
-                # --- GESTÃO DE PERMISSÕES (PROCESSAMENTO) ---
-                if user.username != '50097952800': # Master absoluto não muda
+                if user.username != '50097952800' and user.username != 'Thaynara':
                     lista_perms = request.form.getlist('perm_keys')
                     user.permissions = ",".join(lista_perms)
                 
@@ -127,11 +132,14 @@ def editar_usuario(id):
                 return redirect(url_for('admin.gerenciar_usuarios'))
                 
             elif acao == 'resetar_senha':
-                user.set_password('mudar123'); user.is_first_access = True
-                db.session.commit(); flash('Senha resetada.', 'warning')
+                user.set_password('mudar123')
+                user.is_first_access = True
+                db.session.commit()
+                flash('Senha resetada.', 'warning')
                 
         except Exception as e:
-            db.session.rollback(); flash(f'Erro: {e}', 'error')
+            db.session.rollback()
+            flash(f'Erro: {e}', 'error')
 
     return render_template('admin/editar_usuario.html', user=user, carga_hm=user_carga_hm)
 
@@ -150,15 +158,17 @@ def importar_csv():
                 cpf = row.get('CPF', '').replace('.', '').replace('-', '').strip()
                 if not cpf: continue
                 if PreCadastro.query.filter_by(cpf=cpf).first() or User.query.filter_by(cpf=cpf).first(): continue
-                # REGRA: Importação sempre cria sem permissões (permissions="")
+                
                 pre = PreCadastro(
                     cpf=cpf, nome_previsto=row.get('Nome', 'Funcionario'), cargo=row.get('Cargo', 'Colaborador'),
                     salario=float(row.get('Salario', 0).replace(',', '.') or 0),
                     razao_social="LA SHAHIN SERVIÇOS DE SEGURANÇA E PRONTA RESPOSTA LTDA", cnpj="50.537.235/0001-95",
                     carga_horaria=528, tempo_intervalo=60, inicio_jornada_ideal=row.get('Entrada', '07:12')
                 )
-                db.session.add(pre); count += 1
-            db.session.commit(); flash(f'{count} importados com sucesso.')
+                db.session.add(pre)
+                count += 1
+            db.session.commit()
+            flash(f'{count} importados com sucesso.')
         except Exception as e: flash(f'Erro: {e}')
     return render_template('admin/admin_importar_csv.html')
 
@@ -177,7 +187,9 @@ def liberar_acesso():
                 carga_horaria=528, tempo_intervalo=60, inicio_jornada_ideal=request.form.get('h_ent') or '08:00',
                 escala=request.form.get('escala'), data_inicio_escala=request.form.get('dt_escala') if request.form.get('dt_escala') else None
             )
-            db.session.add(novo); db.session.commit(); flash('Acesso liberado.', 'success')
+            db.session.add(novo)
+            db.session.commit()
+            flash('Acesso liberado.', 'success')
     except Exception as e: flash(f'Erro: {e}', 'error')
     return redirect(url_for('admin.gerenciar_usuarios'))
 
@@ -191,7 +203,7 @@ def excluir_liberacao(id):
 
 @admin_bp.route('/solicitacoes', methods=['GET', 'POST'])
 @login_required
-@permission_required('PONTO') # Apenas quem gere Ponto
+@permission_required('PONTO')
 def admin_solicitacoes():
     if request.method == 'POST':
         solic = PontoAjuste.query.get(request.form.get('solic_id'))
@@ -203,15 +215,23 @@ def admin_solicitacoes():
 
 @admin_bp.route('/ferramentas/limpeza', methods=['GET', 'POST'])
 @login_required
-@master_required # Apenas a 50097952800 (Segurança Máxima)
+@master_required
 def admin_limpeza():
     if request.method == 'POST':
         acao = request.form.get('acao')
         try:
-            if acao == 'limpar_testes_ponto': PontoRegistro.query.delete(); PontoResumo.query.delete()
-            elif acao == 'limpar_holerites': Holerite.query.delete(); Recibo.query.delete()
-            elif acao == 'limpar_usuarios_nao_master': User.query.filter(User.username != '50097952800').delete(); PreCadastro.query.delete()
-            db.session.commit(); return redirect(url_for('admin.admin_limpeza'))
+            if acao == 'limpar_testes_ponto': 
+                PontoRegistro.query.delete()
+                PontoResumo.query.delete()
+            elif acao == 'limpar_holerites': 
+                Holerite.query.delete()
+                Recibo.query.delete()
+            elif acao == 'limpar_usuarios_nao_master': 
+                # Protege o Master CPF e o antigo Thaynara
+                User.query.filter(User.username != '50097952800', User.username != 'Thaynara').delete()
+                PreCadastro.query.delete()
+            db.session.commit()
+            return redirect(url_for('admin.admin_limpeza'))
         except: db.session.rollback()
     return render_template('admin/admin_limpeza.html')
 
@@ -219,7 +239,4 @@ def admin_limpeza():
 @login_required
 @master_required
 def patch_banco_dados():
-    # Rota mantida apenas para emergências, o app init já cuida disso agora
     return "Banco de dados já configurado."
-
-

@@ -11,8 +11,7 @@ def dashboard():
     if current_user.is_first_access:
         return redirect(url_for('auth.primeiro_acesso'))
     
-    # --- CORREÇÃO AQUI ---
-    # O nome da função no arquivo ponto/routes.py é 'terminal_scanner', não 'scanner_ponto'
+    # CORREÇÃO: Nome correto da rota do scanner
     if current_user.role == 'Terminal':
         return redirect(url_for('ponto.terminal_scanner'))
 
@@ -31,7 +30,8 @@ def dashboard():
     admin_stats = {}
     
     if has_permission('USUARIOS'):
-        admin_stats['total_users'] = User.query.filter(User.username != 'terminal').count()
+        # FILTRO: Não conta o Terminal como funcionário ativo
+        admin_stats['total_users'] = User.query.filter(User.username != '12345678900', User.username != 'terminal').count()
         admin_stats['pendentes_cadastro'] = PreCadastro.query.count()
 
     if has_permission('PONTO'):
