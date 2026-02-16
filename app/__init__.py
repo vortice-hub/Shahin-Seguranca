@@ -46,27 +46,31 @@ def create_app():
         try:
             db.create_all()
             
-            # --- PATCH AUTOMÁTICO DE BANCO (Jornada Flexível + Empresa) ---
+            # --- PATCH AUTOMÁTICO DE BANCO ---
             try:
                 with db.engine.connect() as connection:
-                    # Patch Anterior (Empresa)
+                    # Garante Tabela de Recibos e Campos de Usuario
                     connection.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS razao_social_empregadora VARCHAR(150) DEFAULT 'LA SHAHIN SERVIÇOS DE SEGURANÇA E PRONTA RESPOSTA LTDA';"))
                     connection.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS cnpj_empregador VARCHAR(25) DEFAULT '50.537.235/0001-95';"))
-                    connection.execute(text("ALTER TABLE pre_cadastros ADD COLUMN IF NOT EXISTS razao_social VARCHAR(150) DEFAULT 'LA SHAHIN SERVIÇOS DE SEGURANÇA E PRONTA RESPOSTA LTDA';"))
-                    connection.execute(text("ALTER TABLE pre_cadastros ADD COLUMN IF NOT EXISTS cnpj VARCHAR(25) DEFAULT '50.537.235/0001-95';"))
                     
-                    # Patch Novo (Jornada Flexível)
-                    # Carga horária 528 min = 8h48m
+                    # Garante Campos de Jornada
                     connection.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS carga_horaria INTEGER DEFAULT 528;"))
                     connection.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS tempo_intervalo INTEGER DEFAULT 60;"))
                     connection.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS inicio_jornada_ideal VARCHAR(5) DEFAULT '07:12';"))
                     
+                    # Garante Campos de Pré-Cadastro
+                    connection.execute(text("ALTER TABLE pre_cadastros ADD COLUMN IF NOT EXISTS razao_social VARCHAR(150) DEFAULT 'LA SHAHIN SERVIÇOS DE SEGURANÇA E PRONTA RESPOSTA LTDA';"))
+                    connection.execute(text("ALTER TABLE pre_cadastros ADD COLUMN IF NOT EXISTS cnpj VARCHAR(25) DEFAULT '50.537.235/0001-95';"))
                     connection.execute(text("ALTER TABLE pre_cadastros ADD COLUMN IF NOT EXISTS carga_horaria INTEGER DEFAULT 528;"))
                     connection.execute(text("ALTER TABLE pre_cadastros ADD COLUMN IF NOT EXISTS tempo_intervalo INTEGER DEFAULT 60;"))
                     connection.execute(text("ALTER TABLE pre_cadastros ADD COLUMN IF NOT EXISTS inicio_jornada_ideal VARCHAR(5) DEFAULT '07:12';"))
                     
+                    # A tabela espelho_ponto_docs é criada pelo db.create_all(), mas em alguns casos de migração
+                    # complexa no Postgres pode precisar de empurrão se o DB já existir.
+                    # Mas como é tabela nova, o SQLAlchemy costuma criar. Deixaremos sem SQL manual para ela por enquanto.
+                    
                     connection.commit()
-                logger.info(">>> PATCH DE BANCO DE DADOS (JORNADA) APLICADO <<<")
+                logger.info(">>> PATCH DE BANCO DE DADOS APLICADO <<<")
             except Exception as e:
                 logger.warning(f"Info Patch Banco: {e}")
             # -------------------------------------------------------------

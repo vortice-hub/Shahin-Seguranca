@@ -5,73 +5,70 @@
     <p class="text-sm text-slate-500">Gerencie recibos e holerites da equipe.</p>
 </div>
 
-<div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-    <div class="bg-white p-8 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition group">
-        <div class="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center text-blue-600 mb-4 group-hover:scale-110 transition">
-            <i class="fas fa-file-invoice text-2xl"></i>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+    <!-- Card 1: Holerite -->
+    <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition">
+        <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center text-blue-600 mb-4">
+            <i class="fas fa-file-invoice text-xl"></i>
         </div>
-        <h3 class="font-bold text-lg text-slate-800 mb-2">Holerite em massa</h3>
-        <p class="text-sm text-slate-500 mb-6">Importe o PDF unificado da contabilidade. O sistema separa e envia automaticamente.</p>
-        <a href="/documentos/admin/holerites" class="block w-full text-center bg-slate-50 hover:bg-blue-50 text-blue-600 font-bold py-3 rounded-lg border border-slate-200 hover:border-blue-200 transition">
-            IMPORTAR ARQUIVO
-        </a>
+        <h3 class="font-bold text-md text-slate-800 mb-2">Holerite em massa</h3>
+        <p class="text-xs text-slate-500 mb-4">Importe o PDF unificado. O sistema separa e envia.</p>
+        <a href="/documentos/admin/holerites" class="block w-full text-center bg-slate-50 text-blue-600 font-bold py-2 text-xs rounded border border-slate-200 hover:bg-blue-50">IMPORTAR</a>
     </div>
 
-    <div class="bg-white p-8 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition group">
-        <div class="w-12 h-12 bg-emerald-100 rounded-lg flex items-center justify-center text-emerald-600 mb-4 group-hover:scale-110 transition">
-            <i class="fas fa-file-signature text-2xl"></i>
+    <!-- Card 2: Recibo -->
+    <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition">
+        <div class="w-10 h-10 bg-emerald-100 rounded-lg flex items-center justify-center text-emerald-600 mb-4">
+            <i class="fas fa-file-signature text-xl"></i>
         </div>
-        <h3 class="font-bold text-lg text-slate-800 mb-2">Recibo Avulso</h3>
-        <p class="text-sm text-slate-500 mb-6">Gere recibos de Vale Transporte, Alimentação, Cesta Básica ou Pix avulsos.</p>
-        <a href="/documentos/admin/recibo/novo" class="block w-full text-center bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-lg shadow transition">
-            <i class="fas fa-plus mr-2"></i> NOVO RECIBO
-        </a>
+        <h3 class="font-bold text-md text-slate-800 mb-2">Recibo Avulso</h3>
+        <p class="text-xs text-slate-500 mb-4">Gere recibos de VA, VT ou Pix avulsos.</p>
+        <a href="/documentos/admin/recibo/novo" class="block w-full text-center bg-emerald-600 text-white font-bold py-2 text-xs rounded shadow hover:bg-emerald-700">NOVO RECIBO</a>
+    </div>
+
+    <!-- Card 3: Espelho de Ponto (NOVO) -->
+    <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition">
+        <div class="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center text-purple-600 mb-4">
+            <i class="fas fa-calendar-check text-xl"></i>
+        </div>
+        <h3 class="font-bold text-md text-slate-800 mb-2">Enviar Espelhos</h3>
+        <p class="text-xs text-slate-500 mb-4">Gera e envia o PDF do ponto para todos os ativos.</p>
+        
+        <form action="/documentos/admin/disparar-espelhos" method="POST" class="flex gap-2">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <input type="month" name="mes_ref" class="w-full border rounded px-2 py-1 text-xs" required>
+            <button type="submit" class="bg-purple-600 text-white px-3 py-2 rounded text-xs font-bold hover:bg-purple-700" onclick="return confirm('Gerar e enviar para TODOS os funcionários?')">
+                <i class="fas fa-paper-plane"></i>
+            </button>
+        </form>
     </div>
 </div>
 
-<!-- MONITORAMENTO DE STATUS -->
-<h3 class="font-bold text-slate-700 mb-4 text-sm uppercase px-2">Histórico de Recibos Enviados (Status)</h3>
+<h3 class="font-bold text-slate-700 mb-4 text-sm uppercase px-2">Histórico de Recibos Enviados</h3>
 <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-10">
     <div class="overflow-x-auto">
         <table class="w-full text-left text-sm text-slate-600">
             <thead class="bg-slate-50 text-xs uppercase text-slate-400 font-bold border-b border-slate-100">
-                <tr>
-                    <th class="px-6 py-3">Funcionário</th>
-                    <th class="px-6 py-3">Data Envio</th>
-                    <th class="px-6 py-3">Valor</th>
-                    <th class="px-6 py-3 text-center">Leitura</th>
-                    <th class="px-6 py-3 text-right">Ação</th>
-                </tr>
+                <tr><th class="px-6 py-3">Funcionário</th><th class="px-6 py-3">Data Envio</th><th class="px-6 py-3">Valor</th><th class="px-6 py-3 text-center">Leitura</th><th class="px-6 py-3 text-right">Ação</th></tr>
             </thead>
             <tbody class="divide-y divide-slate-100">
                 {% for r in recibos %}
                 <tr class="hover:bg-slate-50 transition">
                     <td class="px-6 py-3 font-bold text-slate-800">{{ r.user.real_name }}</td>
-                    <td class="px-6 py-3">{{ r.created_at.strftime('%d/%m/%Y %H:%M') }}</td>
+                    <td class="px-6 py-3">{{ r.created_at.strftime('%d/%m %H:%M') }}</td>
                     <td class="px-6 py-3 font-mono">R$ {{ "%.2f"|format(r.valor) }}</td>
                     <td class="px-6 py-3 text-center">
-                        {% if r.visualizado %}
-                            <span class="bg-emerald-100 text-emerald-700 px-2 py-1 rounded text-[10px] font-bold uppercase border border-emerald-200">
-                                <i class="fas fa-check-double mr-1"></i> Visto
-                            </span>
-                        {% else %}
-                            <span class="bg-amber-100 text-amber-700 px-2 py-1 rounded text-[10px] font-bold uppercase border border-amber-200 animate-pulse">
-                                <i class="fas fa-clock mr-1"></i> Pendente
-                            </span>
-                        {% endif %}
+                        {% if r.visualizado %}<span class="text-emerald-600 font-bold text-xs"><i class="fas fa-check-double"></i> Visto</span>
+                        {% else %}<span class="text-amber-500 font-bold text-xs"><i class="fas fa-clock"></i> Pendente</span>{% endif %}
                     </td>
                     <td class="px-6 py-3 text-right">
                         <form action="/documentos/baixar/recibo/{{ r.id }}" method="POST" target="_blank">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                            <button type="submit" class="text-blue-600 hover:text-blue-800 text-xs font-bold">
-                                <i class="fas fa-eye"></i> Ver PDF
-                            </button>
+                            <button type="submit" class="text-blue-600 hover:underline text-xs font-bold">Ver PDF</button>
                         </form>
                     </td>
                 </tr>
-                {% else %}
-                <tr><td colspan="5" class="px-6 py-8 text-center text-slate-400">Nenhum recibo enviado recentemente.</td></tr>
-                {% endfor %}
+                {% else %}<tr><td colspan="5" class="px-6 py-8 text-center text-slate-400">Nenhum recibo recente.</td></tr>{% endfor %}
             </tbody>
         </table>
     </div>

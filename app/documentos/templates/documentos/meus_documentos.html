@@ -14,7 +14,7 @@
             <div>
                 <div class="flex items-center gap-2">
                     <h3 class="font-bold text-slate-800">{{ doc.titulo }}</h3>
-                    {% if doc.visualizado %}
+                    {% if doc.visto %}
                     <span class="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded font-bold uppercase">Visto</span>
                     {% else %}
                     <span class="text-[10px] bg-blue-600 text-white px-2 py-0.5 rounded font-bold uppercase animate-pulse">Novo</span>
@@ -24,18 +24,18 @@
             </div>
         </div>
 
-        <form action="{{ url_for('documentos.' + doc.rota_download, id=doc.id) }}" method="POST">
+        <form action="{{ url_for('documentos.' + doc.rota, id=doc.id) }}" method="POST">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
             <button type="submit" class="w-full md:w-auto px-6 py-3 rounded-lg font-bold text-sm transition border flex items-center justify-center gap-2
-                {% if doc.visualizado %} 
+                {% if doc.visto %} 
                     bg-white text-slate-600 border-slate-200 hover:bg-slate-50 
                 {% else %} 
                     bg-blue-600 text-white border-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-200 
                 {% endif %}">
-                {% if doc.visualizado %} 
+                {% if doc.visto %} 
                     <i class="fas fa-download"></i> Baixar Cópia 
                 {% else %} 
-                    <i class="fas fa-file-contract"></i> Confirmar Recebimento 
+                    <i class="fas fa-file-contract"></i> Confirmar e Baixar 
                 {% endif %}
             </button>
         </form>
