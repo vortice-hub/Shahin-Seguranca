@@ -1,14 +1,29 @@
 from datetime import datetime, timedelta, time
 import unicodedata
 import re
+import hashlib
 from functools import wraps
-from flask import abort, redirect, url_for, flash
+from flask import abort, redirect, url_for, flash, request
 from flask_login import current_user
 
 # --- FUNÇÃO CENTRALIZADA DE TEMPO ---
 def get_brasil_time():
     """Retorna o horário atual em UTC-3 (Brasil)."""
     return datetime.utcnow() - timedelta(hours=3)
+
+# --- FUNÇÕES DE AUDITORIA E SEGURANÇA (NOVAS) ---
+def calcular_hash_arquivo(conteudo_bytes):
+    """Gera uma assinatura única (SHA-256) para o arquivo."""
+    if not conteudo_bytes: return None
+    return hashlib.sha256(conteudo_bytes).hexdigest()
+
+def get_client_ip():
+    """
+    Captura o IP real do usuário, mesmo atrás de proxies (Nginx/Render).
+    """
+    if request.headers.getlist("X-Forwarded-For"):
+        return request.headers.getlist("X-Forwarded-For")[0]
+    return request.remote_addr
 
 # --- DECORATOR DE PERMISSÃO ---
 def master_required(f):
@@ -39,7 +54,6 @@ def gerar_login_automatico(nome_completo):
     return re.sub(r'[^a-z]', '', primeiro_nome)
 
 def time_to_minutes(t):
-    """Converte objeto time ou string 'HH:MM' para minutos inteiros."""
     if not t: return 0
     if isinstance(t, str):
         try:
@@ -49,14 +63,12 @@ def time_to_minutes(t):
     return t.hour * 60 + t.minute
 
 def format_minutes_to_hm(total_minutes):
-    """Converte minutos inteiros para string 'HH:MM' ou '-HH:MM'."""
     sinal = "" if total_minutes >= 0 else "-"
     total_minutes = abs(total_minutes)
     h = total_minutes // 60
     m = total_minutes % 60
     return f"{sinal}{h:02d}:{m:02d}"
 
-# --- NOVA LÓGICA DE CÁLCULO (JORNADA FLEXÍVEL) ---
 def calcular_dia(user_id, data_ref):
     from app.extensions import db
     from app.models import User, PontoRegistro, PontoResumo
@@ -64,54 +76,42 @@ def calcular_dia(user_id, data_ref):
     user = User.query.get(user_id)
     if not user: return
 
-    # 1. Busca todas as batidas do dia ordenadas
     registros = PontoRegistro.query.filter_by(
         user_id=user_id, 
         data_registro=data_ref
     ).order_by(PontoRegistro.hora_registro).all()
     
-    # 2. Definição da Meta do Dia
-    # Se for Fim de Semana e escala for 5x2, meta é 0.
-    meta_minutos = user.carga_horaria if user.carga_horaria else 528 # Padrão 8h48
+    # Meta Flexível
+    meta_minutos = user.carga_horaria if user.carga_horaria else 528
     
     if user.escala == '5x2' and data_ref.weekday() >= 5:
         meta_minutos = 0
-    elif user.escala == '12x36':
-        # Lógica simplificada para 12x36 (Dia sim/Dia não baseada na data de início)
-        if user.data_inicio_escala:
-            dias_diff = (data_ref - user.data_inicio_escala).days
-            if dias_diff % 2 != 0: # Dia de folga
-                meta_minutos = 0
-            else:
-                meta_minutos = 720 # 12 horas
+    elif user.escala == '12x36' and user.data_inicio_escala:
+        dias_diff = (data_ref - user.data_inicio_escala).days
+        if dias_diff % 2 != 0: meta_minutos = 0
+        else: meta_minutos = 720
     
-    # 3. Cálculo do Tempo Trabalhado (Pares)
     trabalhado_total = 0
     qtd_batidas = len(registros)
     
-    # Itera de 2 em 2 (Entrada -> Saída)
     for i in range(0, qtd_batidas, 2):
         if i + 1 < qtd_batidas:
             entrada = time_to_minutes(registros[i].hora_registro)
             saida = time_to_minutes(registros[i+1].hora_registro)
             trabalhado_total += (saida - entrada)
 
-    # 4. Cálculo do Saldo
     saldo = trabalhado_total - meta_minutos
     
-    # 5. Definição do Status
     status = "OK"
-    
     if qtd_batidas == 0:
         status = "Falta" if meta_minutos > 0 else "Folga"
     elif qtd_batidas % 2 != 0:
-        status = "Incompleto" # Esqueceu de bater a saída
-    elif saldo > 10: # Tolerância de 10 min
+        status = "Incompleto"
+    elif saldo > 10:
         status = "Hora Extra"
-    elif saldo < -10: # Tolerância de 10 min
-        status = "Débito" if meta_minutos > 0 else "Extra (Folga)"
+    elif saldo < -10:
+        status = "Débito" if meta_minutos > 0 else "Extra"
     
-    # 6. Salva/Atualiza Resumo
     resumo = PontoResumo.query.filter_by(user_id=user_id, data_referencia=data_ref).first()
     if not resumo:
         resumo = PontoResumo(user_id=user_id, data_referencia=data_ref)
@@ -124,9 +124,8 @@ def calcular_dia(user_id, data_ref):
     
     try:
         db.session.commit()
-    except Exception as e:
+    except:
         db.session.rollback()
-        print(f"Erro ao calcular dia: {e}")
 
 
 

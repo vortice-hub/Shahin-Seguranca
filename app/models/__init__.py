@@ -18,13 +18,11 @@ class User(UserMixin, db.Model):
     is_first_access = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=get_brasil_time)
     
-    # Legado
     horario_entrada = db.Column(db.String(5), default='07:12')
     horario_almoco_inicio = db.Column(db.String(5), default='12:00')
     horario_almoco_fim = db.Column(db.String(5), default='13:00')
     horario_saida = db.Column(db.String(5), default='17:00')
     
-    # Jornada Flexível
     carga_horaria = db.Column(db.Integer, default=528) 
     tempo_intervalo = db.Column(db.Integer, default=60)
     inicio_jornada_ideal = db.Column(db.String(5), default='07:12')
@@ -33,7 +31,6 @@ class User(UserMixin, db.Model):
     escala = db.Column(db.String(20), default='Livre')
     data_inicio_escala = db.Column(db.Date, nullable=True)
 
-    # Empresa
     razao_social_empregadora = db.Column(db.String(150), default="LA SHAHIN SERVIÇOS DE SEGURANÇA E PRONTA RESPOSTA LTDA")
     cnpj_empregador = db.Column(db.String(25), default="50.537.235/0001-95")
 
@@ -81,12 +78,11 @@ class Recibo(db.Model):
     created_at = db.Column(db.DateTime, default=get_brasil_time)
     user = db.relationship('User', backref=db.backref('recibos', lazy=True))
 
-# --- NOVO MODELO: ESPELHO DE PONTO (PDF ESTÁTICO) ---
 class EspelhoPontoDoc(db.Model):
     __tablename__ = 'espelho_ponto_docs'
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    mes_referencia = db.Column(db.String(7), nullable=False) # ex: "2026-02"
+    mes_referencia = db.Column(db.String(7), nullable=False)
     conteudo_pdf = db.Column(db.LargeBinary, nullable=True)
     visualizado = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=get_brasil_time)
@@ -163,6 +159,25 @@ class Holerite(db.Model):
     visualizado_em = db.Column(db.DateTime, nullable=True)
     enviado_em = db.Column(db.DateTime, default=get_brasil_time)
     user = db.relationship('User', backref=db.backref('holerites', lazy=True))
+
+# --- TABELA DE AUDITORIA FORENSE ---
+class AssinaturaDigital(db.Model):
+    __tablename__ = 'assinaturas_digitais'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    
+    # Qual documento foi assinado
+    tipo_documento = db.Column(db.String(50)) # Holerite, Recibo, Espelho
+    documento_id = db.Column(db.Integer)
+    
+    # Dados Forenses
+    hash_arquivo = db.Column(db.String(64)) # SHA256 do arquivo no momento do clique
+    ip_address = db.Column(db.String(50))
+    user_agent = db.Column(db.String(255))
+    
+    data_assinatura = db.Column(db.DateTime, default=get_brasil_time)
+    
+    user = db.relationship('User', backref=db.backref('assinaturas', lazy=True))
 
 
 

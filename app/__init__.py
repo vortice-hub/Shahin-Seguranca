@@ -46,31 +46,38 @@ def create_app():
         try:
             db.create_all()
             
-            # --- PATCH AUTOMÁTICO DE BANCO ---
+            # --- PATCH AUTOMÁTICO DE BANCO (AUDITORIA) ---
             try:
                 with db.engine.connect() as connection:
-                    # Garante Tabela de Recibos e Campos de Usuario
+                    # Garante Tabelas Anteriores
                     connection.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS razao_social_empregadora VARCHAR(150) DEFAULT 'LA SHAHIN SERVIÇOS DE SEGURANÇA E PRONTA RESPOSTA LTDA';"))
                     connection.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS cnpj_empregador VARCHAR(25) DEFAULT '50.537.235/0001-95';"))
-                    
-                    # Garante Campos de Jornada
                     connection.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS carga_horaria INTEGER DEFAULT 528;"))
                     connection.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS tempo_intervalo INTEGER DEFAULT 60;"))
                     connection.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS inicio_jornada_ideal VARCHAR(5) DEFAULT '07:12';"))
-                    
-                    # Garante Campos de Pré-Cadastro
                     connection.execute(text("ALTER TABLE pre_cadastros ADD COLUMN IF NOT EXISTS razao_social VARCHAR(150) DEFAULT 'LA SHAHIN SERVIÇOS DE SEGURANÇA E PRONTA RESPOSTA LTDA';"))
                     connection.execute(text("ALTER TABLE pre_cadastros ADD COLUMN IF NOT EXISTS cnpj VARCHAR(25) DEFAULT '50.537.235/0001-95';"))
                     connection.execute(text("ALTER TABLE pre_cadastros ADD COLUMN IF NOT EXISTS carga_horaria INTEGER DEFAULT 528;"))
                     connection.execute(text("ALTER TABLE pre_cadastros ADD COLUMN IF NOT EXISTS tempo_intervalo INTEGER DEFAULT 60;"))
                     connection.execute(text("ALTER TABLE pre_cadastros ADD COLUMN IF NOT EXISTS inicio_jornada_ideal VARCHAR(5) DEFAULT '07:12';"))
                     
-                    # A tabela espelho_ponto_docs é criada pelo db.create_all(), mas em alguns casos de migração
-                    # complexa no Postgres pode precisar de empurrão se o DB já existir.
-                    # Mas como é tabela nova, o SQLAlchemy costuma criar. Deixaremos sem SQL manual para ela por enquanto.
+                    # NOVA TABELA: ASSINATURAS DIGITAIS (Postgres Syntax)
+                    # Cria tabela se não existir
+                    connection.execute(text("""
+                        CREATE TABLE IF NOT EXISTS assinaturas_digitais (
+                            id SERIAL PRIMARY KEY,
+                            user_id INTEGER NOT NULL REFERENCES users(id),
+                            tipo_documento VARCHAR(50),
+                            documento_id INTEGER,
+                            hash_arquivo VARCHAR(64),
+                            ip_address VARCHAR(50),
+                            user_agent VARCHAR(255),
+                            data_assinatura TIMESTAMP WITHOUT TIME ZONE
+                        );
+                    """))
                     
                     connection.commit()
-                logger.info(">>> PATCH DE BANCO DE DADOS APLICADO <<<")
+                logger.info(">>> PATCH DE BANCO (AUDITORIA) APLICADO <<<")
             except Exception as e:
                 logger.warning(f"Info Patch Banco: {e}")
             # -------------------------------------------------------------
