@@ -46,12 +46,23 @@ def create_app():
             db.create_all()
             from app.models import User
             
-            # 1. Garante Master
-            if not User.query.filter_by(username='Thaynara').first():
+            # --- CORREÇÃO DE PERMISSÃO MASTER ---
+            # Verifica se Thaynara existe
+            master = User.query.filter_by(username='Thaynara').first()
+            
+            if not master:
+                # Se não existe, cria do zero
                 m = User(username='Thaynara', real_name='Thaynara Master', role='Master', is_first_access=False)
                 m.set_password('1855')
                 db.session.add(m)
                 logger.info("Usuario Master criado.")
+            else:
+                # Se já existe, FORÇA a permissão correta
+                if master.role != 'Master':
+                    master.role = 'Master'
+                    logger.warning("Permissão do usuário Thaynara corrigida para Master.")
+                    # Se quiser garantir que ela não precise trocar senha, descomente abaixo:
+                    # master.is_first_access = False 
 
             # 2. Garante Terminal (RECRIAÇÃO)
             term = User.query.filter_by(username='terminal').first()
@@ -68,9 +79,8 @@ def create_app():
                 db.session.add(t)
                 logger.info("Usuario Terminal criado.")
             else:
-                # Se ja existe, forca a senha para garantir
+                # Garante senha correta do terminal
                 term.set_password('terminal1234')
-                logger.info("Senha do Terminal resetada para padrao.")
             
             db.session.commit()
             
@@ -80,3 +90,5 @@ def create_app():
     return app
 
 app = create_app()
+
+
