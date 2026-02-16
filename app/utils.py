@@ -4,8 +4,6 @@ import re
 from functools import wraps
 from flask import abort, redirect, url_for, flash
 from flask_login import current_user
-# Nota: Importações de modelos (db, User, etc) são feitas dentro das funções 
-# para evitar erro de Ciclo de Importação (Circular Import).
 
 # --- FUNÇÃO CENTRALIZADA DE TEMPO ---
 def get_brasil_time():
@@ -14,14 +12,10 @@ def get_brasil_time():
 
 # --- DECORATOR DE PERMISSÃO ---
 def master_required(f):
-    """
-    Decorator para garantir que apenas usuários 'Master' acessem a rota.
-    Uso: @master_required logo após @login_required
-    """
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if not current_user.is_authenticated or current_user.role != 'Master':
-            flash('Acesso não autorizado. Área restrita ao Master.', 'error')
+            flash('Acesso não autorizado.', 'error')
             return redirect(url_for('main.dashboard'))
         return f(*args, **kwargs)
     return decorated_function
@@ -45,6 +39,7 @@ def gerar_login_automatico(nome_completo):
     return re.sub(r'[^a-z]', '', primeiro_nome)
 
 def time_to_minutes(t):
+    """Converte objeto time ou string 'HH:MM' para minutos inteiros."""
     if not t: return 0
     if isinstance(t, str):
         try:
@@ -54,55 +49,76 @@ def time_to_minutes(t):
     return t.hour * 60 + t.minute
 
 def format_minutes_to_hm(total_minutes):
+    """Converte minutos inteiros para string 'HH:MM' ou '-HH:MM'."""
     sinal = "" if total_minutes >= 0 else "-"
     total_minutes = abs(total_minutes)
     h = total_minutes // 60
     m = total_minutes % 60
     return f"{sinal}{h:02d}:{m:02d}"
 
+# --- NOVA LÓGICA DE CÁLCULO (JORNADA FLEXÍVEL) ---
 def calcular_dia(user_id, data_ref):
-    # Importação atrasada para evitar ciclo (utils -> models -> utils)
     from app.extensions import db
     from app.models import User, PontoRegistro, PontoResumo
     
     user = User.query.get(user_id)
     if not user: return
 
-    registros = PontoRegistro.query.filter_by(user_id=user_id, data_registro=data_ref).order_by(PontoRegistro.hora_registro).all()
+    # 1. Busca todas as batidas do dia ordenadas
+    registros = PontoRegistro.query.filter_by(
+        user_id=user_id, 
+        data_registro=data_ref
+    ).order_by(PontoRegistro.hora_registro).all()
     
-    ent_prev = time_to_minutes(user.horario_entrada)
-    sai_prev = time_to_minutes(user.horario_saida)
-    alm_ini_prev = time_to_minutes(user.horario_almoco_inicio)
-    alm_fim_prev = time_to_minutes(user.horario_almoco_fim)
+    # 2. Definição da Meta do Dia
+    # Se for Fim de Semana e escala for 5x2, meta é 0.
+    meta_minutos = user.carga_horaria if user.carga_horaria else 528 # Padrão 8h48
     
-    minutos_esperados = (sai_prev - ent_prev) - (alm_fim_prev - alm_ini_prev)
-    if minutos_esperados < 0: minutos_esperados = 0
+    if user.escala == '5x2' and data_ref.weekday() >= 5:
+        meta_minutos = 0
+    elif user.escala == '12x36':
+        # Lógica simplificada para 12x36 (Dia sim/Dia não baseada na data de início)
+        if user.data_inicio_escala:
+            dias_diff = (data_ref - user.data_inicio_escala).days
+            if dias_diff % 2 != 0: # Dia de folga
+                meta_minutos = 0
+            else:
+                meta_minutos = 720 # 12 horas
     
-    if data_ref.weekday() >= 5 and user.escala != 'Livre':
-        minutos_esperados = 0
-
+    # 3. Cálculo do Tempo Trabalhado (Pares)
     trabalhado_total = 0
-    for i in range(0, len(registros), 2):
-        if i + 1 < len(registros):
-            inicio = time_to_minutes(registros[i].hora_registro)
-            fim = time_to_minutes(registros[i+1].hora_registro)
-            trabalhado_total += (fim - inicio)
-
-    saldo = trabalhado_total - minutos_esperados
+    qtd_batidas = len(registros)
     
-    status = "OK"
-    if len(registros) == 0 and minutos_esperados > 0: status = "Falta"
-    elif len(registros) % 2 != 0: status = "Incompleto"
-    elif saldo > 0: status = "Hora Extra"
-    elif saldo < 0: status = "Débito"
+    # Itera de 2 em 2 (Entrada -> Saída)
+    for i in range(0, qtd_batidas, 2):
+        if i + 1 < qtd_batidas:
+            entrada = time_to_minutes(registros[i].hora_registro)
+            saida = time_to_minutes(registros[i+1].hora_registro)
+            trabalhado_total += (saida - entrada)
 
+    # 4. Cálculo do Saldo
+    saldo = trabalhado_total - meta_minutos
+    
+    # 5. Definição do Status
+    status = "OK"
+    
+    if qtd_batidas == 0:
+        status = "Falta" if meta_minutos > 0 else "Folga"
+    elif qtd_batidas % 2 != 0:
+        status = "Incompleto" # Esqueceu de bater a saída
+    elif saldo > 10: # Tolerância de 10 min
+        status = "Hora Extra"
+    elif saldo < -10: # Tolerância de 10 min
+        status = "Débito" if meta_minutos > 0 else "Extra (Folga)"
+    
+    # 6. Salva/Atualiza Resumo
     resumo = PontoResumo.query.filter_by(user_id=user_id, data_referencia=data_ref).first()
     if not resumo:
         resumo = PontoResumo(user_id=user_id, data_referencia=data_ref)
         db.session.add(resumo)
     
     resumo.minutos_trabalhados = trabalhado_total
-    resumo.minutos_esperados = minutos_esperados
+    resumo.minutos_esperados = meta_minutos
     resumo.minutos_saldo = saldo
     resumo.status_dia = status
     

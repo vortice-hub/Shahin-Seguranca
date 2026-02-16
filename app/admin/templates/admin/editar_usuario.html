@@ -9,18 +9,11 @@
             <div class="space-y-4">
                 <div><label class="label-pro">Nome</label><input type="text" name="real_name" value="{{ user.real_name }}" class="input-pro"></div>
                 
-                <!-- DADOS DA EMPRESA -->
                 <div class="bg-slate-50 p-4 rounded-lg border border-slate-200">
-                    <p class="text-xs font-bold text-slate-400 uppercase mb-3">Dados da Contratação</p>
+                    <p class="text-xs font-bold text-slate-400 uppercase mb-3">Empresa</p>
                     <div class="space-y-3">
-                        <div>
-                            <label class="label-pro">Razão Social (Empregador)</label>
-                            <input type="text" name="razao_social" class="input-pro text-xs" value="{{ user.razao_social_empregadora or 'LA SHAHIN SERVIÇOS DE SEGURANÇA E PRONTA RESPOSTA LTDA' }}">
-                        </div>
-                        <div>
-                            <label class="label-pro">CNPJ</label>
-                            <input type="text" name="cnpj" class="input-pro text-xs font-mono" value="{{ user.cnpj_empregador or '50.537.235/0001-95' }}">
-                        </div>
+                        <div><label class="label-pro">Razão Social</label><input type="text" name="razao_social" class="input-pro text-xs" value="{{ user.razao_social_empregadora }}"></div>
+                        <div><label class="label-pro">CNPJ</label><input type="text" name="cnpj" class="input-pro text-xs font-mono" value="{{ user.cnpj_empregador }}"></div>
                     </div>
                 </div>
 
@@ -28,10 +21,11 @@
                 <div><label class="label-pro">Cargo</label><input type="text" name="role" value="{{ user.role }}" class="input-pro" {% if user.username == 'Thaynara' %}disabled{% endif %}></div>
                 <div><label class="label-pro">Salário</label><input type="number" step="0.01" name="salario" value="{{ user.salario }}" class="input-pro"></div>
             </div>
+
             <div class="pt-4 border-t border-slate-100">
-                <p class="text-xs font-bold text-slate-400 uppercase mb-3">Escala e Jornada</p>
+                <p class="text-xs font-bold text-slate-400 uppercase mb-3">Regra de Ponto</p>
                 <div class="mb-4">
-                    <label class="label-pro">Tipo de Escala</label>
+                    <label class="label-pro">Escala</label>
                     <select name="escala" class="input-pro" onchange="toggleDtRef(this)">
                         <option value="Livre" {% if user.escala == 'Livre' %}selected{% endif %}>Livre</option>
                         <option value="5x2" {% if user.escala == '5x2' %}selected{% endif %}>Normal 5x2</option>
@@ -42,13 +36,24 @@
                     <label class="label-pro text-blue-700">Data Ref (Trabalho)</label>
                     <input type="date" name="dt_escala" value="{{ user.data_inicio_escala }}" class="input-pro">
                 </div>
-                <div class="grid grid-cols-2 gap-4">
-                    <div><label class="label-pro">Entrada</label><input type="time" name="h_ent" value="{{ user.horario_entrada }}" class="input-pro"></div>
-                    <div><label class="label-pro">Saída Almoço</label><input type="time" name="h_alm_ini" value="{{ user.horario_almoco_inicio }}" class="input-pro"></div>
-                    <div><label class="label-pro">Volta Almoço</label><input type="time" name="h_alm_fim" value="{{ user.horario_almoco_fim }}" class="input-pro"></div>
-                    <div><label class="label-pro">Saída</label><input type="time" name="h_sai" value="{{ user.horario_saida }}" class="input-pro"></div>
+                
+                <!-- CAMPOS FLEXÍVEIS -->
+                <div class="grid grid-cols-2 gap-4 bg-yellow-50 p-4 rounded-lg border border-yellow-100">
+                    <div>
+                        <label class="label-pro text-yellow-800">Carga Diária (HH:MM)</label>
+                        <input type="time" name="carga_horaria" value="{{ carga_hm }}" class="input-pro border-yellow-200 font-bold">
+                    </div>
+                    <div>
+                        <label class="label-pro text-yellow-800">Intervalo (Min)</label>
+                        <input type="number" name="tempo_intervalo" value="{{ user.tempo_intervalo or 60 }}" class="input-pro border-yellow-200 font-bold">
+                    </div>
+                </div>
+                <div class="mt-4">
+                    <label class="label-pro">Horário de Chegada Ideal</label>
+                    <input type="time" name="h_ent" value="{{ user.inicio_jornada_ideal }}" class="input-pro">
                 </div>
             </div>
+
             <div class="pt-6 border-t border-slate-100 flex flex-col gap-3">
                 <button type="submit" name="acao" value="salvar" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg shadow transition">SALVAR</button>
                 <div class="grid grid-cols-2 gap-3">
@@ -62,5 +67,6 @@
 <script>function toggleDtRef(s){if(s.value==='12x36')document.getElementById('divDtRef').classList.remove('hidden');else document.getElementById('divDtRef').classList.add('hidden');}</script>
 <style>.label-pro { display: block; font-size: 0.7rem; font-weight: 700; color: #64748b; text-transform: uppercase; margin-bottom: 0.5rem; } .input-pro { width: 100%; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 0.5rem; padding: 0.75rem 1rem; outline: none; }</style>
 {% endblock %}
+
 
 
