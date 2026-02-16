@@ -4,10 +4,11 @@ psycopg2-binary
 gunicorn
 flask-login
 werkzeug
-cloudinary
 pypdf
 requests
 python-dotenv
 Flask-WTF
 email_validator
 Flask-Migrate
+reportlab
+
