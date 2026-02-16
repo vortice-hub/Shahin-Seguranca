@@ -52,6 +52,7 @@ def create_app():
         try:
             db.create_all()
             
+            # Patch de permissões
             try:
                 with db.engine.connect() as connection:
                     connection.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS permissions VARCHAR(255) DEFAULT '';"))
@@ -61,15 +62,39 @@ def create_app():
                 logger.warning(f"Info Patch Banco: {e}")
 
             from app.models import User
-            master = User.query.filter_by(username='Thaynara').first()
+            
+            # --- CORREÇÃO DO MASTER (MIGRAÇÃO DE THAYNARA PARA CPF) ---
+            
+            # 1. Remove o antigo usuário de texto se existir (para evitar conflito ou lixo no banco)
+            old_master = User.query.filter_by(username='Thaynara').first()
+            if old_master:
+                db.session.delete(old_master)
+                logger.info("Usuário legado 'Thaynara' removido.")
+
+            # 2. Define o novo Master via CPF
+            cpf_master = '50097952800'
+            master = User.query.filter_by(username=cpf_master).first()
+            
             if not master:
-                m = User(username='Thaynara', real_name='Thaynara Master', role='Master', is_first_access=False, permissions="ALL")
-                m.set_password('1855')
+                # Cria o Master com o CPF como username e login
+                m = User(
+                    username=cpf_master, 
+                    cpf=cpf_master,
+                    real_name='Thaynara Master', 
+                    role='Master', 
+                    is_first_access=False, 
+                    permissions="ALL",
+                    salario=0.0
+                )
+                m.set_password('1855') # Senha mantida
                 db.session.add(m)
+                logger.info(f"Novo Master {cpf_master} criado com sucesso.")
             else:
+                # Garante que o Master existente tenha permissões totais
                 if master.role != 'Master': master.role = 'Master'
                 if not master.permissions: master.permissions = "ALL"
 
+            # 3. Garante o usuário terminal
             term = User.query.filter_by(username='terminal').first()
             if not term:
                 t = User(username='terminal', real_name='Terminal de Ponto', role='Terminal', is_first_access=False, cpf='00000000000', salario=0.0)
@@ -83,5 +108,3 @@ def create_app():
     return app
 
 app = create_app()
-
-
