@@ -16,21 +16,25 @@ documentos_bp = Blueprint('documentos', __name__, template_folder='templates', u
 @login_required
 @master_required
 def dashboard_documentos():
-    return render_template('documentos/dashboard.html')
+    # Busca os últimos 50 recibos para monitoramento de visualização
+    ultimos_recibos = Recibo.query.order_by(Recibo.created_at.desc()).limit(50).all()
+    
+    # Busca os últimos uploads de holerites (agrupados ou lista simples)
+    ultimos_holerites = Holerite.query.order_by(Holerite.enviado_em.desc()).limit(20).all()
+    
+    return render_template('documentos/dashboard.html', recibos=ultimos_recibos, holerites=ultimos_holerites)
 
 @documentos_bp.route('/admin/holerites', methods=['GET', 'POST'])
 @login_required
 @master_required
 def admin_holerites():
     if request.method == 'POST':
-        # Lógica de limpar histórico
         if request.form.get('acao') == 'limpar_tudo':
             Holerite.query.delete()
             db.session.commit()
             flash('Histórico de holerites removido.', 'warning')
             return redirect(url_for('documentos.admin_holerites'))
 
-        # Lógica de upload
         file = request.files.get('arquivo_pdf')
         mes_ref = request.form.get('mes_ref')
         if not file or not mes_ref: return redirect(url_for('documentos.admin_holerites'))
@@ -42,6 +46,9 @@ def admin_holerites():
             def encontrar_user(texto):
                 texto_limpo = remove_accents(texto).upper()
                 for u in User.query.all():
+                    # Ignora usuário terminal na busca do PDF também
+                    if u.username == 'terminal': continue
+                    
                     nome_limpo = remove_accents(u.real_name).upper().strip()
                     if len(nome_limpo.split()) > 1 and nome_limpo in texto_limpo:
                         return u
@@ -74,7 +81,8 @@ def admin_holerites():
 @login_required
 @master_required
 def admin_novo_recibo():
-    users = User.query.order_by(User.real_name).all()
+    # FILTRO: Remove o usuário 'terminal' e ordena por nome
+    users = User.query.filter(User.username != 'terminal').order_by(User.real_name).all()
     
     if request.method == 'POST':
         try:
@@ -96,7 +104,6 @@ def admin_novo_recibo():
                 forma_pagamento = request.form.get('forma_pagamento')
             )
             
-            # Gera PDF em memória
             pdf_bytes = gerar_pdf_recibo(recibo, user)
             recibo.conteudo_pdf = pdf_bytes
             
@@ -117,7 +124,6 @@ def admin_novo_recibo():
 @documentos_bp.route('/meus-documentos')
 @login_required
 def meus_documentos():
-    # Holerites
     holerites = Holerite.query.filter_by(user_id=current_user.id).all()
     lista_docs = []
     
@@ -133,7 +139,6 @@ def meus_documentos():
             'cor': 'blue'
         })
         
-    # Recibos
     recibos = Recibo.query.filter_by(user_id=current_user.id).all()
     for r in recibos:
         lista_docs.append({

@@ -1,19 +1,19 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from flask_login import login_required, current_user
-from sqlalchemy import func
+from sqlalchemy import func, text
 import csv
 import io
 import logging
 
 # Importações do Projeto
 from app.extensions import db
-from app.models import User, PreCadastro, PontoResumo, PontoAjuste, PontoRegistro, Holerite
+from app.models import User, PreCadastro, PontoResumo, PontoAjuste, PontoRegistro, Holerite, Recibo
 from app.utils import (
     calcular_dia, 
     get_brasil_time, 
     format_minutes_to_hm, 
     gerar_login_automatico,
-    master_required  # Decorator
+    master_required
 )
 
 admin_bp = Blueprint('admin', __name__, template_folder='templates', url_prefix='/admin')
@@ -94,12 +94,17 @@ def editar_usuario(id):
                 if user.username == 'Thaynara':
                     flash('Ação Proibida: Não é possível excluir o usuário Master.', 'error')
                 else: 
+                    # --- LIMPEZA DE DADOS RELACIONADOS ---
                     PontoRegistro.query.filter_by(user_id=user.id).delete()
                     PontoResumo.query.filter_by(user_id=user.id).delete()
                     Holerite.query.filter_by(user_id=user.id).delete()
+                    
+                    # Apaga recibos antes de apagar o usuário para evitar erro de Foreign Key
+                    Recibo.query.filter_by(user_id=user.id).delete()
+                    
                     db.session.delete(user)
                     db.session.commit()
-                    flash('Usuário excluído com sucesso.', 'success')
+                    flash('Usuário e todos os seus dados excluídos com sucesso.', 'success')
                     return redirect(url_for('admin.gerenciar_usuarios'))
 
             elif acao == 'salvar':
@@ -111,7 +116,7 @@ def editar_usuario(id):
                 user.razao_social_empregadora = request.form.get('razao_social')
                 user.cnpj_empregador = request.form.get('cnpj')
                 
-                # Jornada
+                # Jornada (Campos Legados - Mantidos por enquanto)
                 user.horario_entrada = request.form.get('h_ent')
                 user.horario_almoco_inicio = request.form.get('h_alm_ini')
                 user.horario_almoco_fim = request.form.get('h_alm_fim')
@@ -142,8 +147,6 @@ def editar_usuario(id):
 @login_required
 @master_required
 def importar_csv():
-    # Mantido igual ao anterior, importação CSV simplificada não considera multi-empresa ainda
-    # para não complicar demais o CSV do usuário. Assume-se empresa padrão.
     if request.method == 'POST':
         file = request.files.get('arquivo_csv')
         if not file: return redirect(url_for('admin.importar_csv'))
@@ -160,7 +163,6 @@ def importar_csv():
                     nome_previsto=row.get('Nome', 'Funcionario'),
                     cargo=row.get('Cargo', 'Colaborador'),
                     salario=float(row.get('Salario', 0).replace(',', '.') or 0),
-                    # Assume padrão se importar via CSV simples
                     razao_social="LA SHAHIN SERVIÇOS DE SEGURANÇA E PRONTA RESPOSTA LTDA",
                     cnpj="50.537.235/0001-95",
                     horario_entrada=row.get('Entrada', '07:12'),
@@ -266,7 +268,9 @@ def admin_limpeza():
                 flash('Registros de ponto limpos.', 'warning')
             elif acao == 'limpar_holerites':
                 Holerite.query.delete()
-                flash('Holerites removidos.', 'warning')
+                # Limpa recibos também
+                Recibo.query.delete()
+                flash('Todos os documentos (Holerites e Recibos) foram removidos.', 'warning')
             elif acao == 'limpar_usuarios_nao_master':
                 User.query.filter(User.username != 'Thaynara').delete()
                 PreCadastro.query.delete()
@@ -277,48 +281,36 @@ def admin_limpeza():
             db.session.rollback(); flash(f'Erro: {e}', 'error')
     return render_template('admin/admin_limpeza.html')
 
-
-# ... (Mantenha todo o código anterior do arquivo)
-
-from sqlalchemy import text
-
+# --- ROTAS DE SISTEMA (PATCH MANUAL SE NECESSÁRIO) ---
 @admin_bp.route('/sistema/atualizar-banco-neon', methods=['GET'])
 @login_required
 @master_required
 def patch_banco_dados():
-    """
-    Rota temporária para criar as colunas novas no PostgreSQL (Neon)
-    sem perder os dados existentes.
-    """
     try:
-        # 1. Adicionar colunas na tabela USERS
-        # Usamos 'IF NOT EXISTS' (dependendo da versão do PG) ou catch de erro, 
-        # mas como vamos rodar SQL bruto, vamos tentar um por um.
-        
         cmds = [
+            # EMPRESA
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS razao_social_empregadora VARCHAR(150) DEFAULT 'LA SHAHIN SERVIÇOS DE SEGURANÇA E PRONTA RESPOSTA LTDA';",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS cnpj_empregador VARCHAR(25) DEFAULT '50.537.235/0001-95';",
-            
             "ALTER TABLE pre_cadastros ADD COLUMN IF NOT EXISTS razao_social VARCHAR(150) DEFAULT 'LA SHAHIN SERVIÇOS DE SEGURANÇA E PRONTA RESPOSTA LTDA';",
-            "ALTER TABLE pre_cadastros ADD COLUMN IF NOT EXISTS cnpj VARCHAR(25) DEFAULT '50.537.235/0001-95';"
+            "ALTER TABLE pre_cadastros ADD COLUMN IF NOT EXISTS cnpj VARCHAR(25) DEFAULT '50.537.235/0001-95';",
+            
+            # JORNADA FLEXIVEL
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS carga_horaria INTEGER DEFAULT 528;",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS tempo_intervalo INTEGER DEFAULT 60;",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS inicio_jornada_ideal VARCHAR(5) DEFAULT '07:12';",
+            "ALTER TABLE pre_cadastros ADD COLUMN IF NOT EXISTS carga_horaria INTEGER DEFAULT 528;",
+            "ALTER TABLE pre_cadastros ADD COLUMN IF NOT EXISTS tempo_intervalo INTEGER DEFAULT 60;",
+            "ALTER TABLE pre_cadastros ADD COLUMN IF NOT EXISTS inicio_jornada_ideal VARCHAR(5) DEFAULT '07:12';"
         ]
-        
         for cmd in cmds:
-            try:
-                db.session.execute(text(cmd))
-            except Exception as e:
-                # Se der erro (ex: coluna ja existe), apenas loga e continua
-                logger.warning(f"Comando falhou ou já aplicado: {cmd} - Erro: {e}")
-                db.session.rollback() # Limpa o erro para tentar o próximo
-
-        # 2. Criar a tabela RECIBOS (O create_all faz isso, mas vamos garantir)
+            try: db.session.execute(text(cmd))
+            except Exception as e: db.session.rollback()
         db.create_all()
-        
         db.session.commit()
-        return "Banco de dados atualizado com sucesso! Colunas de CNPJ e Tabela Recibos criadas."
-        
+        return "Banco de dados atualizado com sucesso (Empresa + Jornada Flexível)."
     except Exception as e:
         db.session.rollback()
-        return f"Erro fatal ao atualizar banco: {str(e)}"
+        return f"Erro: {str(e)}"
+
 
 

@@ -33,7 +33,6 @@ def create_app():
         from app.admin.routes import admin_bp
         from app.ponto.routes import ponto_bp
         from app.estoque.routes import estoque_bp
-        # MUDANÇA: Usando o novo módulo documentos
         from app.documentos.routes import documentos_bp
         from app.main.routes import main_bp
 
@@ -47,23 +46,33 @@ def create_app():
         try:
             db.create_all()
             
-            # --- PATCH AUTOMÁTICO DE BANCO (Garante colunas e tabelas) ---
+            # --- PATCH AUTOMÁTICO DE BANCO (Jornada Flexível + Empresa) ---
             try:
                 with db.engine.connect() as connection:
-                    # Garante colunas de empresa em Users
+                    # Patch Anterior (Empresa)
                     connection.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS razao_social_empregadora VARCHAR(150) DEFAULT 'LA SHAHIN SERVIÇOS DE SEGURANÇA E PRONTA RESPOSTA LTDA';"))
                     connection.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS cnpj_empregador VARCHAR(25) DEFAULT '50.537.235/0001-95';"))
-                    # Garante colunas de empresa em PreCadastro
                     connection.execute(text("ALTER TABLE pre_cadastros ADD COLUMN IF NOT EXISTS razao_social VARCHAR(150) DEFAULT 'LA SHAHIN SERVIÇOS DE SEGURANÇA E PRONTA RESPOSTA LTDA';"))
                     connection.execute(text("ALTER TABLE pre_cadastros ADD COLUMN IF NOT EXISTS cnpj VARCHAR(25) DEFAULT '50.537.235/0001-95';"))
+                    
+                    # Patch Novo (Jornada Flexível)
+                    # Carga horária 528 min = 8h48m
+                    connection.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS carga_horaria INTEGER DEFAULT 528;"))
+                    connection.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS tempo_intervalo INTEGER DEFAULT 60;"))
+                    connection.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS inicio_jornada_ideal VARCHAR(5) DEFAULT '07:12';"))
+                    
+                    connection.execute(text("ALTER TABLE pre_cadastros ADD COLUMN IF NOT EXISTS carga_horaria INTEGER DEFAULT 528;"))
+                    connection.execute(text("ALTER TABLE pre_cadastros ADD COLUMN IF NOT EXISTS tempo_intervalo INTEGER DEFAULT 60;"))
+                    connection.execute(text("ALTER TABLE pre_cadastros ADD COLUMN IF NOT EXISTS inicio_jornada_ideal VARCHAR(5) DEFAULT '07:12';"))
+                    
                     connection.commit()
+                logger.info(">>> PATCH DE BANCO DE DADOS (JORNADA) APLICADO <<<")
             except Exception as e:
                 logger.warning(f"Info Patch Banco: {e}")
             # -------------------------------------------------------------
 
             from app.models import User
             
-            # Garante Master
             master = User.query.filter_by(username='Thaynara').first()
             if not master:
                 m = User(username='Thaynara', real_name='Thaynara Master', role='Master', is_first_access=False)
@@ -72,7 +81,6 @@ def create_app():
             else:
                 if master.role != 'Master': master.role = 'Master'
 
-            # Garante Terminal
             term = User.query.filter_by(username='terminal').first()
             if not term:
                 t = User(username='terminal', real_name='Terminal de Ponto', role='Terminal', is_first_access=False, cpf='00000000000', salario=0.0)

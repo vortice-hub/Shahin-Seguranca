@@ -1,5 +1,9 @@
 {% extends 'base.html' %}
 {% block content %}
+<!-- Plugin para Select Pesquisável -->
+<link href="https://cdn.jsdelivr.net/npm/tom-select@2.2.2/dist/css/tom-select.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/tom-select@2.2.2/dist/js/tom-select.complete.min.js"></script>
+
 <div class="max-w-2xl mx-auto">
     <div class="flex items-center justify-between mb-6">
         <h2 class="text-xl font-bold text-slate-800">Gerar Recibo de Pagamento</h2>
@@ -14,16 +18,18 @@
         <form action="/documentos/admin/recibo/novo" method="POST" class="p-8 space-y-6">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
 
+            <!-- 1. Seleção do Funcionário (Agora Pesquisável) -->
             <div>
-                <label class="label-pro">Selecione o Funcionário</label>
-                <select name="user_id" id="userSelect" class="input-pro text-lg font-bold" onchange="carregarDadosUser(this.value)" required>
-                    <option value="" disabled selected>Clique para buscar...</option>
+                <label class="label-pro mb-2">Selecione o Funcionário</label>
+                <select name="user_id" id="userSelect" class="w-full" onchange="carregarDadosUser(this.value)" required>
+                    <option value="">Digite para pesquisar...</option>
                     {% for u in users %}
                     <option value="{{ u.id }}">{{ u.real_name }}</option>
                     {% endfor %}
                 </select>
             </div>
 
+            <!-- Preview do Texto Legal -->
             <div class="bg-yellow-50 p-4 rounded-lg border border-yellow-100 text-sm font-serif text-slate-700 italic">
                 "Recebi de <strong id="previewEmpresa" class="text-slate-900">...</strong>, inscrita no CNPJ <strong id="previewCnpj" class="text-slate-900">...</strong> a quantia abaixo..."
             </div>
@@ -78,7 +84,21 @@
 </div>
 
 <script>
+    // Inicializa o TomSelect para pesquisa
+    new TomSelect("#userSelect",{
+        create: false,
+        sortField: {
+            field: "text",
+            direction: "asc"
+        },
+        placeholder: "Digite o nome do funcionário...",
+        onChange: function(value) {
+            carregarDadosUser(value);
+        }
+    });
+
     function carregarDadosUser(userId) {
+        if(!userId) return;
         fetch(`/documentos/api/user-info/${userId}`)
             .then(response => response.json())
             .then(data => {
