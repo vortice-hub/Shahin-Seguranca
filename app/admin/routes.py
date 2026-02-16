@@ -93,7 +93,7 @@ def editar_usuario(id):
         acao = request.form.get('acao')
         try:
             if acao == 'excluir':
-                if user.username == 'Thaynara': flash('Impossível excluir Master.', 'error')
+                if user.username == '50097952800': flash('Impossível excluir Master.', 'error')
                 else: 
                     PontoRegistro.query.filter_by(user_id=user.id).delete()
                     PontoResumo.query.filter_by(user_id=user.id).delete()
@@ -118,7 +118,7 @@ def editar_usuario(id):
                 if request.form.get('dt_escala'): user.data_inicio_escala = request.form.get('dt_escala')
 
                 # --- GESTÃO DE PERMISSÕES (PROCESSAMENTO) ---
-                if user.username != 'Thaynara': # Master absoluto não muda
+                if user.username != '50097952800': # Master absoluto não muda
                     lista_perms = request.form.getlist('perm_keys')
                     user.permissions = ",".join(lista_perms)
                 
@@ -203,14 +203,14 @@ def admin_solicitacoes():
 
 @admin_bp.route('/ferramentas/limpeza', methods=['GET', 'POST'])
 @login_required
-@master_required # Apenas a Thaynara (Segurança Máxima)
+@master_required # Apenas a 50097952800 (Segurança Máxima)
 def admin_limpeza():
     if request.method == 'POST':
         acao = request.form.get('acao')
         try:
             if acao == 'limpar_testes_ponto': PontoRegistro.query.delete(); PontoResumo.query.delete()
             elif acao == 'limpar_holerites': Holerite.query.delete(); Recibo.query.delete()
-            elif acao == 'limpar_usuarios_nao_master': User.query.filter(User.username != 'Thaynara').delete(); PreCadastro.query.delete()
+            elif acao == 'limpar_usuarios_nao_master': User.query.filter(User.username != '50097952800').delete(); PreCadastro.query.delete()
             db.session.commit(); return redirect(url_for('admin.admin_limpeza'))
         except: db.session.rollback()
     return render_template('admin/admin_limpeza.html')

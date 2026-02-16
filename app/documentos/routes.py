@@ -104,7 +104,7 @@ def dashboard_documentos():
 def auditoria_documentos():
     """Lista alfabética de funcionários com acordeão de assinaturas."""
     # Busca todos os utilizadores (exceto sistemas) ordenados alfabeticamente
-    users = User.query.filter(User.username != 'terminal', User.username != 'Thaynara').order_by(User.real_name).all()
+    users = User.query.filter(User.username != 'terminal', User.username != '50097952800').order_by(User.real_name).all()
     
     dados_auditoria = []
     for u in users:
@@ -143,7 +143,7 @@ def admin_holerites():
     """Upload e separação de PDFs de Holerites."""
     if request.method == 'POST':
         if request.form.get('acao') == 'limpar_tudo':
-            if current_user.username == 'Thaynara':
+            if current_user.username == '50097952800':
                 Holerite.query.delete(); db.session.commit(); flash('Histórico de holerites limpo.', 'warning')
             else:
                 flash('Ação restrita ao Master absoluto.', 'error')
@@ -234,7 +234,7 @@ def disparar_espelhos():
         return redirect(url_for('documentos.dashboard_documentos'))
         
     try:
-        users = User.query.filter(User.username != 'terminal', User.username != 'Thaynara').all()
+        users = User.query.filter(User.username != 'terminal', User.username != '50097952800').all()
         count = 0
         for user in users:
             existente = EspelhoPontoDoc.query.filter_by(user_id=user.id, mes_referencia=mes_ref).first()
@@ -335,7 +335,7 @@ def baixar_holerite(id):
     doc = Holerite.query.get_or_404(id)
     # Permissão: Dono do doc ou Master/RH
     perms = current_user.permissions or ""
-    if current_user.username != 'Thaynara' and 'DOCUMENTOS' not in perms and doc.user_id != current_user.id:
+    if current_user.username != '50097952800' and 'DOCUMENTOS' not in perms and doc.user_id != current_user.id:
         return redirect(url_for('main.dashboard'))
         
     registrar_assinatura(doc, 'Holerite')
@@ -346,7 +346,7 @@ def baixar_holerite(id):
 def baixar_recibo(id):
     doc = Recibo.query.get_or_404(id)
     perms = current_user.permissions or ""
-    if current_user.username != 'Thaynara' and 'DOCUMENTOS' not in perms and doc.user_id != current_user.id:
+    if current_user.username != '50097952800' and 'DOCUMENTOS' not in perms and doc.user_id != current_user.id:
         return redirect(url_for('main.dashboard'))
         
     registrar_assinatura(doc, 'Recibo')
@@ -357,7 +357,7 @@ def baixar_recibo(id):
 def baixar_espelho(id):
     doc = EspelhoPontoDoc.query.get_or_404(id)
     perms = current_user.permissions or ""
-    if current_user.username != 'Thaynara' and 'DOCUMENTOS' not in perms and doc.user_id != current_user.id:
+    if current_user.username != '50097952800' and 'DOCUMENTOS' not in perms and doc.user_id != current_user.id:
         return redirect(url_for('main.dashboard'))
         
     registrar_assinatura(doc, 'Espelho')
@@ -368,7 +368,7 @@ def baixar_espelho(id):
 def api_user_info(user_id):
     """API para preenchimento automático no cadastro de recibos."""
     perms = current_user.permissions or ""
-    if current_user.username != 'Thaynara' and 'DOCUMENTOS' not in perms:
+    if current_user.username != '50097952800' and 'DOCUMENTOS' not in perms:
         return jsonify({'error': 'unauthorized'}), 403
         
     u = User.query.get_or_404(user_id)

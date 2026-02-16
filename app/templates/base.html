@@ -55,7 +55,7 @@
                         <li><a href="/documentos/meus-documentos" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-folder-open w-6 text-center mr-2 text-slate-500 group-hover:text-yellow-400"></i><span class="font-medium">Meus Documentos</span></a></li>
                         
                         {% set perms = current_user.permissions or "" %}
-                        {% set is_master = current_user.username == 'Thaynara' %}
+                        {% set is_master = current_user.username == '50097952800' %}
 
                         {% if is_master or 'DOCUMENTOS' in perms or 'PONTO' in perms or 'ESTOQUE' in perms or 'USUARIOS' in perms or 'AUDITORIA' in perms %}
                         <li class="pt-6 pb-2 px-6 text-[10px] font-bold uppercase text-slate-600 border-t border-slate-800/50 mt-4">Administração</li>
