@@ -11,8 +11,10 @@ def dashboard():
     if current_user.is_first_access:
         return redirect(url_for('auth.primeiro_acesso'))
     
+    # --- CORREÇÃO AQUI ---
+    # O nome da função no arquivo ponto/routes.py é 'terminal_scanner', não 'scanner_ponto'
     if current_user.role == 'Terminal':
-        return redirect(url_for('ponto.scanner_ponto'))
+        return redirect(url_for('ponto.terminal_scanner'))
 
     # Dados Básicos (Todos Vêem)
     dados = {
@@ -25,7 +27,7 @@ def dashboard():
     docs_r = Recibo.query.filter_by(user_id=current_user.id, visualizado=False).count()
     dados['doc_pendentes'] = docs_h + docs_r
 
-    # Dados Administrativos (Apenas se tiver permissão ou for Thaynara)
+    # Dados Administrativos (Apenas se tiver permissão ou for Master)
     admin_stats = {}
     
     if has_permission('USUARIOS'):
@@ -36,5 +38,3 @@ def dashboard():
         admin_stats['ajustes_pendentes'] = PontoAjuste.query.filter_by(status='Pendente').count()
 
     return render_template('main/dashboard.html', dados=dados, admin=admin_stats)
-
-
