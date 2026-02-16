@@ -1,6 +1,7 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app
 from flask_login import login_required, current_user
-from app.extensions import db
+# ADICIONADO: Importação do 'csrf' para permitir a isenção na rota da API
+from app.extensions import db, csrf
 from app.models import PontoRegistro, PontoResumo, User, PontoAjuste
 from app.utils import get_brasil_time, calcular_dia, format_minutes_to_hm, data_por_extenso
 from datetime import datetime, date
@@ -25,7 +26,6 @@ def gerar_token_qrcode():
     token = s.dumps({'user_id': current_user.id, 'timestamp': get_brasil_time().timestamp()})
     return jsonify({'token': token})
 
-# --- ROTA QUE ESTAVA DANDO ERRO 404 ---
 @ponto_bp.route('/api/check-status', methods=['GET'])
 @login_required
 def check_status_ponto():
@@ -56,6 +56,7 @@ def check_status_ponto():
 
 @ponto_bp.route('/api/registrar-leitura', methods=['POST'])
 @login_required
+@csrf.exempt # --- CORREÇÃO: Permite POST via API sem token de formulário ---
 def registrar_leitura_terminal():
     if current_user.role != 'Terminal' and current_user.role != 'Master': 
         return jsonify({'error': 'Acesso negado.'}), 403
@@ -157,7 +158,6 @@ def registrar_ponto():
     elif len(pontos) == 3: prox = "Saída"
     elif len(pontos) >= 4: prox = "Extra"
 
-    # POST mantido para compatibilidade (botão manual se necessário)
     if request.method == 'POST':
         if bloqueado: 
             flash('Bloqueado')
@@ -188,7 +188,6 @@ def registrar_ponto():
 def espelho_ponto():
     target_user_id = request.args.get('user_id', type=int) or current_user.id
     
-    # Segurança: Só pode ver o próprio ou se for Master
     if target_user_id != current_user.id and current_user.role != 'Master':
         return redirect(url_for('main.dashboard'))
     
