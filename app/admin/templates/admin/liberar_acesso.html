@@ -25,6 +25,20 @@
                 </div>
             </div>
             
+            <!-- EMPRESA -->
+            <div class="bg-slate-50 p-4 rounded-lg border border-slate-100">
+                <div class="grid grid-cols-1 gap-3">
+                    <div>
+                        <label class="label-pro">Razão Social (Empregador)</label>
+                        <input type="text" name="razao_social" class="input-pro text-xs" value="LA SHAHIN SERVIÇOS DE SEGURANÇA E PRONTA RESPOSTA LTDA">
+                    </div>
+                    <div>
+                        <label class="label-pro">CNPJ</label>
+                        <input type="text" name="cnpj" class="input-pro text-xs font-mono" value="50.537.235/0001-95">
+                    </div>
+                </div>
+            </div>
+            
             <div class="grid grid-cols-2 gap-4">
                 <div>
                     <label class="label-pro">Cargo</label>
@@ -92,5 +106,6 @@
 <script>
     function toggleDtRef(sel) { if (sel.value === '12x36') document.getElementById('divDtRef').classList.remove('hidden'); else document.getElementById('divDtRef').classList.add('hidden'); }
 </script>
-
 {% endblock %}
+
+

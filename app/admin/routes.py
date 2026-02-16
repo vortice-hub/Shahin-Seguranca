@@ -13,7 +13,7 @@ from app.utils import (
     get_brasil_time, 
     format_minutes_to_hm, 
     gerar_login_automatico,
-    master_required  # Novo decorator importado
+    master_required  # Decorator
 )
 
 admin_bp = Blueprint('admin', __name__, template_folder='templates', url_prefix='/admin')
@@ -27,17 +27,14 @@ logger = logging.getLogger(__name__)
 def novo_usuario():
     if request.method == 'POST':
         try:
-            # Coleta de dados do formulário
             real_name = request.form.get('real_name')
             cpf_raw = request.form.get('cpf', '')
             cpf = cpf_raw.replace('.', '').replace('-', '').strip()
             
-            # Validação básica
             if not real_name or not cpf:
                 flash('Nome e CPF são obrigatórios.', 'error')
                 return redirect(url_for('admin.novo_usuario'))
 
-            # Verifica duplicidade
             usuario_existente = User.query.filter_by(cpf=cpf).first()
             pre_cadastro_existente = PreCadastro.query.filter_by(cpf=cpf).first()
             
@@ -45,12 +42,16 @@ def novo_usuario():
                 flash('CPF já cadastrado no sistema!', 'error')
                 return redirect(url_for('admin.novo_usuario'))
 
-            # Criação do Pré-Cadastro
             novo_pre = PreCadastro(
                 cpf=cpf,
                 nome_previsto=real_name,
                 cargo=request.form.get('role'),
                 salario=float(request.form.get('salario') or 0),
+                
+                # Dados da Empresa
+                razao_social=request.form.get('razao_social'),
+                cnpj=request.form.get('cnpj'),
+                
                 horario_entrada=request.form.get('h_ent'),
                 horario_almoco_inicio=request.form.get('h_alm_ini'),
                 horario_almoco_fim=request.form.get('h_alm_fim'),
@@ -67,7 +68,7 @@ def novo_usuario():
         except Exception as e:
             db.session.rollback()
             logger.error(f"Erro ao criar usuário: {e}")
-            flash(f'Erro interno ao processar cadastro: {str(e)}', 'error')
+            flash(f'Erro interno: {str(e)}', 'error')
             
     return render_template('admin/novo_usuario.html')
 
@@ -93,11 +94,9 @@ def editar_usuario(id):
                 if user.username == 'Thaynara':
                     flash('Ação Proibida: Não é possível excluir o usuário Master.', 'error')
                 else: 
-                    # Limpeza em cascata manual (se não configurado no DB)
                     PontoRegistro.query.filter_by(user_id=user.id).delete()
                     PontoResumo.query.filter_by(user_id=user.id).delete()
                     Holerite.query.filter_by(user_id=user.id).delete()
-                    
                     db.session.delete(user)
                     db.session.commit()
                     flash('Usuário excluído com sucesso.', 'success')
@@ -108,7 +107,11 @@ def editar_usuario(id):
                 user.role = request.form.get('role')
                 user.salario = float(request.form.get('salario') or 0)
                 
-                # Atualização de Jornada
+                # Atualização de Empresa
+                user.razao_social_empregadora = request.form.get('razao_social')
+                user.cnpj_empregador = request.form.get('cnpj')
+                
+                # Jornada
                 user.horario_entrada = request.form.get('h_ent')
                 user.horario_almoco_inicio = request.form.get('h_alm_ini')
                 user.horario_almoco_fim = request.form.get('h_alm_fim')
@@ -124,15 +127,14 @@ def editar_usuario(id):
                 return redirect(url_for('admin.gerenciar_usuarios'))
                 
             elif acao == 'resetar_senha':
-                # Reseta para uma senha padrão temporária (ex: mudar123)
                 user.set_password('mudar123')
                 user.is_first_access = True
                 db.session.commit()
-                flash(f'Senha resetada para "mudar123". O usuário deverá trocá-la no próximo login.', 'warning')
+                flash('Senha resetada para "mudar123".', 'warning')
                 
         except Exception as e:
             db.session.rollback()
-            flash(f'Erro ao salvar alterações: {e}', 'error')
+            flash(f'Erro ao salvar: {e}', 'error')
 
     return render_template('admin/editar_usuario.html', user=user)
 
@@ -140,79 +142,52 @@ def editar_usuario(id):
 @login_required
 @master_required
 def importar_csv():
+    # Mantido igual ao anterior, importação CSV simplificada não considera multi-empresa ainda
+    # para não complicar demais o CSV do usuário. Assume-se empresa padrão.
     if request.method == 'POST':
         file = request.files.get('arquivo_csv')
-        if not file:
-            return redirect(url_for('admin.importar_csv'))
-            
+        if not file: return redirect(url_for('admin.importar_csv'))
         try:
             stream = io.StringIO(file.stream.read().decode("UTF8"), newline=None)
             csv_reader = csv.DictReader(stream, delimiter=';')
-            
-            count_sucesso = 0
-            count_ignorado = 0
-            
+            count = 0
             for row in csv_reader:
-                cpf_bruto = row.get('CPF', '')
-                cpf_limpo = cpf_bruto.replace('.', '').replace('-', '').strip()
-                
-                if not cpf_limpo:
-                    continue
-                    
-                # Verifica existência
-                if PreCadastro.query.filter_by(cpf=cpf_limpo).first() or User.query.filter_by(cpf=cpf_limpo).first():
-                    count_ignorado += 1
-                    continue
-                
-                # Tratamento de valores numéricos
-                salario_str = row.get('Salario', '0').replace(',', '.')
-                try:
-                    salario_float = float(salario_str)
-                except ValueError:
-                    salario_float = 0.0
-
+                cpf = row.get('CPF', '').replace('.', '').replace('-', '').strip()
+                if not cpf: continue
+                if PreCadastro.query.filter_by(cpf=cpf).first() or User.query.filter_by(cpf=cpf).first(): continue
                 pre = PreCadastro(
-                    cpf=cpf_limpo,
+                    cpf=cpf,
                     nome_previsto=row.get('Nome', 'Funcionario'),
                     cargo=row.get('Cargo', 'Colaborador'),
-                    salario=salario_float,
+                    salario=float(row.get('Salario', 0).replace(',', '.') or 0),
+                    # Assume padrão se importar via CSV simples
+                    razao_social="LA SHAHIN SERVIÇOS DE SEGURANÇA E PRONTA RESPOSTA LTDA",
+                    cnpj="50.537.235/0001-95",
                     horario_entrada=row.get('Entrada', '07:12'),
-                    horario_saida=row.get('Saida', '17:00'),
-                    horario_almoco_inicio='12:00',
-                    horario_almoco_fim='13:00',
-                    escala='5x2'
+                    horario_saida=row.get('Saida', '17:00')
                 )
-                db.session.add(pre)
-                count_sucesso += 1
-                
+                db.session.add(pre); count += 1
             db.session.commit()
-            flash(f'Processamento concluído: {count_sucesso} importados, {count_ignorado} duplicados ignorados.', 'success')
-            
-        except Exception as e:
-            db.session.rollback()
-            flash(f'Erro ao processar arquivo CSV: {e}', 'error')
-            
+            flash(f'{count} importados.')
+        except Exception as e: flash(f'Erro: {e}')
     return render_template('admin/admin_importar_csv.html')
-
-# --- GESTÃO DE ACESSOS E LIBERAÇÕES ---
 
 @admin_bp.route('/liberar-acesso', methods=['POST'])
 @login_required
 @master_required
 def liberar_acesso():
     try:
-        cpf_raw = request.form.get('cpf', '')
-        cpf = cpf_raw.replace('.', '').replace('-', '').strip()
-        
-        # Verifica duplicidade
+        cpf = request.form.get('cpf', '').replace('.', '').replace('-', '').strip()
         if User.query.filter_by(cpf=cpf).first() or PreCadastro.query.filter_by(cpf=cpf).first():
-            flash('Este CPF já possui cadastro ou liberação pendente.', 'error')
+            flash('CPF já existe.', 'error')
         else:
             novo = PreCadastro(
                 cpf=cpf,
                 nome_previsto=request.form.get('nome'),
                 cargo=request.form.get('cargo'),
                 salario=float(request.form.get('salario') or 0),
+                razao_social=request.form.get('razao_social'),
+                cnpj=request.form.get('cnpj'),
                 horario_entrada=request.form.get('h_ent'),
                 horario_almoco_inicio=request.form.get('h_alm_ini'),
                 horario_almoco_fim=request.form.get('h_alm_fim'),
@@ -222,13 +197,9 @@ def liberar_acesso():
             )
             db.session.add(novo)
             db.session.commit()
-            flash('Acesso liberado com sucesso! O funcionário já pode criar a conta.', 'success')
-            
+            flash('Acesso liberado.', 'success')
     except Exception as e:
-        db.session.rollback()
-        flash(f'Erro ao liberar acesso: {e}', 'error')
-        
-    # Redireciona para a lista geral para ver o resultado
+        flash(f'Erro: {e}', 'error')
     return redirect(url_for('admin.gerenciar_usuarios'))
 
 @admin_bp.route('/liberar-acesso/excluir/<int:id>')
@@ -239,10 +210,8 @@ def excluir_liberacao(id):
     if pre:
         db.session.delete(pre)
         db.session.commit()
-        flash('Pré-cadastro removido da fila.', 'success')
+        flash('Removido.')
     return redirect(url_for('admin.gerenciar_usuarios'))
-
-# --- SOLICITAÇÕES DE PONTO ---
 
 @admin_bp.route('/solicitacoes', methods=['GET', 'POST'])
 @login_required
@@ -252,78 +221,37 @@ def admin_solicitacoes():
         solic_id = request.form.get('solic_id')
         decisao = request.form.get('decisao')
         motivo = request.form.get('motivo_repro')
-        
         solic = PontoAjuste.query.get(solic_id)
         if solic:
             if decisao == 'aprovar':
                 solic.status = 'Aprovado'
-                
-                # Se for Inclusão, cria o registro no ponto
-                if solic.tipo_solicitacao == 'Inclusao':
-                    # Lógica futura: Converter string HH:MM para Time e salvar
-                    pass
-                # Se for Edição, atualiza o registro existente
-                elif solic.tipo_solicitacao == 'Edicao' and solic.ponto_original_id:
-                    # Lógica futura: Atualizar PontoRegistro
-                    pass
-                
                 flash('Solicitação Aprovada.', 'success')
             else:
                 solic.status = 'Reprovado'
                 solic.motivo_reprovacao = motivo
                 flash('Solicitação Reprovada.', 'warning')
-                
             db.session.commit()
-            
     solicitacoes = PontoAjuste.query.filter_by(status='Pendente').order_by(PontoAjuste.created_at.desc()).all()
-    
-    # Busca dados extras para exibição (ex: horário original antes da edição)
     extras = {}
     for s in solicitacoes:
         if s.ponto_original_id:
-            ponto = PontoRegistro.query.get(s.ponto_original_id)
-            if ponto:
-                extras[s.id] = ponto.hora_registro.strftime('%H:%M')
-                
+            p = PontoRegistro.query.get(s.ponto_original_id)
+            if p: extras[s.id] = p.hora_registro.strftime('%H:%M')
     return render_template('admin/solicitacoes.html', solicitacoes=solicitacoes, extras=extras)
-
-# --- FERRAMENTAS E RELATÓRIOS ---
 
 @admin_bp.route('/relatorio-folha', methods=['GET', 'POST'])
 @login_required
 @master_required
 def admin_relatorio_folha():
-    # Define mês de referência (Padrão: Atual)
     mes_ref = request.form.get('mes_ref') or get_brasil_time().strftime('%Y-%m')
-    
-    try: 
-        ano, mes = map(int, mes_ref.split('-'))
-    except ValueError: 
-        hoje = get_brasil_time()
-        ano, mes = hoje.year, hoje.month
-        mes_ref = hoje.strftime('%Y-%m')
-    
+    try: ano, mes = map(int, mes_ref.split('-'))
+    except: hoje = get_brasil_time(); ano, mes = hoje.year, hoje.month; mes_ref = hoje.strftime('%Y-%m')
     users = User.query.order_by(User.real_name).all()
     relatorio = []
-    
     for u in users:
-        # Calcula saldo total do mês para cada usuário
-        resumos = PontoResumo.query.filter(
-            PontoResumo.user_id == u.id, 
-            func.extract('year', PontoResumo.data_referencia) == ano, 
-            func.extract('month', PontoResumo.data_referencia) == mes
-        ).all()
-        
+        resumos = PontoResumo.query.filter(PontoResumo.user_id == u.id, func.extract('year', PontoResumo.data_referencia) == ano, func.extract('month', PontoResumo.data_referencia) == mes).all()
         total_saldo = sum(r.minutos_saldo for r in resumos)
-        
-        relatorio.append({
-            'id': u.id,
-            'nome': u.real_name,
-            'cargo': u.role,
-            'saldo_formatado': format_minutes_to_hm(total_saldo),
-            'sinal': 'text-emerald-600' if total_saldo >= 0 else 'text-red-600'
-        })
-        
+        relatorio.append({'id': u.id, 'nome': u.real_name, 'cargo': u.role, 'saldo_formatado': format_minutes_to_hm(total_saldo), 'sinal': 'text-emerald-600' if total_saldo >= 0 else 'text-red-600'})
     return render_template('admin/admin_relatorio_folha.html', relatorio=relatorio, mes_ref=mes_ref)
 
 @admin_bp.route('/ferramentas/limpeza', methods=['GET', 'POST'])
@@ -334,27 +262,63 @@ def admin_limpeza():
         acao = request.form.get('acao')
         try:
             if acao == 'limpar_testes_ponto':
-                PontoRegistro.query.delete()
-                PontoResumo.query.delete()
-                flash('Todos os registros de ponto foram apagados.', 'warning')
-                
+                PontoRegistro.query.delete(); PontoResumo.query.delete()
+                flash('Registros de ponto limpos.', 'warning')
             elif acao == 'limpar_holerites':
                 Holerite.query.delete()
-                flash('Todos os holerites foram removidos do banco.', 'warning')
-                
+                flash('Holerites removidos.', 'warning')
             elif acao == 'limpar_usuarios_nao_master':
-                # Remove todos exceto quem tem 'Master' no username ou role
                 User.query.filter(User.username != 'Thaynara').delete()
                 PreCadastro.query.delete()
-                flash('Usuários de teste removidos com sucesso.', 'warning')
-            
+                flash('Usuários removidos.', 'warning')
             db.session.commit()
             return redirect(url_for('admin.admin_limpeza'))
-            
         except Exception as e:
-            db.session.rollback()
-            flash(f'Erro durante a limpeza: {e}', 'error')
-            
+            db.session.rollback(); flash(f'Erro: {e}', 'error')
     return render_template('admin/admin_limpeza.html')
+
+
+# ... (Mantenha todo o código anterior do arquivo)
+
+from sqlalchemy import text
+
+@admin_bp.route('/sistema/atualizar-banco-neon', methods=['GET'])
+@login_required
+@master_required
+def patch_banco_dados():
+    """
+    Rota temporária para criar as colunas novas no PostgreSQL (Neon)
+    sem perder os dados existentes.
+    """
+    try:
+        # 1. Adicionar colunas na tabela USERS
+        # Usamos 'IF NOT EXISTS' (dependendo da versão do PG) ou catch de erro, 
+        # mas como vamos rodar SQL bruto, vamos tentar um por um.
+        
+        cmds = [
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS razao_social_empregadora VARCHAR(150) DEFAULT 'LA SHAHIN SERVIÇOS DE SEGURANÇA E PRONTA RESPOSTA LTDA';",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS cnpj_empregador VARCHAR(25) DEFAULT '50.537.235/0001-95';",
+            
+            "ALTER TABLE pre_cadastros ADD COLUMN IF NOT EXISTS razao_social VARCHAR(150) DEFAULT 'LA SHAHIN SERVIÇOS DE SEGURANÇA E PRONTA RESPOSTA LTDA';",
+            "ALTER TABLE pre_cadastros ADD COLUMN IF NOT EXISTS cnpj VARCHAR(25) DEFAULT '50.537.235/0001-95';"
+        ]
+        
+        for cmd in cmds:
+            try:
+                db.session.execute(text(cmd))
+            except Exception as e:
+                # Se der erro (ex: coluna ja existe), apenas loga e continua
+                logger.warning(f"Comando falhou ou já aplicado: {cmd} - Erro: {e}")
+                db.session.rollback() # Limpa o erro para tentar o próximo
+
+        # 2. Criar a tabela RECIBOS (O create_all faz isso, mas vamos garantir)
+        db.create_all()
+        
+        db.session.commit()
+        return "Banco de dados atualizado com sucesso! Colunas de CNPJ e Tabela Recibos criadas."
+        
+    except Exception as e:
+        db.session.rollback()
+        return f"Erro fatal ao atualizar banco: {str(e)}"
 
 

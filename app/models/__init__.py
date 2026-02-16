@@ -19,6 +19,7 @@ class User(UserMixin, db.Model):
     is_first_access = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=get_brasil_time)
     
+    # Dados de Jornada
     horario_entrada = db.Column(db.String(5), default='07:12')
     horario_almoco_inicio = db.Column(db.String(5), default='12:00')
     horario_almoco_fim = db.Column(db.String(5), default='13:00')
@@ -26,6 +27,10 @@ class User(UserMixin, db.Model):
     salario = db.Column(db.Float, default=2000.00)
     escala = db.Column(db.String(20), default='Livre')
     data_inicio_escala = db.Column(db.Date, nullable=True)
+
+    # --- NOVOS CAMPOS: DADOS DA EMPRESA CONTRATANTE ---
+    razao_social_empregadora = db.Column(db.String(150), default="LA SHAHIN SERVIÇOS DE SEGURANÇA E PRONTA RESPOSTA LTDA")
+    cnpj_empregador = db.Column(db.String(25), default="50.537.235/0001-95")
 
     def set_password(self, password): self.password_hash = generate_password_hash(password)
     def check_password(self, password): return check_password_hash(self.password_hash, password)
@@ -37,13 +42,50 @@ class PreCadastro(db.Model):
     nome_previsto = db.Column(db.String(100))
     cargo = db.Column(db.String(50), default='Colaborador')
     salario = db.Column(db.Float, default=2000.00)
+    
+    # Jornada
     horario_entrada = db.Column(db.String(5), default='07:12')
     horario_almoco_inicio = db.Column(db.String(5), default='12:00')
     horario_almoco_fim = db.Column(db.String(5), default='13:00')
     horario_saida = db.Column(db.String(5), default='17:00')
     escala = db.Column(db.String(20), default='Livre')
     data_inicio_escala = db.Column(db.Date, nullable=True)
+    
+    # --- NOVOS CAMPOS: DADOS DA EMPRESA ---
+    razao_social = db.Column(db.String(150), default="LA SHAHIN SERVIÇOS DE SEGURANÇA E PRONTA RESPOSTA LTDA")
+    cnpj = db.Column(db.String(25), default="50.537.235/0001-95")
+    
     criado_em = db.Column(db.DateTime, default=get_brasil_time)
+
+# --- NOVO MODELO: RECIBOS ---
+class Recibo(db.Model):
+    __tablename__ = 'recibos'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    
+    # Dados preenchidos no momento da geração
+    valor = db.Column(db.Float, nullable=False)
+    data_pagamento = db.Column(db.Date, nullable=False)
+    
+    # Opções do Recibo (Checkboxes)
+    tipo_vale_alimentacao = db.Column(db.Boolean, default=False)
+    tipo_vale_transporte = db.Column(db.Boolean, default=False)
+    tipo_assiduidade = db.Column(db.Boolean, default=False)
+    tipo_cesta_basica = db.Column(db.Boolean, default=False)
+    
+    # Forma de Pagamento
+    forma_pagamento = db.Column(db.String(50), default="Pix")
+    
+    # Arquivo Gerado
+    conteudo_pdf = db.Column(db.LargeBinary, nullable=True)
+    
+    visualizado = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=get_brasil_time)
+    
+    user = db.relationship('User', backref=db.backref('recibos', lazy=True))
+
+# (Os outros modelos PontoRegistro, PontoResumo, etc, continuam iguais, 
+# mas preciso incluí-los para o arquivo ficar completo se você for substituir tudo)
 
 class PontoRegistro(db.Model):
     __tablename__ = 'ponto_registros'
@@ -116,5 +158,6 @@ class Holerite(db.Model):
     visualizado_em = db.Column(db.DateTime, nullable=True)
     enviado_em = db.Column(db.DateTime, default=get_brasil_time)
     user = db.relationship('User', backref=db.backref('holerites', lazy=True))
+
 
 
