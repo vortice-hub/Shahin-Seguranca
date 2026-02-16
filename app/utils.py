@@ -25,13 +25,13 @@ def get_client_ip():
 def has_permission(permission_name):
     """
     Verifica se o utilizador atual tem uma permissão específica.
-    Bypass automático para o utilizador Master 'Thaynara'.
+    Bypass automático para o utilizador Master '50097952800'.
     """
     if not current_user.is_authenticated:
         return False
     
     # Master Absoluto
-    if current_user.username == 'Thaynara':
+    if current_user.username == '50097952800':
         return True
     
     # Se o utilizador não tem nenhuma permissão atribuída
@@ -60,7 +60,7 @@ def permission_required(permission_name):
 def master_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if not current_user.is_authenticated or (current_user.role != 'Master' and current_user.username != 'Thaynara'):
+        if not current_user.is_authenticated or (current_user.role != 'Master' and current_user.username != '50097952800'):
             flash('Acesso não autorizado.', 'error')
             return redirect(url_for('main.dashboard'))
         return f(*args, **kwargs)
