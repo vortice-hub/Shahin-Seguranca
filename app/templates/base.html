@@ -8,13 +8,41 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
-    <style>body { font-family: 'Inter', sans-serif; } .sidebar { transition: transform 0.3s ease-in-out; }</style>
+    <style>
+        body { font-family: 'Inter', sans-serif; } 
+        .sidebar { transition: transform 0.3s ease-in-out; }
+        /* Animação suave para o submenu */
+        .submenu { transition: max-height 0.3s ease-in-out; overflow: hidden; max-height: 0; }
+        .submenu.open { max-height: 200px; } /* Altura suficiente para os itens */
+        .rotate-icon { transform: rotate(180deg); }
+    </style>
     <script>
         function toggleSidebar() {
             const sb = document.getElementById('sidebar');
             const ov = document.getElementById('overlay');
-            if (sb.classList.contains('-translate-x-full')) { sb.classList.remove('-translate-x-full'); ov.classList.remove('hidden'); }
-            else { sb.classList.add('-translate-x-full'); ov.classList.add('hidden'); }
+            if (sb.classList.contains('-translate-x-full')) { 
+                sb.classList.remove('-translate-x-full'); 
+                ov.classList.remove('hidden'); 
+            } else { 
+                sb.classList.add('-translate-x-full');
+                ov.classList.add('hidden'); 
+            }
+        }
+
+        // Nova função para abrir/fechar submenus
+        function toggleSubmenu(id, iconId) {
+            const menu = document.getElementById(id);
+            const icon = document.getElementById(iconId);
+            if (menu.classList.contains('open')) {
+                menu.classList.remove('open');
+                menu.classList.add('hidden'); // Esconde totalmente após animação
+                if(icon) icon.classList.remove('rotate-180');
+            } else {
+                menu.classList.remove('hidden');
+                // Pequeno delay para permitir que o navegador processe a remoção do hidden antes de animar
+                setTimeout(() => menu.classList.add('open'), 10);
+                if(icon) icon.classList.add('rotate-180');
+            }
         }
     </script>
 </head>
@@ -45,13 +73,35 @@
             <nav class="flex-1 overflow-y-auto py-4">
                 <ul class="space-y-1">
                     {% if current_user.role == 'Terminal' %}
-                         <li><a href="/ponto/scanner" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-qrcode w-6 text-center mr-2 text-blue-500"></i><span class="font-medium">Abrir Leitor</span></a></li>
+                        <li><a href="/ponto/scanner" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-qrcode w-6 text-center mr-2 text-blue-500"></i><span class="font-medium">Abrir Leitor</span></a></li>
                     {% else %}
                         <li><a href="/" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-home w-6 text-center mr-2 text-slate-500 group-hover:text-blue-500"></i><span class="font-medium">Início</span></a></li>
                         
                         <li class="pt-4 pb-2 px-6 text-[10px] font-bold uppercase text-slate-600">Área Pessoal</li>
                         <li><a href="/ponto/registrar" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-fingerprint w-6 text-center mr-2 text-slate-500 group-hover:text-purple-500"></i><span class="font-medium">Registar Ponto</span></a></li>
-                        <li><a href="/ponto/espelho" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-calendar-alt w-6 text-center mr-2 text-slate-500"></i><span class="font-medium">Espelho de Ponto</span></a></li>
+                        
+                        <li>
+                            <button onclick="toggleSubmenu('submenu-espelho', 'icon-espelho')" class="w-full flex items-center justify-between px-6 py-3 hover:bg-slate-800 hover:text-white transition group focus:outline-none">
+                                <div class="flex items-center">
+                                    <i class="fas fa-calendar-alt w-6 text-center mr-2 text-slate-500 group-hover:text-white"></i>
+                                    <span class="font-medium">Espelho de Ponto</span>
+                                </div>
+                                <i id="icon-espelho" class="fas fa-chevron-down text-xs transition-transform duration-300"></i>
+                            </button>
+                            <ul id="submenu-espelho" class="submenu hidden bg-slate-950">
+                                <li>
+                                    <a href="/ponto/espelho" class="block pl-16 pr-6 py-2 text-sm text-slate-400 hover:text-white hover:bg-slate-800 transition border-l-2 border-transparent hover:border-blue-600">
+                                        Visualizar
+                                    </a>
+                                </li>
+                                <li>
+                                    <a href="/ponto/solicitar-ajuste" class="block pl-16 pr-6 py-2 text-sm text-slate-400 hover:text-white hover:bg-slate-800 transition border-l-2 border-transparent hover:border-yellow-500">
+                                        Solicitar Ajuste
+                                    </a>
+                                </li>
+                            </ul>
+                        </li>
+
                         <li><a href="/documentos/meus-documentos" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-folder-open w-6 text-center mr-2 text-slate-500 group-hover:text-yellow-400"></i><span class="font-medium">Meus Documentos</span></a></li>
                         
                         {% set perms = current_user.permissions or "" %}
@@ -122,5 +172,3 @@
     </script>
 </body>
 </html>
-
-

@@ -11,4 +11,4 @@ Flask-WTF
 email_validator
 Flask-Migrate
 reportlab
-
+google-cloud-aiplatform
