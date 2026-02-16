@@ -4,6 +4,7 @@ from flask import Flask
 from app.extensions import db, login_manager, csrf, migrate
 from config import config_map
 from werkzeug.middleware.proxy_fix import ProxyFix
+from sqlalchemy import text  # Importação necessária para o patch
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -32,55 +33,53 @@ def create_app():
         from app.admin.routes import admin_bp
         from app.ponto.routes import ponto_bp
         from app.estoque.routes import estoque_bp
-        from app.holerites.routes import holerite_bp
+        from app.documentos.routes import documentos_bp
         from app.main.routes import main_bp
 
         app.register_blueprint(auth_bp)
         app.register_blueprint(admin_bp)
         app.register_blueprint(ponto_bp)
         app.register_blueprint(estoque_bp)
-        app.register_blueprint(holerite_bp)
+        app.register_blueprint(documentos_bp)
         app.register_blueprint(main_bp)
 
         try:
             db.create_all()
+            
+            # --- PATCH DE EMERGÊNCIA NEON/POSTGRES ---
+            # Força a criação das colunas novas antes de qualquer consulta de usuário
+            try:
+                # Usa transação isolada para garantir execução
+                with db.engine.connect() as connection:
+                    connection.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS razao_social_empregadora VARCHAR(150) DEFAULT 'LA SHAHIN SERVIÇOS DE SEGURANÇA E PRONTA RESPOSTA LTDA';"))
+                    connection.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS cnpj_empregador VARCHAR(25) DEFAULT '50.537.235/0001-95';"))
+                    connection.execute(text("ALTER TABLE pre_cadastros ADD COLUMN IF NOT EXISTS razao_social VARCHAR(150) DEFAULT 'LA SHAHIN SERVIÇOS DE SEGURANÇA E PRONTA RESPOSTA LTDA';"))
+                    connection.execute(text("ALTER TABLE pre_cadastros ADD COLUMN IF NOT EXISTS cnpj VARCHAR(25) DEFAULT '50.537.235/0001-95';"))
+                    connection.commit()
+                logger.info(">>> PATCH DE BANCO DE DADOS APLICADO COM SUCESSO <<<")
+            except Exception as e:
+                # Se der erro (ex: sintaxe ou permissão), apenas loga. 
+                # Se a coluna já existir, o IF NOT EXISTS cuida disso.
+                logger.warning(f"Nota sobre Patch de Banco: {e}")
+            # -----------------------------------------
+
             from app.models import User
             
-            # --- CORREÇÃO DE PERMISSÃO MASTER ---
-            # Verifica se Thaynara existe
+            # Garante Master
             master = User.query.filter_by(username='Thaynara').first()
-            
             if not master:
-                # Se não existe, cria do zero
                 m = User(username='Thaynara', real_name='Thaynara Master', role='Master', is_first_access=False)
                 m.set_password('1855')
                 db.session.add(m)
-                logger.info("Usuario Master criado.")
             else:
-                # Se já existe, FORÇA a permissão correta
-                if master.role != 'Master':
-                    master.role = 'Master'
-                    logger.warning("Permissão do usuário Thaynara corrigida para Master.")
-                    # Se quiser garantir que ela não precise trocar senha, descomente abaixo:
-                    # master.is_first_access = False 
+                if master.role != 'Master': master.role = 'Master'
 
-            # 2. Garante Terminal (RECRIAÇÃO)
+            # Garante Terminal
             term = User.query.filter_by(username='terminal').first()
             if not term:
-                t = User(
-                    username='terminal',
-                    real_name='Terminal de Ponto',
-                    role='Terminal',
-                    is_first_access=False,
-                    cpf='00000000000',
-                    salario=0.0
-                )
+                t = User(username='terminal', real_name='Terminal de Ponto', role='Terminal', is_first_access=False, cpf='00000000000', salario=0.0)
                 t.set_password('terminal1234')
                 db.session.add(t)
-                logger.info("Usuario Terminal criado.")
-            else:
-                # Garante senha correta do terminal
-                term.set_password('terminal1234')
             
             db.session.commit()
             
@@ -90,5 +89,6 @@ def create_app():
     return app
 
 app = create_app()
+
 
 
