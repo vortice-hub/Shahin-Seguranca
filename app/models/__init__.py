@@ -18,19 +18,21 @@ class User(UserMixin, db.Model):
     is_first_access = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=get_brasil_time)
     
+    # --- SISTEMA DE PERMISSÕES ---
+    # Armazena permissões como string separada por vírgulas (ex: "PONTO,ESTOQUE")
+    permissions = db.Column(db.String(255), default="")
+    
+    # Jornada e Empresa
     horario_entrada = db.Column(db.String(5), default='07:12')
     horario_almoco_inicio = db.Column(db.String(5), default='12:00')
     horario_almoco_fim = db.Column(db.String(5), default='13:00')
     horario_saida = db.Column(db.String(5), default='17:00')
-    
     carga_horaria = db.Column(db.Integer, default=528) 
     tempo_intervalo = db.Column(db.Integer, default=60)
     inicio_jornada_ideal = db.Column(db.String(5), default='07:12')
-
     salario = db.Column(db.Float, default=2000.00)
     escala = db.Column(db.String(20), default='Livre')
     data_inicio_escala = db.Column(db.Date, nullable=True)
-
     razao_social_empregadora = db.Column(db.String(150), default="LA SHAHIN SERVIÇOS DE SEGURANÇA E PRONTA RESPOSTA LTDA")
     cnpj_empregador = db.Column(db.String(25), default="50.537.235/0001-95")
 
@@ -44,22 +46,17 @@ class PreCadastro(db.Model):
     nome_previsto = db.Column(db.String(100))
     cargo = db.Column(db.String(50), default='Colaborador')
     salario = db.Column(db.Float, default=2000.00)
-    
     horario_entrada = db.Column(db.String(5), default='07:12')
     horario_almoco_inicio = db.Column(db.String(5), default='12:00')
     horario_almoco_fim = db.Column(db.String(5), default='13:00')
     horario_saida = db.Column(db.String(5), default='17:00')
-    
     carga_horaria = db.Column(db.Integer, default=528)
     tempo_intervalo = db.Column(db.Integer, default=60)
     inicio_jornada_ideal = db.Column(db.String(5), default='07:12')
-
     escala = db.Column(db.String(20), default='Livre')
     data_inicio_escala = db.Column(db.Date, nullable=True)
-    
     razao_social = db.Column(db.String(150), default="LA SHAHIN SERVIÇOS DE SEGURANÇA E PRONTA RESPOSTA LTDA")
     cnpj = db.Column(db.String(25), default="50.537.235/0001-95")
-    
     criado_em = db.Column(db.DateTime, default=get_brasil_time)
 
 class Recibo(db.Model):
@@ -160,24 +157,16 @@ class Holerite(db.Model):
     enviado_em = db.Column(db.DateTime, default=get_brasil_time)
     user = db.relationship('User', backref=db.backref('holerites', lazy=True))
 
-# --- TABELA DE AUDITORIA FORENSE ---
 class AssinaturaDigital(db.Model):
     __tablename__ = 'assinaturas_digitais'
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    
-    # Qual documento foi assinado
-    tipo_documento = db.Column(db.String(50)) # Holerite, Recibo, Espelho
+    tipo_documento = db.Column(db.String(50))
     documento_id = db.Column(db.Integer)
-    
-    # Dados Forenses
-    hash_arquivo = db.Column(db.String(64)) # SHA256 do arquivo no momento do clique
+    hash_arquivo = db.Column(db.String(64))
     ip_address = db.Column(db.String(50))
     user_agent = db.Column(db.String(255))
-    
     data_assinatura = db.Column(db.DateTime, default=get_brasil_time)
-    
     user = db.relationship('User', backref=db.backref('assinaturas', lazy=True))
-
 
 

@@ -46,51 +46,28 @@ def create_app():
         try:
             db.create_all()
             
-            # --- PATCH AUTOMÁTICO DE BANCO (AUDITORIA) ---
+            # --- PATCH AUTOMÁTICO DE BANCO (PERMISSÕES) ---
             try:
                 with db.engine.connect() as connection:
-                    # Garante Tabelas Anteriores
-                    connection.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS razao_social_empregadora VARCHAR(150) DEFAULT 'LA SHAHIN SERVIÇOS DE SEGURANÇA E PRONTA RESPOSTA LTDA';"))
-                    connection.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS cnpj_empregador VARCHAR(25) DEFAULT '50.537.235/0001-95';"))
-                    connection.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS carga_horaria INTEGER DEFAULT 528;"))
-                    connection.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS tempo_intervalo INTEGER DEFAULT 60;"))
-                    connection.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS inicio_jornada_ideal VARCHAR(5) DEFAULT '07:12';"))
-                    connection.execute(text("ALTER TABLE pre_cadastros ADD COLUMN IF NOT EXISTS razao_social VARCHAR(150) DEFAULT 'LA SHAHIN SERVIÇOS DE SEGURANÇA E PRONTA RESPOSTA LTDA';"))
-                    connection.execute(text("ALTER TABLE pre_cadastros ADD COLUMN IF NOT EXISTS cnpj VARCHAR(25) DEFAULT '50.537.235/0001-95';"))
-                    connection.execute(text("ALTER TABLE pre_cadastros ADD COLUMN IF NOT EXISTS carga_horaria INTEGER DEFAULT 528;"))
-                    connection.execute(text("ALTER TABLE pre_cadastros ADD COLUMN IF NOT EXISTS tempo_intervalo INTEGER DEFAULT 60;"))
-                    connection.execute(text("ALTER TABLE pre_cadastros ADD COLUMN IF NOT EXISTS inicio_jornada_ideal VARCHAR(5) DEFAULT '07:12';"))
-                    
-                    # NOVA TABELA: ASSINATURAS DIGITAIS (Postgres Syntax)
-                    # Cria tabela se não existir
-                    connection.execute(text("""
-                        CREATE TABLE IF NOT EXISTS assinaturas_digitais (
-                            id SERIAL PRIMARY KEY,
-                            user_id INTEGER NOT NULL REFERENCES users(id),
-                            tipo_documento VARCHAR(50),
-                            documento_id INTEGER,
-                            hash_arquivo VARCHAR(64),
-                            ip_address VARCHAR(50),
-                            user_agent VARCHAR(255),
-                            data_assinatura TIMESTAMP WITHOUT TIME ZONE
-                        );
-                    """))
-                    
+                    # Adiciona coluna permissions na tabela users
+                    connection.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS permissions VARCHAR(255) DEFAULT '';"))
                     connection.commit()
-                logger.info(">>> PATCH DE BANCO (AUDITORIA) APLICADO <<<")
+                logger.info(">>> PATCH DE BANCO (PERMISSÕES) APLICADO <<<")
             except Exception as e:
                 logger.warning(f"Info Patch Banco: {e}")
-            # -------------------------------------------------------------
+            # -----------------------------------------------
 
             from app.models import User
             
             master = User.query.filter_by(username='Thaynara').first()
             if not master:
-                m = User(username='Thaynara', real_name='Thaynara Master', role='Master', is_first_access=False)
+                # Master absoluto: permissions não importa para ele no código
+                m = User(username='Thaynara', real_name='Thaynara Master', role='Master', is_first_access=False, permissions="ALL")
                 m.set_password('1855')
                 db.session.add(m)
             else:
                 if master.role != 'Master': master.role = 'Master'
+                if not master.permissions: master.permissions = "ALL"
 
             term = User.query.filter_by(username='terminal').first()
             if not term:
@@ -106,6 +83,5 @@ def create_app():
     return app
 
 app = create_app()
-
 
 
