@@ -1,0 +1,54 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="mb-6"><h2 class="text-2xl font-bold text-slate-800">Meus Documentos</h2></div>
+
+<div class="space-y-4">
+    {% for doc in docs %}
+    <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 transition hover:shadow-md">
+        
+        <div class="flex items-center gap-4">
+            <div class="w-12 h-12 rounded-lg flex items-center justify-center text-xl bg-{{ doc.cor }}-100 text-{{ doc.cor }}-600">
+                <i class="fas {{ doc.icone }}"></i>
+            </div>
+            
+            <div>
+                <div class="flex items-center gap-2">
+                    <h3 class="font-bold text-slate-800">{{ doc.titulo }}</h3>
+                    {% if doc.visualizado %}
+                    <span class="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded font-bold uppercase">Visto</span>
+                    {% else %}
+                    <span class="text-[10px] bg-blue-600 text-white px-2 py-0.5 rounded font-bold uppercase animate-pulse">Novo</span>
+                    {% endif %}
+                </div>
+                <p class="text-xs text-slate-500">{{ doc.data.strftime('%d/%m/%Y') }} - {{ doc.tipo }}</p>
+            </div>
+        </div>
+
+        <form action="{{ url_for('documentos.' + doc.rota_download, id=doc.id) }}" method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <button type="submit" class="w-full md:w-auto px-6 py-3 rounded-lg font-bold text-sm transition border flex items-center justify-center gap-2
+                {% if doc.visualizado %} 
+                    bg-white text-slate-600 border-slate-200 hover:bg-slate-50 
+                {% else %} 
+                    bg-blue-600 text-white border-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-200 
+                {% endif %}">
+                {% if doc.visualizado %} 
+                    <i class="fas fa-download"></i> Baixar Cópia 
+                {% else %} 
+                    <i class="fas fa-file-contract"></i> Confirmar Recebimento 
+                {% endif %}
+            </button>
+        </form>
+
+    </div>
+    {% else %}
+    <div class="text-center py-16 text-slate-400 bg-white rounded-xl border border-slate-200 border-dashed">
+        <i class="fas fa-folder-open text-4xl mb-4 opacity-50"></i>
+        <p>Nenhum documento disponível no momento.</p>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}
+
+
+

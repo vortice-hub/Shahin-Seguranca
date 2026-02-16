@@ -3,11 +3,16 @@
 <div class="max-w-4xl mx-auto">
     <div class="mb-6 flex justify-between items-center">
         <div><h2 class="text-2xl font-bold text-slate-800">Importação de Holerites</h2><p class="text-sm text-slate-500">Envie o PDF da folha.</p></div>
-        <form action="/holerites/admin/importar" method="POST" onsubmit="return confirm('Apagar histórico?')"><input type="hidden" name="acao" value="limpar_tudo"><button type="submit" class="text-xs text-red-500 hover:text-red-700 underline font-bold">Limpar Histórico</button></form>
+        <form action="/documentos/admin/holerites" method="POST" onsubmit="return confirm('Apagar histórico?')">
+            <input type="hidden" name="acao" value="limpar_tudo">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <button type="submit" class="text-xs text-red-500 hover:text-red-700 underline font-bold">Limpar Histórico</button>
+        </form>
     </div>
 
     <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-8 mb-8">
-        <form action="/holerites/admin/importar" method="POST" enctype="multipart/form-data" class="space-y-6">
+        <form action="/documentos/admin/holerites" method="POST" enctype="multipart/form-data" class="space-y-6">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div><label class="label-pro">Mês de Referência</label><input type="month" name="mes_ref" class="input-pro" required></div>
                 <div><label class="label-pro">Arquivo PDF</label><input type="file" name="arquivo_pdf" accept=".pdf" class="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100" required></div>
@@ -30,7 +35,10 @@
                         <td class="px-6 py-3">{{ item.mes_referencia }}</td>
                         <td class="px-6 py-3 text-center">{% if item.visualizado %}<span class="bg-emerald-100 text-emerald-700 px-2 py-1 rounded text-[10px] font-bold uppercase">Lido</span>{% else %}<span class="bg-yellow-100 text-yellow-700 px-2 py-1 rounded text-[10px] font-bold uppercase">Pendente</span>{% endif %}</td>
                         <td class="px-6 py-3 text-right">
-                            <a href="/holerites/baixar/{{ item.id }}" target="_blank" class="text-blue-600 hover:underline text-xs font-bold"><i class="fas fa-download"></i> Baixar</a>
+                            <form action="/documentos/baixar/holerite/{{ item.id }}" method="POST" target="_blank" style="display:inline;">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                <button type="submit" class="text-blue-600 hover:underline text-xs font-bold"><i class="fas fa-download"></i> Baixar</button>
+                            </form>
                         </td>
                     </tr>
                     {% else %}<tr><td colspan="4" class="px-6 py-8 text-center text-slate-400">Nenhum envio recente.</td></tr>{% endfor %}
@@ -39,5 +47,7 @@
         </div>
     </div>
 </div>
-<style>.label-pro { display: block; font-size: 0.7rem; font-weight: 700; color: #64748b; text-transform: uppercase; margin-bottom: 0.5rem; } .input-pro { width: 100%; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 0.5rem; padding: 0.75rem 1rem; outline: none; }</style>
 {% endblock %}
+
+
+

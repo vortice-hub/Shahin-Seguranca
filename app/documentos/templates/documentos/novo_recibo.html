@@ -1,0 +1,94 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="max-w-2xl mx-auto">
+    <div class="flex items-center justify-between mb-6">
+        <h2 class="text-xl font-bold text-slate-800">Gerar Recibo de Pagamento</h2>
+        <a href="/documentos/admin" class="text-xs font-bold text-slate-400 hover:text-slate-600">CANCELAR</a>
+    </div>
+
+    <div class="bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden">
+        <div class="bg-slate-50 border-b border-slate-100 p-6 text-center">
+            <h3 class="font-serif font-bold text-lg text-slate-700">RECIBO DE PAGAMENTO DE BENEFÍCIOS</h3>
+        </div>
+
+        <form action="/documentos/admin/recibo/novo" method="POST" class="p-8 space-y-6">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+
+            <div>
+                <label class="label-pro">Selecione o Funcionário</label>
+                <select name="user_id" id="userSelect" class="input-pro text-lg font-bold" onchange="carregarDadosUser(this.value)" required>
+                    <option value="" disabled selected>Clique para buscar...</option>
+                    {% for u in users %}
+                    <option value="{{ u.id }}">{{ u.real_name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="bg-yellow-50 p-4 rounded-lg border border-yellow-100 text-sm font-serif text-slate-700 italic">
+                "Recebi de <strong id="previewEmpresa" class="text-slate-900">...</strong>, inscrita no CNPJ <strong id="previewCnpj" class="text-slate-900">...</strong> a quantia abaixo..."
+            </div>
+
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="label-pro text-emerald-600">Valor (R$)</label>
+                    <input type="number" step="0.01" name="valor" class="input-pro text-2xl font-bold text-emerald-700" placeholder="0,00" required>
+                </div>
+                <div>
+                    <label class="label-pro">Data do Pagamento</label>
+                    <input type="date" name="data_pagamento" value="{{ hoje }}" class="input-pro" required>
+                </div>
+            </div>
+
+            <div>
+                <label class="label-pro mb-3">Tipo de Benefício (Marque as opções)</label>
+                <div class="grid grid-cols-2 gap-3">
+                    <label class="flex items-center p-3 border rounded-lg hover:bg-slate-50 cursor-pointer transition">
+                        <input type="checkbox" name="va" checked class="w-5 h-5 text-blue-600 rounded">
+                        <span class="ml-2 text-sm font-bold text-slate-700">Vale Alimentação (VA)</span>
+                    </label>
+                    <label class="flex items-center p-3 border rounded-lg hover:bg-slate-50 cursor-pointer transition">
+                        <input type="checkbox" name="vt" checked class="w-5 h-5 text-blue-600 rounded">
+                        <span class="ml-2 text-sm font-bold text-slate-700">Vale Transporte (VT)</span>
+                    </label>
+                    <label class="flex items-center p-3 border rounded-lg hover:bg-slate-50 cursor-pointer transition">
+                        <input type="checkbox" name="assiduidade" class="w-5 h-5 text-blue-600 rounded">
+                        <span class="ml-2 text-sm font-bold text-slate-700">Assiduidade</span>
+                    </label>
+                    <label class="flex items-center p-3 border rounded-lg hover:bg-slate-50 cursor-pointer transition">
+                        <input type="checkbox" name="cesta" class="w-5 h-5 text-blue-600 rounded">
+                        <span class="ml-2 text-sm font-bold text-slate-700">Cesta Básica</span>
+                    </label>
+                </div>
+            </div>
+
+            <div>
+                <label class="label-pro mb-2">Forma de Pagamento</label>
+                <div class="flex gap-4">
+                    <label class="flex items-center"><input type="radio" name="forma_pagamento" value="Pix" checked class="mr-2"> Pix</label>
+                    <label class="flex items-center"><input type="radio" name="forma_pagamento" value="Dinheiro" class="mr-2"> Dinheiro</label>
+                    <label class="flex items-center"><input type="radio" name="forma_pagamento" value="Transferência" class="mr-2"> Transferência</label>
+                </div>
+            </div>
+
+            <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-lg shadow-lg transition">
+                <i class="fas fa-file-signature mr-2"></i> GERAR E SALVAR RECIBO
+            </button>
+        </form>
+    </div>
+</div>
+
+<script>
+    function carregarDadosUser(userId) {
+        fetch(`/documentos/api/user-info/${userId}`)
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('previewEmpresa').innerText = data.razao_social || "LA SHAHIN SERVIÇOS DE SEGURANÇA LTDA";
+                document.getElementById('previewCnpj').innerText = data.cnpj || "50.537.235/0001-95";
+            })
+            .catch(err => console.error("Erro ao buscar dados:", err));
+    }
+</script>
+{% endblock %}
+
+
+

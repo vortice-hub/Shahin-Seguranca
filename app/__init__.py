@@ -4,7 +4,7 @@ from flask import Flask
 from app.extensions import db, login_manager, csrf, migrate
 from config import config_map
 from werkzeug.middleware.proxy_fix import ProxyFix
-from sqlalchemy import text  # Importação necessária para o patch
+from sqlalchemy import text
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -33,6 +33,7 @@ def create_app():
         from app.admin.routes import admin_bp
         from app.ponto.routes import ponto_bp
         from app.estoque.routes import estoque_bp
+        # MUDANÇA: Usando o novo módulo documentos
         from app.documentos.routes import documentos_bp
         from app.main.routes import main_bp
 
@@ -46,22 +47,19 @@ def create_app():
         try:
             db.create_all()
             
-            # --- PATCH DE EMERGÊNCIA NEON/POSTGRES ---
-            # Força a criação das colunas novas antes de qualquer consulta de usuário
+            # --- PATCH AUTOMÁTICO DE BANCO (Garante colunas e tabelas) ---
             try:
-                # Usa transação isolada para garantir execução
                 with db.engine.connect() as connection:
+                    # Garante colunas de empresa em Users
                     connection.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS razao_social_empregadora VARCHAR(150) DEFAULT 'LA SHAHIN SERVIÇOS DE SEGURANÇA E PRONTA RESPOSTA LTDA';"))
                     connection.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS cnpj_empregador VARCHAR(25) DEFAULT '50.537.235/0001-95';"))
+                    # Garante colunas de empresa em PreCadastro
                     connection.execute(text("ALTER TABLE pre_cadastros ADD COLUMN IF NOT EXISTS razao_social VARCHAR(150) DEFAULT 'LA SHAHIN SERVIÇOS DE SEGURANÇA E PRONTA RESPOSTA LTDA';"))
                     connection.execute(text("ALTER TABLE pre_cadastros ADD COLUMN IF NOT EXISTS cnpj VARCHAR(25) DEFAULT '50.537.235/0001-95';"))
                     connection.commit()
-                logger.info(">>> PATCH DE BANCO DE DADOS APLICADO COM SUCESSO <<<")
             except Exception as e:
-                # Se der erro (ex: sintaxe ou permissão), apenas loga. 
-                # Se a coluna já existir, o IF NOT EXISTS cuida disso.
-                logger.warning(f"Nota sobre Patch de Banco: {e}")
-            # -----------------------------------------
+                logger.warning(f"Info Patch Banco: {e}")
+            # -------------------------------------------------------------
 
             from app.models import User
             

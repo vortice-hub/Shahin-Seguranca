@@ -1,0 +1,34 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="mb-8">
+    <h2 class="text-2xl font-bold text-slate-800">Central de Documentos</h2>
+    <p class="text-sm text-slate-500">Gerencie recibos e holerites da equipe.</p>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <div class="bg-white p-8 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition group">
+        <div class="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center text-blue-600 mb-4 group-hover:scale-110 transition">
+            <i class="fas fa-file-invoice text-2xl"></i>
+        </div>
+        <h3 class="font-bold text-lg text-slate-800 mb-2">Folha de Pagamento</h3>
+        <p class="text-sm text-slate-500 mb-6">Importe o PDF unificado da contabilidade. O sistema separa e envia automaticamente.</p>
+        <a href="/documentos/admin/holerites" class="block w-full text-center bg-slate-50 hover:bg-blue-50 text-blue-600 font-bold py-3 rounded-lg border border-slate-200 hover:border-blue-200 transition">
+            IMPORTAR ARQUIVO
+        </a>
+    </div>
+
+    <div class="bg-white p-8 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition group">
+        <div class="w-12 h-12 bg-emerald-100 rounded-lg flex items-center justify-center text-emerald-600 mb-4 group-hover:scale-110 transition">
+            <i class="fas fa-file-signature text-2xl"></i>
+        </div>
+        <h3 class="font-bold text-lg text-slate-800 mb-2">Recibo Avulso</h3>
+        <p class="text-sm text-slate-500 mb-6">Gere recibos de Vale Transporte, Alimentação, Cesta Básica ou Pix avulsos.</p>
+        <a href="/documentos/admin/recibo/novo" class="block w-full text-center bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-lg shadow transition">
+            <i class="fas fa-plus mr-2"></i> NOVO RECIBO
+        </a>
+    </div>
+</div>
+{% endblock %}
+
+
+
