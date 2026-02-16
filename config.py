@@ -4,18 +4,24 @@ from dotenv import load_dotenv
 load_dotenv()
 
 class Config:
+    # Segurança: Usa variável de ambiente ou um fallback (nunca fixo em prod)
     SECRET_KEY = os.environ.get('SECRET_KEY', 'chave_mestra_v67_fix_final')
+    
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SQLALCHEMY_ENGINE_OPTIONS = {
         "pool_pre_ping": True,
         "pool_recycle": 300,
         "pool_size": 10
     }
-    # Desativa proteção CSRF temporariamente para garantir login
-    WTF_CSRF_ENABLED = False 
     
-    # Configurações de Cookie mais permissivas para evitar problemas de proxy
-    SESSION_COOKIE_SECURE = False # Render trata SSL no load balancer, as vezes True quebra interno
+    # --- CORREÇÃO DE SEGURANÇA (FASE 1) ---
+    # Ativa proteção contra CSRF (Cross-Site Request Forgery)
+    # Importante: Certifique-se que seus formulários HTML tenham {{ csrf_token() }}
+    WTF_CSRF_ENABLED = True 
+    
+    # Configurações de Cookie
+    # Mude SESSION_COOKIE_SECURE para True apenas se estiver usando HTTPS (Produção)
+    SESSION_COOKIE_SECURE = False 
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = 'Lax'
 
@@ -32,3 +38,6 @@ config_map = {
     'production': ProductionConfig,
     'default': DevelopmentConfig
 }
+
+
+

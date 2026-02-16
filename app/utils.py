@@ -1,10 +1,30 @@
 from datetime import datetime, timedelta, time
-from app.models import db, PontoRegistro, PontoResumo, User
 import unicodedata
 import re
+from functools import wraps
+from flask import abort, redirect, url_for, flash
+from flask_login import current_user
+# Nota: Importações de modelos (db, User, etc) são feitas dentro das funções 
+# para evitar erro de Ciclo de Importação (Circular Import).
 
+# --- FUNÇÃO CENTRALIZADA DE TEMPO ---
 def get_brasil_time():
+    """Retorna o horário atual em UTC-3 (Brasil)."""
     return datetime.utcnow() - timedelta(hours=3)
+
+# --- DECORATOR DE PERMISSÃO ---
+def master_required(f):
+    """
+    Decorator para garantir que apenas usuários 'Master' acessem a rota.
+    Uso: @master_required logo após @login_required
+    """
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not current_user.is_authenticated or current_user.role != 'Master':
+            flash('Acesso não autorizado. Área restrita ao Master.', 'error')
+            return redirect(url_for('main.dashboard'))
+        return f(*args, **kwargs)
+    return decorated_function
 
 def data_por_extenso(data_obj):
     meses = {
@@ -41,7 +61,10 @@ def format_minutes_to_hm(total_minutes):
     return f"{sinal}{h:02d}:{m:02d}"
 
 def calcular_dia(user_id, data_ref):
+    # Importação atrasada para evitar ciclo (utils -> models -> utils)
+    from app.extensions import db
     from app.models import User, PontoRegistro, PontoResumo
+    
     user = User.query.get(user_id)
     if not user: return
 
@@ -85,5 +108,9 @@ def calcular_dia(user_id, data_ref):
     
     try:
         db.session.commit()
-    except:
+    except Exception as e:
         db.session.rollback()
+        print(f"Erro ao calcular dia: {e}")
+
+
+

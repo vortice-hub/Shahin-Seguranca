@@ -1,13 +1,8 @@
 from app.extensions import db, login_manager
-# O conteúdo original de models.py será anexado aqui
-
-from app.extensions import db, login_manager
 from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
-from datetime import datetime, timedelta
-
-def get_brasil_time():
-    return datetime.utcnow() - timedelta(hours=3)
+# Importa a função centralizada de tempo para evitar duplicação
+from app.utils import get_brasil_time
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -115,9 +110,11 @@ class Holerite(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     mes_referencia = db.Column(db.String(7), nullable=False) 
-    url_arquivo = db.Column(db.String(500), nullable=True) # Agora aceita nulo no Python
+    url_arquivo = db.Column(db.String(500), nullable=True)
     conteudo_pdf = db.Column(db.LargeBinary, nullable=True) 
     visualizado = db.Column(db.Boolean, default=False)
     visualizado_em = db.Column(db.DateTime, nullable=True)
     enviado_em = db.Column(db.DateTime, default=get_brasil_time)
     user = db.relationship('User', backref=db.backref('holerites', lazy=True))
+
+

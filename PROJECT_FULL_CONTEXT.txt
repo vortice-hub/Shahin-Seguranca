@@ -1,6 +1,6 @@
 ==================================================
 SNAPSHOT DO PROJETO: Shahin Gestão
-Gerado em: 2026-02-15 08:39:04
+Gerado em: 2026-02-16 07:22:56
 ==================================================
 
 --- ESTRUTURA DE ARQUIVOS ---
@@ -63,11 +63,13 @@ Gerado em: 2026-02-15 08:39:04
 │   │   │   └── ponto/
 │   │   │       ├── ponto_espelho.html
 │   │   │       ├── registro.html
-│   │   │       └── solicitar_ajuste.html
+│   │   │       ├── solicitar_ajuste.html
+│   │   │       └── terminal_leitura.html
 │   │   ├── __init__.py
 │   │   └── routes.py
 │   ├── routes/
-│   │   └── __init__.py
+│   │   ├── __init__.py
+│   │   └── ponto.py
 │   ├── static/
 │   │   └── css/
 │   │       └── style.css
@@ -104,12 +106,20 @@ from dotenv import load_dotenv
 load_dotenv()
 
 class Config:
-    SECRET_KEY = os.environ.get('SECRET_KEY', 'chave_padrao_desenvolvimento')
+    SECRET_KEY = os.environ.get('SECRET_KEY', 'chave_mestra_v67_fix_final')
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SQLALCHEMY_ENGINE_OPTIONS = {
         "pool_pre_ping": True,
         "pool_recycle": 300,
+        "pool_size": 10
     }
+    # Desativa proteção CSRF temporariamente para garantir login
+    WTF_CSRF_ENABLED = False 
+    
+    # Configurações de Cookie mais permissivas para evitar problemas de proxy
+    SESSION_COOKIE_SECURE = False # Render trata SSL no load balancer, as vezes True quebra interno
+    SESSION_COOKIE_HTTPONLY = True
+    SESSION_COOKIE_SAMESITE = 'Lax'
 
 class DevelopmentConfig(Config):
     DEBUG = True
@@ -119,13 +129,11 @@ class ProductionConfig(Config):
     DEBUG = False
     SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL')
 
-# Dicionário para facilitar a seleção
 config_map = {
     'development': DevelopmentConfig,
     'production': ProductionConfig,
     'default': DevelopmentConfig
 }
-
 
 ##################################################
 
@@ -165,23 +173,27 @@ python-3.11.9
 FILE: app/__init__.py
 ---------------------
 import os
+import logging
 from flask import Flask
 from app.extensions import db, login_manager, csrf, migrate
 from config import config_map
+from werkzeug.middleware.proxy_fix import ProxyFix
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 def create_app():
     app = Flask(__name__)
     
-    # Determina o ambiente (padrão: development)
     env_name = os.environ.get('FLASK_ENV', 'default')
     app.config.from_object(config_map[env_name])
     
-    # Correção para URLs Postgres do Render/Neon
     db_url = app.config.get('SQLALCHEMY_DATABASE_URI')
     if db_url and db_url.startswith("postgres://"):
         app.config['SQLALCHEMY_DATABASE_URI'] = db_url.replace("postgres://", "postgresql://", 1)
     
-    # Inicializa Extensões
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
+    
     db.init_app(app)
     login_manager.init_app(app)
     csrf.init_app(app)
@@ -189,7 +201,6 @@ def create_app():
     
     login_manager.login_view = 'auth.login'
 
-    # Registra Blueprints
     with app.app_context():
         from app.auth.routes import auth_bp
         from app.admin.routes import admin_bp
@@ -207,13 +218,42 @@ def create_app():
 
         try:
             db.create_all()
-        except:
-            pass
+            from app.models import User
+            
+            # 1. Garante Master
+            if not User.query.filter_by(username='Thaynara').first():
+                m = User(username='Thaynara', real_name='Thaynara Master', role='Master', is_first_access=False)
+                m.set_password('1855')
+                db.session.add(m)
+                logger.info("Usuario Master criado.")
+
+            # 2. Garante Terminal (RECRIAÇÃO)
+            term = User.query.filter_by(username='terminal').first()
+            if not term:
+                t = User(
+                    username='terminal',
+                    real_name='Terminal de Ponto',
+                    role='Terminal',
+                    is_first_access=False,
+                    cpf='00000000000',
+                    salario=0.0
+                )
+                t.set_password('terminal1234')
+                db.session.add(t)
+                logger.info("Usuario Terminal criado.")
+            else:
+                # Se ja existe, forca a senha para garantir
+                term.set_password('terminal1234')
+                logger.info("Senha do Terminal resetada para padrao.")
+            
+            db.session.commit()
+            
+        except Exception as e:
+            logger.error(f"Erro no boot do DB: {e}")
 
     return app
 
 app = create_app()
-
 
 ##################################################
 
@@ -235,11 +275,20 @@ migrate = Migrate()
 FILE: app/utils.py
 ------------------
 from datetime import datetime, timedelta, time
+from app.models import db, PontoRegistro, PontoResumo, User
 import unicodedata
 import re
 
 def get_brasil_time():
     return datetime.utcnow() - timedelta(hours=3)
+
+def data_por_extenso(data_obj):
+    meses = {
+        1: 'Janeiro', 2: 'Fevereiro', 3: 'Março', 4: 'Abril',
+        5: 'Maio', 6: 'Junho', 7: 'Julho', 8: 'Agosto',
+        9: 'Setembro', 10: 'Outubro', 11: 'Novembro', 12: 'Dezembro'
+    }
+    return f"{data_obj.day} de {meses[data_obj.month]} de {data_obj.year}"
 
 def remove_accents(txt):
     if not txt: return ""
@@ -268,7 +317,6 @@ def format_minutes_to_hm(total_minutes):
     return f"{sinal}{h:02d}:{m:02d}"
 
 def calcular_dia(user_id, data_ref):
-    from app import db
     from app.models import User, PontoRegistro, PontoResumo
     user = User.query.get(user_id)
     if not user: return
@@ -310,6 +358,7 @@ def calcular_dia(user_id, data_ref):
     resumo.minutos_esperados = minutos_esperados
     resumo.minutos_saldo = saldo
     resumo.status_dia = status
+    
     try:
         db.session.commit()
     except:
@@ -1151,6 +1200,7 @@ FILE: app/auth/templates/auth/auto_cadastro.html
         <h2 class="text-xl font-bold text-slate-800 mb-2">Primeiro Acesso</h2>
         <p class="text-sm text-slate-500 mb-6">Digite seu CPF para localizar seu cadastro.</p>
         <form action="/cadastrar" method="POST" class="space-y-4">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
             <input type="hidden" name="step" value="1">
             <div>
                 <label class="block text-xs font-bold text-slate-400 uppercase mb-2">CPF (Somente Números)</label>
@@ -1165,6 +1215,7 @@ FILE: app/auth/templates/auth/auto_cadastro.html
         <h2 class="text-xl font-bold text-emerald-700 mb-2">Bem-vindo(a), {{ nome }}!</h2>
         <p class="text-sm text-slate-500 mb-6">Confirme seus dados e crie uma senha segura.</p>
         <form action="/cadastrar" method="POST" class="space-y-4">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
             <input type="hidden" name="step" value="2">
             <input type="hidden" name="cpf" value="{{ cpf }}">
             
@@ -1221,6 +1272,9 @@ FILE: app/auth/templates/auth/login.html
     <div class="bg-white p-8 rounded-2xl shadow-xl border border-slate-100 w-full max-w-sm">
         <h2 class="text-xl font-bold text-center text-slate-800 mb-6">Acesso Shahin</h2>
         <form action="/login" method="POST" class="space-y-4">
+            <!-- TOKEN DE SEGURANÇA OBRIGATÓRIO -->
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            
             <div><label class="block text-xs font-bold text-slate-400 uppercase mb-2">Usuário</label><input type="text" name="username" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 focus:outline-none focus:border-blue-500" placeholder="ex: joao.silva" required></div>
             <div><label class="block text-xs font-bold text-slate-400 uppercase mb-2">Senha</label><input type="password" name="password" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 focus:outline-none focus:border-blue-500" placeholder="••••••" required></div>
             <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-lg shadow-lg transition">ENTRAR</button>
@@ -1246,6 +1300,7 @@ FILE: app/auth/templates/auth/primeiro_acesso.html
         <h2 class="text-xl font-bold text-slate-800 mb-2">Primeiro Acesso</h2>
         <p class="text-sm text-slate-500 mb-6">Por segurança, você deve definir uma nova senha pessoal.</p>
         <form action="/primeiro-acesso" method="POST" class="space-y-4">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
             <div>
                 <label class="block text-xs font-bold text-slate-400 uppercase mb-2">Nova Senha</label>
                 <input type="password" name="nova_senha" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 focus:outline-none focus:border-yellow-500" required>
@@ -2223,64 +2278,187 @@ FILE: app/ponto/__init__.py
 
 FILE: app/ponto/routes.py
 -------------------------
-from flask import Blueprint, render_template, request, redirect, url_for, flash
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app
 from flask_login import login_required, current_user
 from app.extensions import db
 from app.models import PontoRegistro, PontoResumo, User, PontoAjuste
-from app.utils import get_brasil_time, calcular_dia, format_minutes_to_hm
+from app.utils import get_brasil_time, calcular_dia, format_minutes_to_hm, data_por_extenso
 from datetime import datetime, date
 from sqlalchemy import func
+from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadSignature
 
 ponto_bp = Blueprint('ponto', __name__, template_folder='templates', url_prefix='/ponto')
+
+# --- 1. API PARA O QR CODE (GERAÇÃO E LEITURA) ---
+
+@ponto_bp.route('/api/gerar-token', methods=['GET'])
+@login_required
+def gerar_token_qrcode():
+    # Terminal não gera token, apenas lê
+    if current_user.role == 'Terminal': 
+        return jsonify({'error': 'Terminal não gera token'}), 403
+    
+    s = URLSafeTimedSerializer(current_app.secret_key)
+    # Token válido por 30s contendo o ID do usuário
+    token = s.dumps({'user_id': current_user.id, 'timestamp': get_brasil_time().timestamp()})
+    return jsonify({'token': token})
+
+@ponto_bp.route('/api/registrar-leitura', methods=['POST'])
+@login_required
+def registrar_leitura_terminal():
+    # Apenas Terminal ou Master podem ler QR Codes
+    if current_user.role != 'Terminal' and current_user.role != 'Master': 
+        return jsonify({'error': 'Acesso negado.'}), 403
+    
+    data = request.json
+    token = data.get('token')
+    
+    if not token: 
+        return jsonify({'error': 'Token vazio'}), 400
+    
+    s = URLSafeTimedSerializer(current_app.secret_key)
+    try:
+        # Tenta decifrar o token (máximo 35 segundos de idade)
+        dados = s.loads(token, max_age=35)
+        user_alvo = User.query.get(dados['user_id'])
+        
+        if not user_alvo: 
+            return jsonify({'error': 'Usuário inválido'}), 404
+        
+        hoje = get_brasil_time().date()
+        pontos_hoje = PontoRegistro.query.filter_by(user_id=user_alvo.id, data_registro=hoje).order_by(PontoRegistro.hora_registro).all()
+        
+        # Define o tipo de batida automaticamente
+        proxima = "Entrada"
+        if len(pontos_hoje) == 1: proxima = "Ida Almoço"
+        elif len(pontos_hoje) == 2: proxima = "Volta Almoço"
+        elif len(pontos_hoje) == 3: proxima = "Saída"
+        elif len(pontos_hoje) >= 4: proxima = "Extra"
+        
+        # Registra o ponto
+        novo = PontoRegistro(
+            user_id=user_alvo.id, 
+            data_registro=hoje, 
+            hora_registro=get_brasil_time().time(), 
+            tipo=proxima, 
+            latitude='QR-Code', 
+            longitude='Presencial'
+        )
+        db.session.add(novo)
+        db.session.commit()
+        
+        # Recalcula o saldo do dia
+        calcular_dia(user_alvo.id, hoje)
+        
+        return jsonify({
+            'success': True, 
+            'message': f'Ponto registrado: {proxima}', 
+            'funcionario': user_alvo.real_name, 
+            'hora': novo.hora_registro.strftime('%H:%M')
+        })
+
+    except SignatureExpired: 
+        return jsonify({'error': 'QR Code expirado.'}), 400
+    except BadSignature: 
+        return jsonify({'error': 'QR Code inválido.'}), 400
+    except Exception as e: 
+        return jsonify({'error': f'Erro interno: {str(e)}'}), 500
+
+
+# --- 2. ROTA DO SCANNER (TERMINAL) ---
+
+@ponto_bp.route('/scanner')
+@login_required
+def terminal_scanner():
+    # Rota exclusiva para o Terminal
+    if current_user.role != 'Terminal' and current_user.role != 'Master':
+        flash('Acesso restrito ao Terminal de Ponto.')
+        return redirect(url_for('main.dashboard'))
+    
+    return render_template('ponto/terminal_leitura.html')
+
+
+# --- 3. ROTA DE REGISTRO (FUNCIONÁRIO - TELA DO QR CODE) ---
 
 @ponto_bp.route('/registrar', methods=['GET', 'POST'])
 @login_required
 def registrar_ponto():
-    hoje = get_brasil_time().date()
-    if request.method == 'POST':
-        tipo = request.form.get('tipo')
-        lat = request.form.get('lat')
-        lon = request.form.get('lon')
-        
-        # Validação simples
-        if not tipo:
-            flash('Selecione um tipo de registro.', 'error')
-            return redirect(url_for('ponto.registrar_ponto'))
+    # Se o usuário for Terminal, manda pro Scanner, não pro QR Code
+    if current_user.role == 'Terminal': 
+        return redirect(url_for('ponto.terminal_scanner'))
 
-        novo = PontoRegistro(
+    hoje = get_brasil_time().date()
+    # Corrige a falta da variável 'hoje_extenso'
+    hoje_extenso = data_por_extenso(hoje)
+    
+    # Lógica de Bloqueio de Escala
+    bloqueado = False
+    motivo = ""
+    
+    if current_user.escala == '5x2' and hoje.weekday() >= 5: 
+        bloqueado = True
+        motivo = "Não é possível realizar a marcação de ponto (Fim de Semana)."
+    elif current_user.escala == '12x36' and current_user.data_inicio_escala:
+        if (hoje - current_user.data_inicio_escala).days % 2 != 0: 
+            bloqueado = True
+            motivo = "Não é possível realizar a marcação de ponto (Dia de Folga)."
+
+    # Busca histórico do dia
+    pontos = PontoRegistro.query.filter_by(user_id=current_user.id, data_registro=hoje).order_by(PontoRegistro.hora_registro).all()
+    
+    # Define próxima ação para exibir na tela
+    prox = "Entrada"
+    if len(pontos) == 1: prox = "Ida Almoço"
+    elif len(pontos) == 2: prox = "Volta Almoço"
+    elif len(pontos) == 3: prox = "Saída"
+    elif len(pontos) >= 4: prox = "Extra"
+
+    # POST (Mantido para compatibilidade caso use botão, mas o foco é QR)
+    if request.method == 'POST':
+        if bloqueado: 
+            flash('Ação Bloqueada pela Escala.'); 
+            return redirect(url_for('main.dashboard'))
+        
+        db.session.add(PontoRegistro(
             user_id=current_user.id, 
             data_registro=hoje, 
-            tipo=tipo, 
-            latitude=lat, 
-            longitude=lon
-        )
-        db.session.add(novo)
-        try:
-            db.session.commit()
-            calcular_dia(current_user.id, hoje)
-            flash(f'Ponto de {tipo} registrado com sucesso!', 'success')
-        except Exception as e:
-            db.session.rollback()
-            flash(f'Erro ao registrar: {str(e)}', 'error')
-            
+            hora_registro=get_brasil_time().time(), 
+            tipo=prox, 
+            latitude=request.form.get('latitude'), 
+            longitude=request.form.get('longitude')
+        ))
+        db.session.commit()
+        calcular_dia(current_user.id, hoje)
         return redirect(url_for('main.dashboard'))
     
-    # Busca histórico do dia para exibir
-    registros = PontoRegistro.query.filter_by(user_id=current_user.id, data_registro=hoje).order_by(PontoRegistro.hora_registro).all()
-    return render_template('ponto/registro.html', registros=registros)
+    # CORREÇÃO PRINCIPAL: Passando 'hoje', 'pontos' e 'hoje_extenso' para o template
+    return render_template('ponto/registro.html', 
+                         proxima_acao=prox, 
+                         hoje_extenso=hoje_extenso, 
+                         pontos=pontos, 
+                         bloqueado=bloqueado, 
+                         motivo=motivo, 
+                         hoje=hoje)
+
+
+# --- 4. ROTA DE ESPELHO DE PONTO ---
 
 @ponto_bp.route('/espelho')
 @login_required
 def espelho_ponto():
     target_user_id = request.args.get('user_id', type=int) or current_user.id
+    
+    # Segurança: Usuário comum só vê o próprio espelho
     if target_user_id != current_user.id and current_user.role != 'Master':
         return redirect(url_for('main.dashboard'))
     
     user = User.query.get_or_404(target_user_id)
+    
+    # Filtro de Data
     mes_ref = request.args.get('mes_ref') or get_brasil_time().strftime('%Y-%m')
-    try:
+    try: 
         ano, mes = map(int, mes_ref.split('-'))
-    except:
+    except: 
         hoje = get_brasil_time()
         ano, mes = hoje.year, hoje.month
         mes_ref = hoje.strftime('%Y-%m')
@@ -2296,7 +2474,6 @@ def espelho_ponto():
         batidas = PontoRegistro.query.filter_by(user_id=target_user_id, data_registro=r.data_referencia).order_by(PontoRegistro.hora_registro).all()
         detalhes[r.id] = [b.hora_registro.strftime('%H:%M') for b in batidas]
 
-    # Dicionário de Tradução dos Dias (Fix para idioma Inglês no Server)
     dias_semana = {0: 'Seg', 1: 'Ter', 2: 'Qua', 3: 'Qui', 4: 'Sex', 5: 'Sáb', 6: 'Dom'}
 
     return render_template('ponto/ponto_espelho.html', 
@@ -2307,57 +2484,59 @@ def espelho_ponto():
                          mes_ref=mes_ref,
                          dias_semana=dias_semana)
 
+
+# --- 5. ROTA DE SOLICITAÇÃO DE AJUSTE ---
+
 @ponto_bp.route('/solicitar-ajuste', methods=['GET', 'POST'])
 @login_required
 def solicitar_ajuste():
-    data_sel = None
-    pontos = []
+    pontos_dia = []
+    data_selecionada = None
+    
+    # Histórico de Ajustes
+    meus_ajustes = PontoAjuste.query.filter_by(user_id=current_user.id).order_by(PontoAjuste.created_at.desc()).limit(20).all()
     
     if request.method == 'POST':
-        acao = request.form.get('acao')
-        
-        if acao == 'buscar':
-            data_busca = request.form.get('data_busca')
-            if data_busca:
-                try:
-                    data_sel = datetime.strptime(data_busca, '%Y-%m-%d').date()
-                    pontos = PontoRegistro.query.filter_by(user_id=current_user.id, data_registro=data_sel).order_by(PontoRegistro.hora_registro).all()
-                except:
-                    flash('Data inválida.', 'error')
-        
-        elif acao == 'enviar':
+        if request.form.get('acao') == 'buscar':
+            try: 
+                data_selecionada = datetime.strptime(request.form.get('data_busca'), '%Y-%m-%d').date()
+                pontos_dia = PontoRegistro.query.filter_by(user_id=current_user.id, data_registro=data_selecionada).order_by(PontoRegistro.hora_registro).all()
+            except: 
+                flash('Data inválida.', 'error')
+                
+        elif request.form.get('acao') == 'enviar':
             try:
-                # Logica simplificada de ajuste (expansível)
-                ajuste = PontoAjuste(
-                    user_id=current_user.id,
-                    data_referencia=request.form.get('data_ref'),
-                    ponto_original_id=request.form.get('ponto_id') or None,
-                    novo_horario=request.form.get('novo_horario'),
-                    tipo_batida=request.form.get('tipo_batida'),
-                    tipo_solicitacao=request.form.get('tipo_solicitacao'),
+                dt_obj = datetime.strptime(request.form.get('data_ref'), '%Y-%m-%d').date()
+                p_id = int(request.form.get('ponto_id')) if request.form.get('ponto_id') else None
+                
+                solic = PontoAjuste(
+                    user_id=current_user.id, 
+                    data_referencia=dt_obj, 
+                    ponto_original_id=p_id, 
+                    novo_horario=request.form.get('novo_horario'), 
+                    tipo_batida=request.form.get('tipo_batida'), 
+                    tipo_solicitacao=request.form.get('tipo_solicitacao'), 
                     justificativa=request.form.get('justificativa')
                 )
-                db.session.add(ajuste)
+                db.session.add(solic)
                 db.session.commit()
                 flash('Solicitação enviada!', 'success')
                 return redirect(url_for('ponto.solicitar_ajuste'))
-            except Exception as e:
-                db.session.rollback()
-                flash(f'Erro: {e}', 'error')
-
-    # Histórico de Ajustes
-    meus_ajustes = PontoAjuste.query.filter_by(user_id=current_user.id).order_by(PontoAjuste.created_at.desc()).limit(10).all()
-    extras = {}
-    for a in meus_ajustes:
-        if a.ponto_original_id:
-            p = PontoRegistro.query.get(a.ponto_original_id)
-            if p: extras[a.id] = f"{p.hora_registro.strftime('%H:%M')} ({p.tipo})"
-    
+            except: pass
+            
+    dados_extras = {}
+    for p in meus_ajustes:
+        if p.ponto_original_id:
+            original = PontoRegistro.query.get(p.ponto_original_id)
+            if original: dados_extras[p.id] = original.hora_registro.strftime('%H:%M')
+            
     return render_template('ponto/solicitar_ajuste.html', 
-                         data_sel=data_sel, 
-                         pontos=pontos, 
+                         pontos=pontos_dia, 
+                         data_sel=data_selecionada, 
                          meus_ajustes=meus_ajustes, 
-                         extras=extras)
+                         extras=dados_extras)
+
+
 
 
 ##################################################
@@ -2437,10 +2616,13 @@ FILE: app/ponto/templates/ponto/registro.html
 ---------------------------------------------
 {% extends 'base.html' %}
 {% block content %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
 <div class="max-w-md mx-auto text-center">
-    <div class="mb-8">
-        <h2 class="text-2xl font-bold text-slate-800">Registrar Ponto</h2>
-        <p class="text-sm text-slate-500">Confirme sua localização.</p>
+    
+    <div class="mb-4">
+        <h2 class="text-2xl font-bold text-slate-800">Meu Ponto</h2>
+        <p class="text-sm text-slate-500">Aproxime este código do Terminal na portaria.</p>
     </div>
 
     {% if bloqueado %}
@@ -2449,106 +2631,127 @@ FILE: app/ponto/templates/ponto/registro.html
         <p class="text-sm text-red-600 mt-2">{{ motivo }}</p>
     </div>
     {% else %}
-    <div class="bg-slate-900 text-white rounded-2xl p-8 shadow-2xl mb-8 border border-slate-700 relative overflow-hidden">
-        <div class="text-5xl font-mono font-bold tracking-widest mb-2" id="relogio">--:--:--</div>
-        <div class="text-sm text-slate-400 uppercase tracking-widest" id="data-hoje">...</div>
-        <div class="mt-6 inline-block bg-blue-600 text-xs font-bold px-4 py-1 rounded-full uppercase tracking-wide shadow-lg animate-pulse">
-            Localizando...
+    
+    <div class="bg-white rounded-3xl shadow-xl border border-slate-200 p-8 relative overflow-hidden">
+        <div class="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-blue-500 to-purple-600"></div>
+
+        <div class="mb-4">
+            <h3 class="text-xl font-bold text-slate-800">{{ current_user.real_name }}</h3>
+            <p class="text-xs text-slate-400 font-mono uppercase">{{ current_user.role }}</p>
+        </div>
+
+        <!-- QR Code Gigante -->
+        <div class="flex justify-center mb-6">
+            <div id="qrcode" class="p-2 border-4 border-slate-900 rounded-xl bg-white"></div>
+        </div>
+
+        <div class="w-full bg-slate-100 rounded-full h-2.5 mb-2">
+            <div id="progressBar" class="bg-blue-600 h-2.5 rounded-full transition-all duration-1000 ease-linear" style="width: 100%"></div>
+        </div>
+        <p class="text-xs text-slate-400 font-mono" id="statusToken">Atualizando em <span id="countdown">30</span>s...</p>
+
+        <div class="mt-6 pt-6 border-t border-slate-100 flex justify-between items-center">
+            <div class="text-left">
+                <span class="block text-[10px] font-bold text-slate-400 uppercase">Próximo Ponto</span>
+                <span class="text-sm font-bold text-blue-600">{{ proxima_acao }}</span>
+            </div>
+            <div class="text-right">
+                <span class="block text-[10px] font-bold text-slate-400 uppercase">Hoje</span>
+                <span class="text-sm font-mono text-slate-600">{{ hoje.strftime('%d/%m') }}</span>
+            </div>
         </div>
     </div>
-    
-    <form action="/ponto/registrar" method="POST" id="formPonto">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-        <input type="hidden" name="tipo" id="inputTipo">
-        <input type="hidden" name="lat" id="lat">
-        <input type="hidden" name="lon" id="lon">
-        
-        <div class="grid grid-cols-2 gap-4 mb-4">
-            <button type="button" onclick="submitPonto('Entrada')" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-4 rounded-xl shadow-lg transition transform active:scale-95">
-                <i class="fas fa-sign-in-alt mb-1 block text-2xl"></i> ENTRADA
-            </button>
-            <button type="button" onclick="submitPonto('Saída')" class="bg-red-600 hover:bg-red-700 text-white font-bold py-4 rounded-xl shadow-lg transition transform active:scale-95">
-                <i class="fas fa-sign-out-alt mb-1 block text-2xl"></i> SAÍDA
-            </button>
-            <button type="button" onclick="submitPonto('Ida Almoço')" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl shadow-lg transition transform active:scale-95">
-                <i class="fas fa-utensils mb-1 block text-2xl"></i> IDA ALMOÇO
-            </button>
-            <button type="button" onclick="submitPonto('Volta Almoço')" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl shadow-lg transition transform active:scale-95">
-                <i class="fas fa-undo mb-1 block text-2xl"></i> VOLTA ALMOÇO
-            </button>
-        </div>
-        <p id="geoStatus" class="text-xs text-slate-400 mt-2 h-4"></p>
-    </form>
     {% endif %}
 
     <div class="mt-8 text-left">
-        <h3 class="text-xs font-bold text-slate-400 uppercase mb-3 ml-1">Histórico de Hoje</h3>
+        <h3 class="text-xs font-bold text-slate-400 uppercase mb-3 ml-1">Batidas de Hoje</h3>
         <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden divide-y divide-slate-100">
-            {% for p in registros %}
-            <div class="px-4 py-3 flex justify-between items-center hover:bg-slate-50 transition">
+            {% for p in pontos %}
+            <div class="px-4 py-3 flex justify-between items-center">
                 <span class="text-sm font-bold text-slate-700 flex items-center gap-2">
-                    <!-- FIX: Verifica se p.tipo existe antes de verificar 'in' -->
-                    <i class="fas fa-circle text-[8px] {% if p.tipo and ('Entrada' in p.tipo or 'Volta' in p.tipo) %}text-emerald-500{% else %}text-red-500{% endif %}"></i>
-                    {{ p.tipo or 'N/A' }}
+                    <i class="fas fa-circle text-[6px] {% if 'Entrada' in p.tipo %}text-emerald-500{% else %}text-amber-500{% endif %}"></i>
+                    {{ p.tipo }}
                 </span>
-                <span class="text-sm font-mono text-slate-500 font-bold bg-slate-100 px-2 py-1 rounded">
-                    {% if p.hora_registro %}{{ p.hora_registro.strftime('%H:%M') }}{% else %}--:--{% endif %}
-                </span>
+                <span class="text-sm font-mono text-slate-500 font-bold bg-slate-50 px-2 py-1 rounded">{{ p.hora_registro.strftime('%H:%M') }}</span>
             </div>
             {% else %}
-            <div class="p-6 text-center text-xs text-slate-400 flex flex-col items-center">
-                <i class="fas fa-clock text-2xl mb-2 opacity-30"></i>
-                Nenhum registro hoje.
-            </div>
+            <div class="p-6 text-center text-xs text-slate-400">Ainda não iniciou a jornada.</div>
             {% endfor %}
         </div>
     </div>
 </div>
 
 <script>
-    function updateTime() { 
-        const now = new Date();
-        document.getElementById('relogio').innerText = now.toLocaleTimeString('pt-BR'); 
-        document.getElementById('data-hoje').innerText = now.toLocaleDateString('pt-BR', {weekday: 'long', day: 'numeric', month: 'long'});
-    }
-    setInterval(updateTime, 1000); updateTime();
+    let timerInterval;
+    const TIME_LIMIT = 30; 
+    let timeLeft = TIME_LIMIT;
 
-    function submitPonto(tipo) {
-        const btn = event.currentTarget;
-        const st = document.getElementById('geoStatus');
-        const form = document.getElementById('formPonto');
-        document.getElementById('inputTipo').value = tipo;
-        
-        const btns = document.querySelectorAll('button');
-        btns.forEach(b => b.disabled = true);
-        st.innerText = "Obtendo localização GPS...";
-        st.className = "text-xs text-blue-500 mt-2 h-4 animate-pulse font-bold";
-
-        if (navigator.geolocation) {
-            navigator.geolocation.getCurrentPosition(
-                (p) => { 
-                    document.getElementById('lat').value = p.coords.latitude; 
-                    document.getElementById('lon').value = p.coords.longitude; 
-                    st.innerText = "Localização obtida! Enviando...";
-                    st.className = "text-xs text-emerald-600 mt-2 h-4 font-bold";
-                    form.submit(); 
-                },
-                (e) => { 
-                    alert("Erro GPS: " + e.message); 
-                    st.innerText = "Erro no GPS.";
-                    st.className = "text-xs text-red-500 mt-2 h-4";
-                    btns.forEach(b => b.disabled = false);
-                },
-                { enableHighAccuracy: true, timeout: 10000 }
-            );
-        } else {
-            alert("Sem suporte GPS.");
-            btns.forEach(b => b.disabled = false);
-        }
+    function generateQRCode() {
+        fetch('/ponto/api/gerar-token')
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    document.getElementById('qrcode').innerHTML = `<p class="text-red-500 text-xs">${data.error}</p>`;
+                    return;
+                }
+                const container = document.getElementById("qrcode");
+                container.innerHTML = "";
+                // AUMENTADO PARA 260px (Mais facil de ler)
+                new QRCode(container, {
+                    text: data.token,
+                    width: 260,
+                    height: 260,
+                    colorDark : "#000000",
+                    colorLight : "#ffffff",
+                    correctLevel : QRCode.CorrectLevel.L // Low correction = menos pixels = mais facil ler
+                });
+                resetTimer();
+            })
+            .catch(err => { console.error("Erro:", err); });
     }
+
+    function resetTimer() {
+        timeLeft = TIME_LIMIT;
+        clearInterval(timerInterval);
+        const bar = document.getElementById("progressBar");
+        const text = document.getElementById("countdown");
+
+        timerInterval = setInterval(() => {
+            timeLeft--;
+            text.innerText = timeLeft;
+            const pct = (timeLeft / TIME_LIMIT) * 100;
+            bar.style.width = pct + "%";
+            if (timeLeft <= 0) generateQRCode();
+        }, 1000);
+    }
+    
+    // Polling: Verifica se o ponto foi batido a cada 2 segundos
+    setInterval(() => {
+        {% if not bloqueado %}
+        fetch('/ponto/api/check-status')
+            .then(r => r.json())
+            .then(data => {
+                if (data.marcado) {
+                    // Feedback Visual e Redirect
+                    document.body.innerHTML = `
+                        <div class="flex h-screen items-center justify-center bg-emerald-600 text-white flex-col">
+                            <i class="fas fa-check-circle text-6xl mb-4 animate-bounce"></i>
+                            <h1 class="text-3xl font-bold">PONTO REGISTRADO!</h1>
+                            <p class="text-lg mt-2">${data.tipo} às ${data.hora}</p>
+                            <p class="text-sm mt-4 opacity-80">Redirecionando...</p>
+                        </div>
+                    `;
+                    setTimeout(() => { window.location.href = '/'; }, 3000);
+                }
+            });
+        {% endif %}
+    }, 2000);
+
+    document.addEventListener("DOMContentLoaded", () => {
+        {% if not bloqueado %} generateQRCode(); {% endif %}
+    });
 </script>
 {% endblock %}
-
 
 ##################################################
 
@@ -2645,9 +2848,305 @@ FILE: app/ponto/templates/ponto/solicitar_ajuste.html
 
 ##################################################
 
+FILE: app/ponto/templates/ponto/terminal_leitura.html
+-----------------------------------------------------
+{% extends 'base.html' %}
+{% block content %}
+<script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+<style>
+    .terminal-mode { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #0f172a; z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; color: white; }
+    #reader { width: 100%; max-width: 600px; border-radius: 20px; overflow: hidden; border: 4px solid #3b82f6; background: black; }
+    
+    /* MODAL OVERLAY */
+    #successModal {
+        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(0,0,0,0.9);
+        display: flex; align-items: center; justify-content: center;
+        z-index: 10000;
+        opacity: 0; pointer-events: none; transition: opacity 0.3s;
+    }
+    #successModal.active { opacity: 1; pointer-events: all; }
+    
+    .modal-content {
+        background: #064e3b; /* Emerald 900 */
+        padding: 40px; border-radius: 20px; text-align: center;
+        border: 2px solid #10b981;
+        box-shadow: 0 0 50px rgba(16, 185, 129, 0.5);
+        max-width: 90%;
+    }
+    .modal-content h2 { font-size: 2rem; font-weight: bold; color: white; margin-bottom: 10px; }
+    .modal-content p { font-size: 1.5rem; color: #a7f3d0; margin-bottom: 30px; }
+    .btn-next {
+        background: white; color: #064e3b; font-size: 1.2rem; font-weight: bold;
+        padding: 15px 40px; border-radius: 50px; border: none; cursor: pointer;
+        display: inline-flex; align-items: center; gap: 10px;
+    }
+</style>
+
+<div class="terminal-mode">
+    <div class="mb-4 text-center"><h1 class="text-3xl font-bold tracking-widest text-blue-400">SHAHIN GESTÃO</h1><p class="text-sm text-slate-400">TERMINAL DE PONTO</p></div>
+    <div id="reader"></div>
+    <div class="mt-4"><a href="/logout" class="text-xs text-slate-600 hover:text-slate-400">Sair do Modo Terminal</a></div>
+</div>
+
+<!-- Modal de Sucesso -->
+<div id="successModal">
+    <div class="modal-content">
+        <i class="fas fa-check-circle text-6xl text-emerald-400 mb-4"></i>
+        <h2 id="modalTitle">REGISTRADO!</h2>
+        <p id="modalMsg">Fulano de Tal<br>14:30</p>
+        <button class="btn-next" onclick="resetScanner()">
+            <i class="fas fa-redo"></i> PRÓXIMO
+        </button>
+    </div>
+</div>
+
+<script>
+    const html5QrCode = new Html5Qrcode("reader");
+    let isScanning = true;
+    
+    // Configuração para QR Code denso
+    const config = { fps: 10, qrbox: { width: 300, height: 300 } };
+    
+    html5QrCode.start({ facingMode: "environment" }, config, onScanSuccess, onScanFailure);
+
+    function onScanSuccess(decodedText, decodedResult) {
+        if (!isScanning) return;
+        isScanning = false;
+        
+        // Som de Beep
+        try { new Audio("https://actions.google.com/sounds/v1/alarms/beep_short.ogg").play(); } catch(e){}
+
+        fetch('/ponto/api/registrar-leitura', { 
+            method: 'POST', 
+            headers: {'Content-Type': 'application/json'}, 
+            body: JSON.stringify({ token: decodedText }) 
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showModal(data.funcionario, data.hora, data.tipo);
+            } else {
+                alert("ERRO: " + data.error);
+                setTimeout(() => { isScanning = true; }, 2000);
+            }
+        })
+        .catch(err => {
+            alert("Erro de conexão.");
+            setTimeout(() => { isScanning = true; }, 2000);
+        });
+    }
+
+    function onScanFailure(error) {}
+
+    function showModal(nome, hora, tipo) {
+        document.getElementById('modalTitle').innerText = tipo.toUpperCase() + " REGISTRADA";
+        document.getElementById('modalMsg').innerHTML = `<strong>${nome}</strong><br>${hora}`;
+        document.getElementById('successModal').classList.add('active');
+        
+        // Auto-fechar em 4s se ninguem clicar
+        setTimeout(() => {
+            if(document.getElementById('successModal').classList.contains('active')) resetScanner();
+        }, 4000);
+    }
+
+    function resetScanner() {
+        document.getElementById('successModal').classList.remove('active');
+        isScanning = true;
+    }
+</script>
+{% endblock %}
+
+##################################################
+
 FILE: app/routes/__init__.py
 ----------------------------
 
+
+##################################################
+
+FILE: app/routes/ponto.py
+-------------------------
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app
+from flask_login import login_required, current_user
+from app import db
+from app.models import PontoRegistro, PontoResumo, User, PontoAjuste
+from app.utils import get_brasil_time, calcular_dia, format_minutes_to_hm, data_por_extenso
+from datetime import datetime, date, timedelta
+from sqlalchemy import func
+from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadSignature
+
+ponto_bp = Blueprint('ponto', __name__, template_folder='templates', url_prefix='/ponto')
+
+# --- APIS DO SISTEMA DE PONTO ---
+
+@ponto_bp.route('/api/gerar-token', methods=['GET'])
+@login_required
+def gerar_token_qrcode():
+    if current_user.role == 'Terminal': return jsonify({'error': 'Terminal não gera token'}), 403
+    s = URLSafeTimedSerializer(current_app.secret_key)
+    token = s.dumps({'user_id': current_user.id, 'timestamp': get_brasil_time().timestamp()})
+    return jsonify({'token': token})
+
+@ponto_bp.route('/api/check-status', methods=['GET'])
+@login_required
+def check_status_ponto():
+    # Verifica se houve um ponto registrado nos ultimos 10 segundos
+    # Isso permite que o celular do funcionario saiba que o terminal leu o codigo
+    if current_user.role == 'Terminal': return jsonify({'status': 'ignorar'})
+    
+    agora = get_brasil_time()
+    # Busca ultimo ponto do usuario
+    ultimo_ponto = PontoRegistro.query.filter_by(user_id=current_user.id).order_by(PontoRegistro.id.desc()).first()
+    
+    if ultimo_ponto:
+        # Pega data/hora do ponto
+        dt_ponto = datetime.combine(ultimo_ponto.data_registro, ultimo_ponto.hora_registro)
+        # Se foi registrado ha menos de 10 segundos
+        diferenca = (agora - dt_ponto).total_seconds()
+        
+        if diferenca < 15: # Janela de tempo para notificar
+            return jsonify({
+                'marcado': True, 
+                'tipo': ultimo_ponto.tipo, 
+                'hora': ultimo_ponto.hora_registro.strftime('%H:%M')
+            })
+            
+    return jsonify({'marcado': False})
+
+@ponto_bp.route('/api/registrar-leitura', methods=['POST'])
+@login_required
+def registrar_leitura_terminal():
+    if current_user.role != 'Terminal' and current_user.role != 'Master': return jsonify({'error': 'Acesso negado.'}), 403
+    data = request.json
+    token = data.get('token')
+    if not token: return jsonify({'error': 'Token vazio'}), 400
+    s = URLSafeTimedSerializer(current_app.secret_key)
+    try:
+        dados = s.loads(token, max_age=35)
+        user_alvo = User.query.get(dados['user_id'])
+        if not user_alvo: return jsonify({'error': 'Usuário inválido'}), 404
+        
+        hoje = get_brasil_time().date()
+        
+        # Verifica duplicidade imediata (evita leitura dupla em 1 min)
+        ultimo = PontoRegistro.query.filter_by(user_id=user_alvo.id, data_registro=hoje).order_by(PontoRegistro.hora_registro.desc()).first()
+        if ultimo:
+            agora_time = get_brasil_time()
+            dt_ultimo = datetime.combine(hoje, ultimo.hora_registro)
+            if (agora_time - dt_ultimo).total_seconds() < 60:
+                 return jsonify({'error': f'Ponto já registrado há instantes ({ultimo.hora_registro.strftime("%H:%M")}). Aguarde.'}), 400
+
+        pontos_hoje = PontoRegistro.query.filter_by(user_id=user_alvo.id, data_registro=hoje).order_by(PontoRegistro.hora_registro).all()
+        
+        proxima = "Entrada"
+        if len(pontos_hoje) == 1: proxima = "Ida Almoço"
+        elif len(pontos_hoje) == 2: proxima = "Volta Almoço"
+        elif len(pontos_hoje) == 3: proxima = "Saída"
+        elif len(pontos_hoje) >= 4: proxima = "Extra"
+        
+        novo = PontoRegistro(user_id=user_alvo.id, data_registro=hoje, hora_registro=get_brasil_time().time(), tipo=proxima, latitude='QR-Code', longitude='Presencial')
+        db.session.add(novo); db.session.commit(); calcular_dia(user_alvo.id, hoje)
+        
+        return jsonify({'success': True, 'message': f'Ponto registrado: {proxima}', 'funcionario': user_alvo.real_name, 'hora': novo.hora_registro.strftime('%H:%M'), 'tipo': proxima})
+    except SignatureExpired: return jsonify({'error': 'QR Code expirado.'}), 400
+    except BadSignature: return jsonify({'error': 'QR Code inválido.'}), 400
+    except Exception as e: return jsonify({'error': f'Erro interno: {str(e)}'}), 500
+
+# --- ROTAS DE INTERFACE ---
+
+@ponto_bp.route('/scanner')
+@login_required
+def terminal_scanner():
+    if current_user.role != 'Terminal' and current_user.role != 'Master':
+        flash('Acesso restrito.')
+        return redirect(url_for('main.dashboard'))
+    return render_template('ponto/terminal_leitura.html')
+
+@ponto_bp.route('/registrar', methods=['GET', 'POST'])
+@login_required
+def registrar_ponto():
+    if current_user.role == 'Terminal': return redirect(url_for('ponto.terminal_scanner'))
+
+    hoje = get_brasil_time().date()
+    hoje_extenso = data_por_extenso(hoje)
+    
+    bloqueado = False; motivo = ""
+    if current_user.escala == '5x2' and hoje.weekday() >= 5: bloqueado = True; motivo = "Não é possível realizar a marcação de ponto."
+    elif current_user.escala == '12x36' and current_user.data_inicio_escala:
+        if (hoje - current_user.data_inicio_escala).days % 2 != 0: bloqueado = True; motivo = "Não é possível realizar a marcação de ponto."
+
+    pontos = PontoRegistro.query.filter_by(user_id=current_user.id, data_registro=hoje).order_by(PontoRegistro.hora_registro).all()
+    prox = "Entrada"
+    if len(pontos) == 1: prox = "Ida Almoço"
+    elif len(pontos) == 2: prox = "Volta Almoço"
+    elif len(pontos) == 3: prox = "Saída"
+    elif len(pontos) >= 4: prox = "Extra"
+
+    if request.method == 'POST':
+        if bloqueado: flash('Bloqueado'); return redirect(url_for('main.dashboard'))
+        db.session.add(PontoRegistro(user_id=current_user.id, data_registro=hoje, hora_registro=get_brasil_time().time(), tipo=prox, latitude=request.form.get('latitude'), longitude=request.form.get('longitude')))
+        db.session.commit(); calcular_dia(current_user.id, hoje)
+        return redirect(url_for('main.dashboard'))
+    
+    return render_template('ponto/registro.html', proxima_acao=prox, hoje_extenso=hoje_extenso, pontos=pontos, bloqueado=bloqueado, motivo=motivo, hoje=hoje)
+
+@ponto_bp.route('/espelho')
+@login_required
+def espelho_ponto():
+    target_user_id = request.args.get('user_id', type=int) or current_user.id
+    if target_user_id != current_user.id and current_user.role != 'Master':
+        return redirect(url_for('main.dashboard'))
+    
+    user = User.query.get_or_404(target_user_id)
+    mes_ref = request.args.get('mes_ref') or get_brasil_time().strftime('%Y-%m')
+    try: ano, mes = map(int, mes_ref.split('-'))
+    except: hoje = get_brasil_time(); ano, mes = hoje.year, hoje.month; mes_ref = hoje.strftime('%Y-%m')
+    
+    resumos = PontoResumo.query.filter(
+        PontoResumo.user_id == target_user_id,
+        func.extract('year', PontoResumo.data_referencia) == ano,
+        func.extract('month', PontoResumo.data_referencia) == mes
+    ).order_by(PontoResumo.data_referencia).all()
+    
+    detalhes = {}
+    for r in resumos:
+        batidas = PontoRegistro.query.filter_by(user_id=target_user_id, data_registro=r.data_referencia).order_by(PontoRegistro.hora_registro).all()
+        detalhes[r.id] = [b.hora_registro.strftime('%H:%M') for b in batidas]
+
+    dias_semana = {0: 'Seg', 1: 'Ter', 2: 'Qua', 3: 'Qui', 4: 'Sex', 5: 'Sáb', 6: 'Dom'}
+
+    return render_template('ponto/ponto_espelho.html', 
+                         resumos=resumos, 
+                         user=user, 
+                         detalhes=detalhes, 
+                         format_hm=format_minutes_to_hm, 
+                         mes_ref=mes_ref,
+                         dias_semana=dias_semana)
+
+@ponto_bp.route('/solicitar-ajuste', methods=['GET', 'POST'])
+@login_required
+def solicitar_ajuste():
+    pontos_dia = []; data_selecionada = None
+    meus_ajustes = PontoAjuste.query.filter_by(user_id=current_user.id).order_by(PontoAjuste.created_at.desc()).limit(20).all()
+    if request.method == 'POST':
+        if request.form.get('acao') == 'buscar':
+            try: data_selecionada = datetime.strptime(request.form.get('data_busca'), '%Y-%m-%d').date(); pontos_dia = PontoRegistro.query.filter_by(user_id=current_user.id, data_registro=data_selecionada).order_by(PontoRegistro.hora_registro).all()
+            except: flash('Data inválida')
+        elif request.form.get('acao') == 'enviar':
+            try:
+                dt_obj = datetime.strptime(request.form.get('data_ref'), '%Y-%m-%d').date()
+                p_id = int(request.form.get('ponto_id')) if request.form.get('ponto_id') else None
+                solic = PontoAjuste(user_id=current_user.id, data_referencia=dt_obj, ponto_original_id=p_id, novo_horario=request.form.get('novo_horario'), tipo_batida=request.form.get('tipo_batida'), tipo_solicitacao=request.form.get('tipo_solicitacao'), justificativa=request.form.get('justificativa'))
+                db.session.add(solic); db.session.commit(); flash('Enviado!')
+                return redirect(url_for('ponto.solicitar_ajuste'))
+            except: pass
+    dados_extras = {}
+    for p in meus_ajustes:
+        if p.ponto_original_id:
+            original = PontoRegistro.query.get(p.ponto_original_id)
+            if original: dados_extras[p.id] = original.hora_registro.strftime('%H:%M')
+    return render_template('ponto/solicitar_ajuste.html', pontos=pontos_dia, data_sel=data_selecionada, meus_ajustes=meus_ajustes, extras=dados_extras)
 
 ##################################################
 
@@ -2705,17 +3204,12 @@ FILE: app/templates/base.html
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Shahin Gestão</title>
-    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- FontAwesome -->
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
-    <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
-    <!-- Toastify CSS -->
     <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
-    
-    
-    
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>body { font-family: 'Inter', sans-serif; } .sidebar { transition: transform 0.3s ease-in-out; }</style>
     <script>
         function toggleSidebar() {
             const sb = document.getElementById('sidebar');
@@ -2724,7 +3218,6 @@ FILE: app/templates/base.html
             else { sb.classList.add('-translate-x-full'); ov.classList.add('hidden'); }
         }
     </script>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body class="bg-slate-50 text-slate-800">
     {% if current_user.is_authenticated and not current_user.is_first_access %}
@@ -2735,7 +3228,6 @@ FILE: app/templates/base.html
     </div>
     <div id="overlay" onclick="toggleSidebar()" class="fixed inset-0 bg-black bg-opacity-50 z-40 hidden md:hidden"></div>
     {% endif %}
-    
     <div class="{% if current_user.is_authenticated and not current_user.is_first_access %}flex h-screen overflow-hidden{% endif %}">
         {% if current_user.is_authenticated and not current_user.is_first_access %}
         <aside id="sidebar" class="sidebar fixed inset-y-0 left-0 z-50 w-64 bg-slate-900 text-slate-300 transform -translate-x-full md:translate-x-0 md:static md:flex-shrink-0 flex flex-col shadow-2xl h-full">
@@ -2749,24 +3241,34 @@ FILE: app/templates/base.html
             </div>
             <nav class="flex-1 overflow-y-auto py-4">
                 <ul class="space-y-1">
-                    <li><a href="/" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-home w-6 text-center mr-2 text-slate-500 group-hover:text-blue-500"></i><span class="font-medium">Início</span></a></li>
                     
-                    <li class="pt-4 pb-2 px-6 text-[10px] font-bold uppercase text-slate-600">Funcionário</li>
-                    <li><a href="/ponto/registrar" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-fingerprint w-6 text-center mr-2 text-slate-500 group-hover:text-purple-500"></i><span class="font-medium">Registrar Ponto</span></a></li>
-                    <li><a href="/ponto/espelho" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-calendar-alt w-6 text-center mr-2 text-slate-500"></i><span class="font-medium">Espelho de Ponto</span></a></li>
-                    <li><a href="/holerites/meus-documentos" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-folder w-6 text-center mr-2 text-slate-500 group-hover:text-yellow-400"></i><span class="font-medium">Meus Holerites</span></a></li>
-                    <li><a href="/ponto/solicitar-ajuste" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-edit w-6 text-center mr-2 text-slate-500"></i><span class="font-medium">Solicitar Ajuste</span></a></li>
+                    {% if current_user.role == 'Terminal' %}
+                        <!-- MENU EXCLUSIVO TERMINAL -->
+                         <li class="pt-4 pb-2 px-6 text-[10px] font-bold uppercase text-slate-600">Terminal Fixo</li>
+                         <li><a href="/ponto/scanner" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-qrcode w-6 text-center mr-2 text-blue-500"></i><span class="font-medium">Abrir Leitor</span></a></li>
+                         <li><a href="/logout" class="flex items-center px-6 py-3 hover:bg-red-900/20 hover:text-red-400 transition group mt-8"><i class="fas fa-sign-out-alt w-6 text-center mr-2 text-slate-500 group-hover:text-red-400"></i><span class="font-medium">Sair</span></a></li>
                     
-                    {% if current_user.role == 'Master' %}
-                    <li class="pt-4 pb-2 px-6 text-[10px] font-bold uppercase text-slate-600">Administração</li>
-                    <li><a href="/holerites/admin/importar" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-file-upload w-6 text-center mr-2 text-slate-500 group-hover:text-blue-400"></i><span class="font-medium">Importar Holerites</span></a></li>
-                    <li><a href="/admin/relatorio-folha" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-file-invoice-dollar w-6 text-center mr-2 text-slate-500 group-hover:text-emerald-400"></i><span class="font-medium">Relatório de Folha</span></a></li>
-                    <li><a href="/controle-uniforme" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-tshirt w-6 text-center mr-2 text-slate-500 group-hover:text-yellow-500"></i><span class="font-medium">Controle de Uniforme</span></a></li>
-                    <li><a href="/admin/solicitacoes" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-check-double w-6 text-center mr-2 text-slate-500 group-hover:text-emerald-500"></i><span class="font-medium">Solicitações de Ponto</span></a></li>
-                    <li><a href="/admin/usuarios" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-users-cog w-6 text-center mr-2 text-blue-400"></i><span class="font-medium">Funcionários</span></a></li>
+                    {% else %}
+                        <!-- MENU PADRAO (MASTER E COLABORADOR) -->
+                        <li><a href="/" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-home w-6 text-center mr-2 text-slate-500 group-hover:text-blue-500"></i><span class="font-medium">Início</span></a></li>
+                        
+                        <li class="pt-4 pb-2 px-6 text-[10px] font-bold uppercase text-slate-600">Ponto Eletrônico</li>
+                        <li><a href="/ponto/registrar" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-fingerprint w-6 text-center mr-2 text-slate-500 group-hover:text-purple-500"></i><span class="font-medium">Registrar Ponto</span></a></li>
+                        <li><a href="/ponto/espelho" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-calendar-alt w-6 text-center mr-2 text-slate-500"></i><span class="font-medium">Espelho de Ponto</span></a></li>
+                        <li><a href="/holerites/meus-documentos" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-folder w-6 text-center mr-2 text-slate-500 group-hover:text-yellow-400"></i><span class="font-medium">Meus Holerites</span></a></li>
+                        <li><a href="/ponto/solicitar-ajuste" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-edit w-6 text-center mr-2 text-slate-500"></i><span class="font-medium">Solicitar Ajuste</span></a></li>
+                        
+                        {% if current_user.role == 'Master' %}
+                        <li class="pt-4 pb-2 px-6 text-[10px] font-bold uppercase text-slate-600">Administração</li>
+                        <li><a href="/holerites/admin/importar" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-file-upload w-6 text-center mr-2 text-slate-500 group-hover:text-blue-400"></i><span class="font-medium">Importar Holerites</span></a></li>
+                        <li><a href="/admin/relatorio-folha" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-file-invoice-dollar w-6 text-center mr-2 text-slate-500 group-hover:text-emerald-400"></i><span class="font-medium">Relatório de Folha</span></a></li>
+                        <li><a href="/controle-uniforme" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-tshirt w-6 text-center mr-2 text-slate-500 group-hover:text-yellow-500"></i><span class="font-medium">Controle de Uniforme</span></a></li>
+                        <li><a href="/admin/solicitacoes" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-check-double w-6 text-center mr-2 text-slate-500 group-hover:text-emerald-500"></i><span class="font-medium">Solicitações de Ponto</span></a></li>
+                        <li><a href="/admin/usuarios" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-users-cog w-6 text-center mr-2 text-blue-400"></i><span class="font-medium">Funcionários</span></a></li>
+                        {% endif %}
+                        
+                        <li><a href="/logout" class="flex items-center px-6 py-3 hover:bg-red-900/20 hover:text-red-400 transition group mt-8"><i class="fas fa-sign-out-alt w-6 text-center mr-2 text-slate-500 group-hover:text-red-400"></i><span class="font-medium">Sair</span></a></li>
                     {% endif %}
-                    
-                    <li><a href="/logout" class="flex items-center px-6 py-3 hover:bg-red-900/20 hover:text-red-400 transition group mt-8"><i class="fas fa-sign-out-alt w-6 text-center mr-2 text-slate-500 group-hover:text-red-400"></i><span class="font-medium">Sair</span></a></li>
                 </ul>
             </nav>
         </aside>
@@ -2774,6 +3276,13 @@ FILE: app/templates/base.html
         
         <div class="flex-1 h-full overflow-y-auto bg-slate-50 relative w-full">
             <div class="max-w-5xl mx-auto p-4 md:p-8 pb-20">
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                        {% for category, message in messages %}
+                            <div class="hidden" id="flask-msg-{{ loop.index }}" data-cat="{{ category }}">{{ message }}</div>
+                        {% endfor %}
+                    {% endif %}
+                {% endwith %}
                 {% block content %}{% endblock %}
             </div>
             {% if current_user.is_authenticated and not current_user.is_first_access %}
@@ -2781,37 +3290,32 @@ FILE: app/templates/base.html
             {% endif %}
         </div>
     </div>
-
-    <!-- Toastify JS -->
+    
     <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            {% with messages = get_flashed_messages(with_categories=true) %}
-                {% if messages %}
-                    {% for category, message in messages %}
-                        Toastify({
-                            text: "{{ message }}",
-                            duration: 4000,
-                            close: true,
-                            gravity: "top", 
-                            position: "right", 
-                            stopOnFocus: true, 
-                            style: {
-                                background: "{% if category == 'error' %}linear-gradient(to right, #ef4444, #b91c1c){% else %}linear-gradient(to right, #059669, #047857){% endif %}",
-                                borderRadius: "8px",
-                                boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)",
-                                fontWeight: "bold",
-                                fontSize: "14px"
-                            },
-                        }).showToast();
-                    {% endfor %}
-                {% endif %}
-            {% endwith %}
+            // Processa mensagens flash escondidas
+            document.querySelectorAll('[id^="flask-msg-"]').forEach(el => {
+                const msg = el.innerText;
+                const cat = el.getAttribute('data-cat');
+                Toastify({
+                    text: msg,
+                    duration: 4000,
+                    close: true,
+                    gravity: "top", 
+                    position: "right", 
+                    style: {
+                        background: cat === 'error' ? "linear-gradient(to right, #ef4444, #b91c1c)" : "linear-gradient(to right, #059669, #047857)",
+                        borderRadius: "8px",
+                        boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)",
+                        fontSize: "14px"
+                    },
+                }).showToast();
+            });
         });
     </script>
 </body>
 </html>
-
 
 ##################################################
 
