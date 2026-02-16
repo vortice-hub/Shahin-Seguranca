@@ -1,88 +1,109 @@
 {% extends 'base.html' %}
 {% block content %}
-<div class="mb-8 flex justify-between items-end">
+<div class="mb-8 flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
     <div>
         <h2 class="text-2xl font-bold text-slate-800">Central de Documentos</h2>
-        <p class="text-sm text-slate-500">Gerencie recibos e holerites da equipe.</p>
+        <p class="text-sm text-slate-500">Gestão integrada de RH e Financeiro.</p>
     </div>
-    <a href="/documentos/admin/auditoria" class="bg-slate-800 hover:bg-slate-900 text-white font-bold py-2 px-4 rounded-lg shadow-lg text-xs transition flex items-center gap-2">
-        <i class="fas fa-shield-alt"></i> AUDITORIA & ASSINATURAS
-    </a>
+    <div class="flex gap-2">
+        <a href="/documentos/admin/auditoria" class="bg-slate-800 hover:bg-slate-900 text-white font-bold py-2 px-4 rounded-lg shadow-lg text-xs transition flex items-center gap-2">
+            <i class="fas fa-shield-alt"></i> AUDITORIA & ASSINATURAS
+        </a>
+    </div>
 </div>
 
-<div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-    <!-- Card 1: Holerite -->
-    <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition group">
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
+    <!-- Cards de Ação (Mantidos os mesmos do passo anterior) -->
+    <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition">
         <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center text-blue-600 mb-4">
             <i class="fas fa-file-invoice text-xl"></i>
         </div>
         <h3 class="font-bold text-md text-slate-800 mb-2">Holerite em massa</h3>
-        <p class="text-xs text-slate-500 mb-4">Importe o PDF unificado da contabilidade. O sistema separa e envia automaticamente.</p>
-        <a href="/documentos/admin/holerites" class="block w-full text-center bg-slate-50 hover:bg-blue-50 text-blue-600 font-bold py-2 text-xs rounded border border-slate-200 hover:border-blue-200 transition">
-            IMPORTAR ARQUIVO
-        </a>
+        <p class="text-xs text-slate-500 mb-4">Importe o PDF unificado. O sistema separa e envia.</p>
+        <a href="/documentos/admin/holerites" class="block w-full text-center bg-slate-50 hover:bg-blue-50 text-blue-600 font-bold py-2 text-xs rounded border border-slate-200 transition">IMPORTAR</a>
     </div>
 
-    <!-- Card 2: Recibo -->
     <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition">
         <div class="w-10 h-10 bg-emerald-100 rounded-lg flex items-center justify-center text-emerald-600 mb-4">
             <i class="fas fa-file-signature text-xl"></i>
         </div>
         <h3 class="font-bold text-md text-slate-800 mb-2">Recibo Avulso</h3>
         <p class="text-xs text-slate-500 mb-4">Gere recibos de VA, VT ou Pix avulsos.</p>
-        <a href="/documentos/admin/recibo/novo" class="block w-full text-center bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 text-xs rounded shadow transition">
-            NOVO RECIBO
-        </a>
+        <a href="/documentos/admin/recibo/novo" class="block w-full text-center bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 text-xs rounded shadow transition">NOVO RECIBO</a>
     </div>
 
-    <!-- Card 3: Espelho de Ponto -->
     <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition">
         <div class="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center text-purple-600 mb-4">
             <i class="fas fa-calendar-check text-xl"></i>
         </div>
-        <h3 class="font-bold text-md text-slate-800 mb-2">Enviar Espelhos</h3>
-        <p class="text-xs text-slate-500 mb-4">Gera e envia o PDF do ponto para todos os ativos.</p>
-        
+        <h3 class="font-bold text-md text-slate-800 mb-2">Disparar Espelhos</h3>
+        <p class="text-xs text-slate-500 mb-4">Envia o PDF do ponto para todos os ativos.</p>
         <form action="/documentos/admin/disparar-espelhos" method="POST" class="flex gap-2">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
             <input type="month" name="mes_ref" class="w-full border rounded px-2 py-1 text-xs" required>
-            <button type="submit" class="bg-purple-600 hover:bg-purple-700 text-white px-3 py-2 rounded text-xs font-bold transition" onclick="return confirm('Gerar e enviar para TODOS os funcionários?')">
+            <button type="submit" class="bg-purple-600 hover:bg-purple-700 text-white px-3 py-2 rounded text-xs font-bold transition">
                 <i class="fas fa-paper-plane"></i>
             </button>
         </form>
     </div>
 </div>
 
-<h3 class="font-bold text-slate-700 mb-4 text-sm uppercase px-2">Histórico de Recibos Enviados</h3>
+<!-- HISTÓRICO UNIFICADO (REFORMULADO) -->
+<h3 class="font-bold text-slate-700 mb-4 text-xs uppercase px-2 tracking-widest flex items-center gap-2">
+    <i class="fas fa-stream text-slate-400"></i> Histórico de Documentos Enviados
+</h3>
+
 <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-10">
     <div class="overflow-x-auto">
         <table class="w-full text-left text-sm text-slate-600">
-            <thead class="bg-slate-50 text-xs uppercase text-slate-400 font-bold border-b border-slate-100">
-                <tr><th class="px-6 py-3">Funcionário</th><th class="px-6 py-3">Data Envio</th><th class="px-6 py-3">Valor</th><th class="px-6 py-3 text-center">Leitura</th><th class="px-6 py-3 text-right">Ação</th></tr>
+            <thead class="bg-slate-50 text-[10px] uppercase text-slate-400 font-bold border-b border-slate-100">
+                <tr>
+                    <th class="px-6 py-4">Tipo</th>
+                    <th class="px-6 py-4">Funcionário</th>
+                    <th class="px-6 py-4">Informação de Referência</th>
+                    <th class="px-6 py-4">Data do Envio</th>
+                    <th class="px-6 py-4 text-center">Assinatura</th>
+                    <th class="px-6 py-4 text-right">Arquivo</th>
+                </tr>
             </thead>
             <tbody class="divide-y divide-slate-100">
-                {% for r in recibos %}
+                {% for h in historico %}
                 <tr class="hover:bg-slate-50 transition">
-                    <td class="px-6 py-3 font-bold text-slate-800">{{ r.user.real_name }}</td>
-                    <td class="px-6 py-3">{{ r.created_at.strftime('%d/%m %H:%M') }}</td>
-                    <td class="px-6 py-3 font-mono">R$ {{ "%.2f"|format(r.valor) }}</td>
-                    <td class="px-6 py-3 text-center">
-                        {% if r.visualizado %}<span class="text-emerald-600 font-bold text-xs"><i class="fas fa-check-double"></i> Visto</span>
-                        {% else %}<span class="text-amber-500 font-bold text-xs"><i class="fas fa-clock"></i> Pendente</span>{% endif %}
+                    <td class="px-6 py-4">
+                        <span class="bg-{{ h.cor }}-50 text-{{ h.cor }}-600 px-2 py-1 rounded text-[10px] font-bold uppercase border border-{{ h.cor }}-100 shadow-sm">
+                            {{ h.tipo }}
+                        </span>
                     </td>
-                    <td class="px-6 py-3 text-right">
-                        <form action="/documentos/baixar/recibo/{{ r.id }}" method="POST" target="_blank">
+                    <td class="px-6 py-4 font-bold text-slate-800">{{ h.usuario }}</td>
+                    <td class="px-6 py-4 text-xs font-medium text-slate-600">{{ h.info }}</td>
+                    <td class="px-6 py-4 text-xs text-slate-400">{{ h.data.strftime('%d/%m/%Y %H:%M') }}</td>
+                    <td class="px-6 py-4 text-center">
+                        {% if h.visto %}
+                        <span class="text-emerald-600 font-bold text-[10px] uppercase flex items-center justify-center gap-1">
+                            <i class="fas fa-check-circle"></i> Assinado
+                        </span>
+                        {% else %}
+                        <span class="text-amber-500 font-bold text-[10px] uppercase flex items-center justify-center gap-1">
+                            <i class="fas fa-hourglass-half"></i> Pendente
+                        </span>
+                        {% endif %}
+                    </td>
+                    <td class="px-6 py-4 text-right">
+                        <form action="{{ url_for('documentos.' + h.rota, id=h.id) }}" method="POST" target="_blank">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                            <button type="submit" class="text-blue-600 hover:underline text-xs font-bold">Ver PDF</button>
+                            <button type="submit" class="text-slate-400 hover:text-blue-600 transition p-2">
+                                <i class="fas fa-file-pdf text-lg"></i>
+                            </button>
                         </form>
                     </td>
                 </tr>
-                {% else %}<tr><td colspan="5" class="px-6 py-8 text-center text-slate-400">Nenhum recibo recente.</td></tr>{% endfor %}
+                {% else %}
+                <tr><td colspan="6" class="px-6 py-20 text-center text-slate-400">Nenhum registo de envio encontrado.</td></tr>
+                {% endfor %}
             </tbody>
         </table>
     </div>
 </div>
 {% endblock %}
-
 
 

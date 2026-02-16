@@ -1,58 +1,123 @@
 {% extends 'base.html' %}
 {% block content %}
-<div class="mb-6 flex justify-between items-center">
+<div class="mb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
     <div>
-        <h2 class="text-2xl font-bold text-slate-800">Auditoria de Assinaturas</h2>
-        <p class="text-sm text-slate-500">Rastreabilidade forense de entrega de documentos.</p>
+        <h2 class="text-2xl font-bold text-slate-800">Auditoria de Recebimento</h2>
+        <p class="text-sm text-slate-500">Controlo de conformidade e assinaturas digitais por colaborador.</p>
     </div>
-    <a href="/documentos/admin" class="text-sm font-bold text-slate-500 hover:text-slate-800">Voltar</a>
+    <div class="relative w-full md:w-80">
+        <input type="text" id="userSearch" onkeyup="searchUsers()" placeholder="Pesquisar funcionário pelo nome..." 
+               class="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 pl-11 text-sm focus:ring-2 focus:ring-blue-500 outline-none transition shadow-sm">
+        <i class="fas fa-search absolute left-4 top-3.5 text-slate-400"></i>
+    </div>
 </div>
 
-<div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-    <div class="overflow-x-auto">
-        <table class="w-full text-left text-sm text-slate-600">
-            <thead class="bg-slate-50 text-xs uppercase text-slate-400 font-bold border-b border-slate-100">
-                <tr>
-                    <th class="px-6 py-4">Data / Hora</th>
-                    <th class="px-6 py-4">Funcionário</th>
-                    <th class="px-6 py-4">Documento</th>
-                    <th class="px-6 py-4">IP / Dispositivo</th>
-                    <th class="px-6 py-4 text-right">Comprovante</th>
-                </tr>
-            </thead>
-            <tbody class="divide-y divide-slate-100">
-                {% for ass in assinaturas %}
-                <tr class="hover:bg-slate-50 transition">
-                    <td class="px-6 py-4">
-                        <div class="font-bold text-slate-800">{{ ass.data_assinatura.strftime('%d/%m/%Y') }}</div>
-                        <div class="text-xs text-slate-400">{{ ass.data_assinatura.strftime('%H:%M:%S') }}</div>
-                    </td>
-                    <td class="px-6 py-4 font-bold text-blue-700">
-                        {{ ass.user.real_name }}
-                    </td>
-                    <td class="px-6 py-4">
-                        <span class="bg-slate-100 text-slate-600 px-2 py-1 rounded text-[10px] font-bold uppercase border border-slate-200">
-                            {{ ass.tipo_documento }}
-                        </span>
-                        <div class="text-[10px] text-slate-400 mt-1 font-mono">Hash: {{ ass.hash_arquivo[:8] }}...</div>
-                    </td>
-                    <td class="px-6 py-4 text-xs">
-                        <div class="font-mono text-emerald-600">{{ ass.ip_address }}</div>
-                        <div class="text-slate-400 truncate w-32" title="{{ ass.user_agent }}">{{ ass.user_agent[:20] }}...</div>
-                    </td>
-                    <td class="px-6 py-4 text-right">
-                        <a href="/documentos/admin/auditoria/certificado/{{ ass.id }}" target="_blank" class="bg-slate-800 text-white px-3 py-2 rounded-lg text-xs font-bold hover:bg-black transition shadow-sm">
-                            <i class="fas fa-certificate mr-1"></i> Certificado
-                        </a>
-                    </td>
-                </tr>
-                {% else %}
-                <tr><td colspan="5" class="px-6 py-12 text-center text-slate-400 italic">Nenhuma assinatura registrada ainda.</td></tr>
-                {% endfor %}
-            </tbody>
-        </table>
+<div class="space-y-3" id="usersList">
+    {% for item in auditores %}
+    <div class="user-item bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm transition hover:shadow-md" data-name="{{ item.user.real_name.lower() }}">
+        <!-- Cabeçalho (Accordion Toggle) -->
+        <button onclick="toggleAccordion('box-{{ item.user.id }}')" 
+                class="w-full px-6 py-5 flex items-center justify-between hover:bg-slate-50/80 transition group">
+            <div class="flex items-center gap-4">
+                <div class="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center text-slate-500 font-bold border-2 border-white shadow-inner">
+                    {{ item.user.real_name[:1].upper() }}
+                </div>
+                <div class="text-left">
+                    <div class="font-bold text-slate-800 text-base group-hover:text-blue-600 transition">{{ item.user.real_name }}</div>
+                    <div class="text-[10px] text-slate-400 uppercase tracking-widest font-bold flex items-center gap-2">
+                        <span>CPF: {{ item.user.cpf }}</span>
+                        <span class="text-slate-200">|</span>
+                        <span>{{ item.user.role }}</span>
+                    </div>
+                </div>
+            </div>
+            <div class="flex items-center gap-6">
+                <div class="hidden md:block text-right">
+                    <div class="text-[10px] text-slate-400 uppercase font-bold">Total Assinado</div>
+                    <div class="font-mono font-bold text-slate-700">{{ item.total }} docs</div>
+                </div>
+                <i class="fas fa-chevron-down text-slate-300 transition-transform duration-300 text-lg" id="icon-box-{{ item.user.id }}"></i>
+            </div>
+        </button>
+
+        <!-- Painel de Detalhes -->
+        <div id="box-{{ item.user.id }}" class="hidden border-t border-slate-100 bg-slate-50/30">
+            {% if item.assinaturas %}
+            <div class="p-2">
+                <div class="overflow-x-auto rounded-lg border border-slate-100">
+                    <table class="w-full text-left text-sm">
+                        <thead class="bg-slate-100/50 text-[10px] text-slate-500 uppercase font-bold">
+                            <tr>
+                                <th class="px-6 py-3">Tipo</th>
+                                <th class="px-6 py-3">Referência do Documento</th>
+                                <th class="px-6 py-3">Data/Hora Assinatura</th>
+                                <th class="px-6 py-3 text-right">Certificado Forense</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100 bg-white">
+                            {% for a in item.assinaturas %}
+                            <tr class="hover:bg-blue-50/50 transition">
+                                <td class="px-6 py-4">
+                                    <span class="px-2 py-1 rounded text-[10px] font-bold uppercase tracking-tight
+                                        {% if a.tipo == 'Holerite' %} bg-blue-50 text-blue-600 
+                                        {% elif a.tipo == 'Recibo' %} bg-emerald-50 text-emerald-600 
+                                        {% else %} bg-purple-50 text-purple-600 {% endif %}">
+                                        {{ a.tipo }}
+                                    </span>
+                                </td>
+                                <td class="px-6 py-4">
+                                    <div class="font-bold text-slate-700">{{ a.referencia }}</div>
+                                    <div class="text-[9px] text-slate-400 font-mono">IP: {{ a.ip }}</div>
+                                </td>
+                                <td class="px-6 py-4 text-slate-600">
+                                    <div class="font-medium">{{ a.data.strftime('%d/%m/%Y') }}</div>
+                                    <div class="text-xs text-slate-400">{{ a.data.strftime('%H:%M:%S') }}</div>
+                                </td>
+                                <td class="px-6 py-4 text-right">
+                                    <a href="/documentos/admin/auditoria/certificado/{{ a.id }}" target="_blank" 
+                                       class="inline-flex items-center gap-2 bg-white border border-slate-200 text-slate-700 hover:bg-slate-900 hover:text-white hover:border-slate-900 px-4 py-2 rounded-lg font-bold text-xs transition shadow-sm">
+                                        <i class="fas fa-file-signature text-blue-500"></i> Baixar Comprovante
+                                    </a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            {% else %}
+            <div class="px-6 py-12 text-center text-slate-400 bg-white">
+                <i class="fas fa-comment-slash text-3xl mb-3 opacity-20"></i>
+                <p class="text-sm">Este colaborador ainda não possui registos de assinatura digital.</p>
+                <p class="text-[10px] uppercase mt-1">O sistema aguarda o primeiro download de documento.</p>
+            </div>
+            {% endif %}
+        </div>
     </div>
+    {% endfor %}
 </div>
+
+<script>
+    function toggleAccordion(id) {
+        const content = document.getElementById(id);
+        const icon = document.getElementById('icon-' + id);
+        content.classList.toggle('hidden');
+        icon.classList.toggle('rotate-180');
+    }
+
+    function searchUsers() {
+        let input = document.getElementById('userSearch').value.toLowerCase();
+        let items = document.getElementsByClassName('user-item');
+        for (let i = 0; i < items.length; i++) {
+            let name = items[i].getAttribute('data-name');
+            if (name.includes(input)) {
+                items[i].style.display = "";
+            } else {
+                items[i].style.display = "none";
+            }
+        }
+    }
+</script>
 {% endblock %}
 
 

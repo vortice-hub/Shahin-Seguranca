@@ -54,27 +54,31 @@
                         <li><a href="/ponto/espelho" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-calendar-alt w-6 text-center mr-2 text-slate-500"></i><span class="font-medium">Espelho de Ponto</span></a></li>
                         <li><a href="/documentos/meus-documentos" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-folder-open w-6 text-center mr-2 text-slate-500 group-hover:text-yellow-400"></i><span class="font-medium">Meus Documentos</span></a></li>
                         
-                        <!-- SECÇÃO ADMINISTRATIVA DINÂMICA -->
                         {% set perms = current_user.permissions or "" %}
                         {% set is_master = current_user.username == 'Thaynara' %}
 
-                        {% if is_master or 'DOCUMENTOS' in perms or 'PONTO' in perms or 'ESTOQUE' in perms or 'USUARIOS' in perms %}
+                        {% if is_master or 'DOCUMENTOS' in perms or 'PONTO' in perms or 'ESTOQUE' in perms or 'USUARIOS' in perms or 'AUDITORIA' in perms %}
                         <li class="pt-6 pb-2 px-6 text-[10px] font-bold uppercase text-slate-600 border-t border-slate-800/50 mt-4">Administração</li>
                         
                         {% if is_master or 'DOCUMENTOS' in perms %}
-                        <li><a href="/documentos/admin" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-file-contract w-6 text-center mr-2 text-slate-500 group-hover:text-pink-400"></i><span class="font-medium">Documentos & RH</span></a></li>
+                        <li class="relative group">
+                            <a href="/documentos/admin" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition"><i class="fas fa-file-contract w-6 text-center mr-2 text-slate-500"></i><span class="font-medium">Central Documentos</span></a>
+                            {% if is_master or 'AUDITORIA' in perms %}
+                            <a href="/documentos/admin/auditoria" class="flex items-center pl-14 pr-6 py-2 text-xs text-slate-400 hover:text-white hover:bg-slate-800 transition"><i class="fas fa-shield-alt mr-2 text-[10px]"></i>Assinaturas Digitais</a>
+                            {% endif %}
+                        </li>
                         {% endif %}
 
                         {% if is_master or 'ESTOQUE' in perms %}
-                        <li><a href="/controle-uniforme" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-tshirt w-6 text-center mr-2 text-slate-500 group-hover:text-yellow-500"></i><span class="font-medium">Uniformes/Estoque</span></a></li>
+                        <li><a href="/controle-uniforme" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-tshirt w-6 text-center mr-2 text-slate-500"></i><span class="font-medium">Uniformes/Estoque</span></a></li>
                         {% endif %}
 
                         {% if is_master or 'PONTO' in perms %}
-                        <li><a href="/admin/solicitacoes" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-check-double w-6 text-center mr-2 text-slate-500 group-hover:text-emerald-500"></i><span class="font-medium">Gestão de Ponto</span></a></li>
+                        <li><a href="/admin/solicitacoes" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-check-double w-6 text-center mr-2 text-slate-500"></i><span class="font-medium">Gestão de Ponto</span></a></li>
                         {% endif %}
 
                         {% if is_master or 'USUARIOS' in perms %}
-                        <li><a href="/admin/usuarios" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-users-cog w-6 text-center mr-2 text-slate-500 group-hover:text-blue-400"></i><span class="font-medium">Funcionários</span></a></li>
+                        <li><a href="/admin/usuarios" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-users-cog w-6 text-center mr-2 text-slate-500"></i><span class="font-medium">Funcionários</span></a></li>
                         {% endif %}
                         
                         {% endif %}
