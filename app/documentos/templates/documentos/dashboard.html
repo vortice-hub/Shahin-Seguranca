@@ -76,7 +76,7 @@
                     </td>
                     <td class="px-6 py-4 font-bold text-slate-800">{{ h.usuario }}</td>
                     <td class="px-6 py-4 text-xs font-medium text-slate-600">{{ h.info }}</td>
-                    <td class="px-6 py-4 text-xs text-slate-400">{{ h.data.strftime('%d/%m/%Y %H:%M') }}</td>
+                    <td class="px-6 py-4 text-xs text-slate-400">{{ h.enviado_em.strftime('%d/%m/%Y %H:%M') }}</td>
                     <td class="px-6 py-4 text-center">
                         {% if h.visto %}
                         <span class="text-emerald-600 font-bold text-[10px] uppercase flex items-center justify-center gap-1">
