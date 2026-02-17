@@ -36,6 +36,7 @@ def gerar_url_assinada(caminho_blob):
         )
         return url
     except Exception as e:
+        # Fallback: Se a permissão 'Token Creator' não estiver ativa, o erro aparecerá aqui
         print(f"Erro ao gerar link assinado: {e}")
         return None
 

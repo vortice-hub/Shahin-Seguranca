@@ -49,32 +49,34 @@
                     <th class="px-6 py-4">Ref/Valor</th>
                     <th class="px-6 py-4">Enviado em</th>
                     <th class="px-6 py-4 text-center">Status</th>
-                    <th class="px-6 py-4 text-right">Ação</th>
+                    <th class="px-6 py-4 text-right">Arquivo</th>
                 </tr>
             </thead>
             <tbody class="divide-y divide-slate-100">
                 {% for doc in historico %}
                 <tr class="hover:bg-slate-50 transition">
-                    <td class="px-6 py-4"><span class="bg-{{ doc.cor }}-50 text-{{ doc.cor }}-600 px-2 py-1 rounded text-[10px] font-bold uppercase">{{ doc.tipo }}</span></td>
-                    <td class="px-6 py-4 font-bold text-slate-800">{{ doc.usuario }}</td>
-                    <td class="px-6 py-4 text-xs">{{ doc.info }}</td>
+                    <td class="px-6 py-4"><span class="bg-{{ doc['cor'] }}-50 text-{{ doc['cor'] }}-600 px-2 py-1 rounded text-[10px] font-bold uppercase border border-{{ doc['cor'] }}-100">{{ doc['tipo'] }}</span></td>
+                    <td class="px-6 py-4 font-bold text-slate-800">{{ doc['usuario'] }}</td>
+                    <td class="px-6 py-4 text-xs font-medium text-slate-600">{{ doc['info'] }}</td>
                     <td class="px-6 py-4 text-xs text-slate-400">
-                        {{ doc.data.strftime('%d/%m/%Y %H:%M') if doc.data else '--' }}
+                        {{ doc['data'].strftime('%d/%m/%Y %H:%M') if doc['data'] else '--' }}
                     </td>
                     <td class="px-6 py-4 text-center">
-                        {% if doc.visualizado %}
-                        <span class="text-emerald-600 font-bold text-[10px] uppercase"><i class="fas fa-check-circle"></i> Lido</span>
+                        {% if doc['visualizado'] %}
+                        <span class="text-emerald-600 font-bold text-[10px] uppercase flex items-center justify-center gap-1"><i class="fas fa-check-circle"></i> Lido</span>
                         {% else %}
-                        <span class="text-amber-500 font-bold text-[10px] uppercase"><i class="fas fa-clock"></i> Enviado</span>
+                        <span class="text-amber-500 font-bold text-[10px] uppercase flex items-center justify-center gap-1"><i class="fas fa-clock"></i> Enviado</span>
                         {% endif %}
                     </td>
                     <td class="px-6 py-4 text-right">
-                        <form action="{{ url_for('documentos.' + doc.rota, id=doc.id) }}" method="POST" target="_blank">
+                        <form action="{{ url_for('documentos.' + doc['rota'], id=doc['id']) }}" method="POST" target="_blank">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                             <button type="submit" class="text-slate-400 hover:text-blue-600 p-2"><i class="fas fa-file-pdf text-lg"></i></button>
                         </form>
                     </td>
                 </tr>
+                {% else %}
+                <tr><td colspan="6" class="px-6 py-20 text-center text-slate-400 font-medium">Nenhum documento enviado recentemente.</td></tr>
                 {% endfor %}
             </tbody>
         </table>
