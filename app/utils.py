@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time
 import unicodedata
 import re
 import hashlib
@@ -8,71 +8,111 @@ from flask_login import current_user
 
 # --- FUNÇÃO CENTRALIZADA DE TEMPO ---
 def get_brasil_time():
-    """Retorna o horário atual em UTC-3 (Horário de Brasília)."""
+    """Retorna o horário atual em UTC-3."""
     return datetime.utcnow() - timedelta(hours=3)
 
 # --- UTILITÁRIOS DE TEXTO E DATA ---
 
 def remove_accents(txt):
-    """Remove acentos de uma string."""
     if not txt: return ""
     return "".join(c for c in unicodedata.normalize('NFD', txt) if unicodedata.category(c) != 'Mn')
 
 def limpar_nome(txt):
     """
-    Normalização Agressiva para comparação de nomes (IA vs Banco).
-    1. Remove acentos.
-    2. Remove preposições (de, da, dos...).
-    3. Remove espaços extras.
+    Normalização Agressiva para IA.
+    Remove acentos, preposições e espaços extras.
     """
     if not txt: return ""
-    # Remove acentos e converte para maiúsculo
     txt = remove_accents(txt).upper().strip()
-    
-    # Remove preposições comuns que atrapalham a comparação
     stopwords = [" DE ", " DA ", " DO ", " DOS ", " DAS ", " E "]
     for word in stopwords:
         txt = txt.replace(word, " ")
-    
-    # Remove espaços duplos resultantes
     return " ".join(txt.split())
 
 def gerar_login_automatico(nome_completo):
-    """Gera um login base (primeiro nome) para novos usuários."""
+    """Gera login base (primeiro nome) para novos usuários."""
     if not nome_completo: return "user"
     partes = nome_completo.split()
-    # Pega o primeiro nome, remove acentos e deixa minúsculo
     primeiro_nome = remove_accents(partes[0]).lower()
-    # Remove qualquer caractere que não seja letra
     return re.sub(r'[^a-z]', '', primeiro_nome)
 
 def data_por_extenso(data_obj):
-    """Retorna data formatada: '17 de Fevereiro de 2026'."""
     meses = {1:'Janeiro', 2:'Fevereiro', 3:'Março', 4:'Abril', 5:'Maio', 6:'Junho', 
              7:'Julho', 8:'Agosto', 9:'Setembro', 10:'Outubro', 11:'Novembro', 12:'Dezembro'}
     return f"{data_obj.day} de {meses[data_obj.month]} de {data_obj.year}"
 
-# --- CÁLCULOS DE PONTO ---
+# --- CÁLCULOS DE PONTO (ESSENCIAIS) ---
 
 def time_to_minutes(t):
-    """Converte objeto time ou string 'HH:MM' para minutos totais."""
     if not t: return 0
     if isinstance(t, str):
-        try: 
-            h, m = map(int, t.split(':'))
-            return h * 60 + m
+        try: h, m = map(int, t.split(':')); return h * 60 + m
         except: return 0
     return t.hour * 60 + t.minute
 
 def format_minutes_to_hm(total_minutes):
-    """Converte minutos totais para string 'HH:MM' (aceita negativos)."""
     sinal = "" if total_minutes >= 0 else "-"
     total_minutes = abs(total_minutes)
     h = total_minutes // 60
     m = total_minutes % 60
     return f"{sinal}{h:02d}:{m:02d}"
 
-# --- SISTEMA DE AUDITORIA ---
+def calcular_dia(user_id, data_ref):
+    """Calcula o saldo de horas e status do dia para o módulo de Ponto."""
+    from app.extensions import db
+    from app.models import User, PontoRegistro, PontoResumo
+    
+    user = User.query.get(user_id)
+    if not user: return
+
+    registros = PontoRegistro.query.filter_by(user_id=user_id, data_registro=data_ref).order_by(PontoRegistro.hora_registro).all()
+    
+    # Meta padrão
+    meta = user.carga_horaria if user.carga_horaria else 528
+    
+    # Regras de Escala
+    if user.escala == '5x2' and data_ref.weekday() >= 5: meta = 0
+    elif user.escala == '12x36' and user.data_inicio_escala:
+        dias_diff = (data_ref - user.data_inicio_escala).days
+        if dias_diff % 2 != 0: meta = 0
+        else: meta = 720
+            
+    # Cálculo de horas trabalhadas
+    trab = 0
+    for i in range(0, len(registros), 2):
+        if i + 1 < len(registros):
+            entrada = time_to_minutes(registros[i].hora_registro)
+            saida = time_to_minutes(registros[i+1].hora_registro)
+            trab += (saida - entrada)
+            
+    saldo = trab - meta
+    
+    # Definição de Status
+    status = "OK"
+    if not registros:
+        status = "Falta" if meta > 0 else "Folga"
+    elif len(registros) % 2 != 0:
+        status = "Incompleto"
+    elif saldo > 10:
+        status = "Hora Extra"
+    elif saldo < -10:
+        status = "Débito" if meta > 0 else "Extra" # Extra se for folga trabalhada
+        
+    # Salva ou Atualiza Resumo
+    resumo = PontoResumo.query.filter_by(user_id=user_id, data_referencia=data_ref).first()
+    if not resumo:
+        resumo = PontoResumo(user_id=user_id, data_referencia=data_ref)
+        db.session.add(resumo)
+    
+    resumo.minutos_trabalhados = trab
+    resumo.minutos_esperados = meta
+    resumo.minutos_saldo = saldo
+    resumo.status_dia = status
+    
+    try: db.session.commit()
+    except: db.session.rollback()
+
+# --- SISTEMA DE AUDITORIA E PERMISSÕES ---
 
 def calcular_hash_arquivo(conteudo_bytes):
     if not conteudo_bytes: return None
@@ -83,22 +123,14 @@ def get_client_ip():
         return request.headers.getlist("X-Forwarded-For")[0]
     return request.remote_addr
 
-# --- SISTEMA DE PERMISSÕES ---
-
 def has_permission(permission_name):
-    """Verifica se o usuário logado tem a permissão específica."""
-    if not current_user.is_authenticated:
-        return False
-    # Master Absoluto (Bypass)
-    if current_user.username == '50097952800':
-        return True
-    if not current_user.permissions:
-        return False
+    if not current_user.is_authenticated: return False
+    if current_user.username == '50097952800': return True
+    if not current_user.permissions: return False
     user_perms = [p.strip().upper() for p in current_user.permissions.split(',')]
     return permission_name.upper() in user_perms
 
 def permission_required(permission_name):
-    """Decorator para proteger rotas com base em permissões."""
     def decorator(f):
         @wraps(f)
         def decorated_function(*args, **kwargs):
@@ -110,7 +142,6 @@ def permission_required(permission_name):
     return decorator
 
 def master_required(f):
-    """Decorator exclusivo para o Master."""
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if not current_user.is_authenticated or (current_user.role != 'Master' and current_user.username != '50097952800'):
