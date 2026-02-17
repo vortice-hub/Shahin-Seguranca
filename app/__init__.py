@@ -21,12 +21,19 @@ def create_app():
     
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
     
+    # Inicialização das extensões
     db.init_app(app)
     login_manager.init_app(app)
     csrf.init_app(app)
     migrate.init_app(app, db)
     
     login_manager.login_view = 'auth.login'
+
+    # --- CORREÇÃO: USER LOADER (O que estava faltando) ---
+    @login_manager.user_loader
+    def load_user(user_id):
+        from app.models import User
+        return User.query.get(int(user_id))
 
     # --- REGISTO DE FUNÇÕES PARA O HTML ---
     @app.context_processor
@@ -35,6 +42,7 @@ def create_app():
         return dict(has_permission=has_permission)
 
     with app.app_context():
+        # Importação de Blueprints
         from app.auth.routes import auth_bp
         from app.admin.routes import admin_bp
         from app.ponto.routes import ponto_bp
@@ -63,20 +71,11 @@ def create_app():
 
             from app.models import User
             
-            # --- CORREÇÃO DO MASTER (MIGRAÇÃO DE THAYNARA PARA CPF) ---
-            
-            # 1. Remove o antigo usuário de texto se existir (para evitar conflito ou lixo no banco)
-            old_master = User.query.filter_by(username='Thaynara').first()
-            if old_master:
-                db.session.delete(old_master)
-                logger.info("Usuário legado 'Thaynara' removido.")
-
-            # 2. Define o novo Master via CPF
+            # --- GESTÃO DO USUÁRIO MASTER ---
             cpf_master = '50097952800'
             master = User.query.filter_by(username=cpf_master).first()
             
             if not master:
-                # Cria o Master com o CPF como username e login
                 m = User(
                     username=cpf_master, 
                     cpf=cpf_master,
@@ -86,15 +85,14 @@ def create_app():
                     permissions="ALL",
                     salario=0.0
                 )
-                m.set_password('1855') # Senha mantida
+                m.set_password('1855')
                 db.session.add(m)
-                logger.info(f"Novo Master {cpf_master} criado com sucesso.")
+                logger.info(f"Novo Master {cpf_master} criado.")
             else:
-                # Garante que o Master existente tenha permissões totais
                 if master.role != 'Master': master.role = 'Master'
-                if not master.permissions: master.permissions = "ALL"
+                master.permissions = "ALL"
 
-            # 3. Garante o usuário terminal
+            # Garantir usuário terminal
             term = User.query.filter_by(username='12345678900').first()
             if not term:
                 t = User(username='12345678900', real_name='Terminal de Ponto', role='Terminal', is_first_access=False, cpf='12345678900', salario=0.0)
@@ -108,3 +106,4 @@ def create_app():
     return app
 
 app = create_app()
+
