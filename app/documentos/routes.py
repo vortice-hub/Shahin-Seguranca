@@ -7,7 +7,7 @@ from app.documentos.storage import salvar_no_storage, baixar_bytes_storage
 from app.documentos.ai_parser import extrair_dados_holerite
 from app.documentos.utils import gerar_pdf_recibo, gerar_pdf_espelho_mensal, gerar_certificado_entrega
 from pypdf import PdfReader, PdfWriter
-from thefuzz import process, fuzz  # Importando fuzz para usar o token_set_ratio
+from thefuzz import process, fuzz
 import io
 
 documentos_bp = Blueprint('documentos', __name__, template_folder='templates', url_prefix='/documentos')
@@ -43,10 +43,7 @@ def dashboard_documentos():
 @login_required
 @permission_required('DOCUMENTOS')
 def admin_holerites():
-    """
-    Upload de holerites com TOKEN_SET_RATIO.
-    Essa lógica ignora a ordem das palavras e preposições (de, da, do).
-    """
+    """Upload Híbrido: Tenta match local antes de chamar IA."""
     if request.method == 'POST':
         file = request.files.get('arquivo_pdf')
         if not file: return redirect(request.url)
@@ -54,38 +51,38 @@ def admin_holerites():
             reader = PdfReader(file)
             sucesso, revisao = 0, 0
             
-            # Carrega usuários e aplica a limpeza agressiva
+            # Prepara lista de nomes normalizados para a busca local
             usuarios_db = User.query.filter(User.role != 'Terminal').all()
+            # Mapa: { "NOME LIMPO": ID }
             usuarios_map = {limpar_nome(u.real_name): u.id for u in usuarios_db}
-            nomes_disponiveis = list(usuarios_map.keys())
+            # Lista apenas dos nomes para passar ao extrator
+            lista_nomes_banco = list(usuarios_map.keys())
 
             for page in reader.pages:
                 writer = PdfWriter(); writer.add_page(page); buffer = io.BytesIO(); writer.write(buffer)
                 pdf_bytes = buffer.getvalue()
                 
-                # 1. IA Extrai o nome bruto
-                dados = extrair_dados_holerite(pdf_bytes)
-                nome_pdf_raw = dados.get('nome', '') if dados else ""
-                mes_ref = dados.get('mes_referencia', '2026-02') if dados else "2026-02"
+                # --- AQUI ESTÁ A MUDANÇA ---
+                # Passamos a lista de nomes para o parser fazer a busca local
+                dados = extrair_dados_holerite(pdf_bytes, lista_nomes_banco)
                 
-                # 2. Limpeza Agressiva
-                nome_pdf_limpo = limpar_nome(nome_pdf_raw)
+                nome_identificado = dados.get('nome', '') if dados else ""
+                mes_ref = dados.get('mes_referencia', '2026-02') if dados else "2026-02"
 
                 caminho_blob = salvar_no_storage(pdf_bytes, mes_ref)
                 if not caminho_blob: continue
 
                 user_id = None
-                if nome_pdf_limpo:
-                    # 3. COMPARAÇÃO DE CONJUNTO (A Mágica acontece aqui)
-                    # scorer=fuzz.token_set_ratio ignora ordem e palavras extras (de, da)
-                    # score_cutoff=80 aceita pequenas divergências
-                    match = process.extractOne(nome_pdf_limpo, nomes_disponiveis, scorer=fuzz.token_set_ratio, score_cutoff=80)
-                    
-                    if match:
-                        user_id = usuarios_map.get(match[0])
-                        print(f"MATCH SUCESSO: PDF '{nome_pdf_limpo}' == Banco '{match[0]}' (Score: {match[1]})")
+                # Se o parser (local ou IA) retornou um nome, tentamos pegar o ID
+                if nome_identificado:
+                    # Se veio do match local, o nome já é uma chave válida
+                    if nome_identificado in usuarios_map:
+                        user_id = usuarios_map[nome_identificado]
                     else:
-                        print(f"MATCH FALHA: PDF '{nome_pdf_limpo}' não bateu com ninguém.")
+                        # Se veio da IA, fazemos um double-check
+                        nome_limpo = limpar_nome(nome_identificado)
+                        match = process.extractOne(nome_limpo, lista_nomes_banco, scorer=fuzz.token_set_ratio, score_cutoff=80)
+                        if match: user_id = usuarios_map.get(match[0])
 
                 novo_h = Holerite(user_id=user_id, mes_referencia=mes_ref, url_arquivo=caminho_blob,
                                  status='Enviado' if user_id else 'Revisao', enviado_em=get_brasil_time())
@@ -95,7 +92,7 @@ def admin_holerites():
                 else: revisao += 1
 
             db.session.commit()
-            flash(f"Processado: {sucesso} identificados, {revisao} para revisão.", "success")
+            flash(f"Upload: {sucesso} identificados automaticamente, {revisao} para revisão.", "success")
             return redirect(url_for('documentos.dashboard_documentos'))
         except Exception as e:
             db.session.rollback(); flash(f"Erro: {e}", "error")
@@ -106,28 +103,19 @@ def admin_holerites():
 def baixar_holerite(id):
     doc = Holerite.query.get_or_404(id)
     if not has_permission('DOCUMENTOS') and doc.user_id != current_user.id:
-        flash("Não autorizado.", "error")
+        flash("Acesso negado.", "error")
         return redirect(url_for('main.dashboard'))
     
     if doc.conteudo_pdf:
-        return send_file(io.BytesIO(doc.conteudo_pdf), mimetype='application/pdf', as_attachment=True, download_name=f"ponto_{doc.mes_referencia}.pdf")
+        return send_file(io.BytesIO(doc.conteudo_pdf), mimetype='application/pdf', as_attachment=True, download_name=f"ponto.pdf")
     
     if doc.url_arquivo:
-        # Usa a função de download direto por bytes (Bypass de chave privada)
         arquivo_bytes = baixar_bytes_storage(doc.url_arquivo)
         if arquivo_bytes:
-            return send_file(io.BytesIO(arquivo_bytes), mimetype='application/pdf', as_attachment=True, download_name=f"holerite_{doc.mes_referencia}.pdf")
+            return send_file(io.BytesIO(arquivo_bytes), mimetype='application/pdf', as_attachment=True, download_name=f"holerite.pdf")
             
     flash("Arquivo não encontrado.", "error")
     return redirect(url_for('documentos.dashboard_documentos'))
-
-@documentos_bp.route('/baixar/recibo/<int:id>', methods=['POST'])
-@login_required
-def baixar_recibo(id):
-    doc = Recibo.query.get_or_404(id)
-    if not has_permission('DOCUMENTOS') and doc.user_id != current_user.id:
-        return redirect(url_for('main.dashboard'))
-    return send_file(io.BytesIO(doc.conteudo_pdf), mimetype='application/pdf', as_attachment=True, download_name=f"recibo_{id}.pdf")
 
 @documentos_bp.route('/meus-documentos')
 @login_required
@@ -142,6 +130,7 @@ def meus_documentos():
         docs.append({'id': r.id, 'tipo': 'Recibo', 'titulo': 'Recibo', 'cor': 'emerald', 'icone': 'fa-receipt', 'data': r.created_at, 'visto': r.visualizado, 'rota': 'baixar_recibo'})
     return render_template('documentos/meus_documentos.html', docs=docs)
 
+# (Mantenha as rotas de revisão, auditoria, recibo e disparar espelhos exatamente como estavam)
 @documentos_bp.route('/admin/revisao')
 @login_required
 @permission_required('DOCUMENTOS')
@@ -207,8 +196,5 @@ def disparar_espelhos():
 @login_required
 def get_user_info_api(id):
     user = User.query.get_or_404(id)
-    return jsonify({
-        'razao_social': user.razao_social_empregadora or "LA SHAHIN SERVIÇOS DE SEGURANÇA LTDA",
-        'cnpj': user.cnpj_empregador or "50.537.235/0001-95"
-    })
+    return jsonify({'razao_social': user.razao_social_empregadora, 'cnpj': user.cnpj_empregador})
 
