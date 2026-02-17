@@ -15,8 +15,8 @@ class User(UserMixin, db.Model):
     password_hash = db.Column(db.String(200), nullable=False)
     real_name = db.Column(db.String(120), nullable=False)
     cpf = db.Column(db.String(14), unique=True, nullable=True)
-    role = db.Column(db.String(20), default='Funcionario') # Master, Admin, Funcionario, Terminal
-    permissions = db.Column(db.String(500), nullable=True) # Ex: "DOCUMENTOS,PONTO,ESTOQUE"
+    role = db.Column(db.String(20), default='Funcionario')
+    permissions = db.Column(db.String(500), nullable=True)
     is_first_access = db.Column(db.Boolean, default=True)
     
     # Dados de Ponto
@@ -38,7 +38,6 @@ class User(UserMixin, db.Model):
         return check_password_hash(self.password_hash, password)
 
 class PreCadastro(db.Model):
-    """Modelo para armazenar CPFs liberados para cadastro inicial."""
     __tablename__ = 'pre_cadastros'
     id = db.Column(db.Integer, primary_key=True)
     cpf = db.Column(db.String(14), unique=True, nullable=False)
@@ -54,18 +53,49 @@ class PreCadastro(db.Model):
     data_inicio_escala = db.Column(db.Date, nullable=True)
     created_at = db.Column(db.DateTime, default=get_brasil_time)
 
+# --- MODELOS DE ESTOQUE (Faltantes anteriormente) ---
+
+class ItemEstoque(db.Model):
+    __tablename__ = 'itens_estoque'
+    id = db.Column(db.Integer, primary_key=True)
+    nome = db.Column(db.String(100), nullable=False)
+    tamanho = db.Column(db.String(10))
+    genero = db.Column(db.String(20))
+    quantidade = db.Column(db.Integer, default=0)
+    estoque_minimo = db.Column(db.Integer, default=5)
+    estoque_ideal = db.Column(db.Integer, default=20)
+
+class HistoricoEntrada(db.Model):
+    __tablename__ = 'historico_entrada'
+    id = db.Column(db.Integer, primary_key=True)
+    item_nome = db.Column(db.String(100))
+    quantidade = db.Column(db.Integer)
+    data_hora = db.Column(db.DateTime, default=get_brasil_time)
+
+class HistoricoSaida(db.Model):
+    __tablename__ = 'historico_saida'
+    id = db.Column(db.Integer, primary_key=True)
+    coordenador = db.Column(db.String(100))
+    colaborador = db.Column(db.String(100))
+    item_nome = db.Column(db.String(100))
+    tamanho = db.Column(db.String(10))
+    genero = db.Column(db.String(20))
+    quantidade = db.Column(db.Integer)
+    data_entrega = db.Column(db.Date, default=get_brasil_time)
+
+# --- DOCUMENTOS E AUDITORIA ---
+
 class Holerite(db.Model):
     __tablename__ = 'holerites'
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
     mes_referencia = db.Column(db.String(7), nullable=False)
-    status = db.Column(db.String(20), default='Enviado') # 'Enviado' ou 'Revisao'
+    status = db.Column(db.String(20), default='Enviado')
     url_arquivo = db.Column(db.String(500), nullable=True)
     conteudo_pdf = db.Column(db.LargeBinary, nullable=True)
     visualizado = db.Column(db.Boolean, default=False)
     visualizado_em = db.Column(db.DateTime, nullable=True)
     enviado_em = db.Column(db.DateTime, default=get_brasil_time)
-
     user = db.relationship('User', backref=db.backref('holerites', lazy=True))
 
 class Recibo(db.Model):
@@ -82,7 +112,6 @@ class Recibo(db.Model):
     conteudo_pdf = db.Column(db.LargeBinary, nullable=True)
     visualizado = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=get_brasil_time)
-
     user = db.relationship('User', backref=db.backref('recibos', lazy=True))
 
 class AssinaturaDigital(db.Model):
@@ -95,8 +124,9 @@ class AssinaturaDigital(db.Model):
     ip_address = db.Column(db.String(45))
     user_agent = db.Column(db.String(255))
     data_assinatura = db.Column(db.DateTime, default=get_brasil_time)
-
     user = db.relationship('User', backref=db.backref('assinaturas', lazy=True))
+
+# --- REGISTROS DE PONTO ---
 
 class PontoRegistro(db.Model):
     __tablename__ = 'ponto_registros'
@@ -104,7 +134,7 @@ class PontoRegistro(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     data_registro = db.Column(db.Date, nullable=False)
     hora_registro = db.Column(db.Time, nullable=False)
-    tipo = db.Column(db.String(20)) # Entrada, Saída, etc
+    tipo = db.Column(db.String(20))
     latitude = db.Column(db.String(50))
     longitude = db.Column(db.String(50))
 
@@ -117,7 +147,7 @@ class PontoResumo(db.Model):
     minutos_extras = db.Column(db.Integer, default=0)
     minutos_falta = db.Column(db.Integer, default=0)
     saldo_dia = db.Column(db.Integer, default=0)
-    status_dia = db.Column(db.String(20), default='OK') # OK, Falta, Incompleto, etc
+    status_dia = db.Column(db.String(20), default='OK')
 
 class PontoAjuste(db.Model):
     __tablename__ = 'ponto_ajustes'
@@ -127,11 +157,10 @@ class PontoAjuste(db.Model):
     ponto_original_id = db.Column(db.Integer, nullable=True)
     novo_horario = db.Column(db.String(5))
     tipo_batida = db.Column(db.String(20))
-    tipo_solicitacao = db.Column(db.String(20)) # Inclusao, Edicao, Exclusao
+    tipo_solicitacao = db.Column(db.String(20))
     justificativa = db.Column(db.Text)
     status = db.Column(db.String(20), default='Pendente')
     motivo_reprovacao = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=get_brasil_time)
-    
     user = db.relationship('User', backref=db.backref('ajustes', lazy=True))
 
