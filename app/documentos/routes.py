@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash
+from flask import Blueprint, render_template, request, redirect, url_for, flash, send_file
 from flask_login import login_required, current_user
 from app.extensions import db
 from app.models import User, Holerite, Recibo
@@ -15,20 +15,20 @@ documentos_bp = Blueprint('documentos', __name__, template_folder='templates', u
 @permission_required('DOCUMENTOS')
 def dashboard_documentos():
     """Painel administrativo de documentos (Dashboard)."""
-    # Busca os últimos holerites enviados para exibição no histórico
-    historico = Holerite.query.order_by(Holerite.enviado_em.desc()).limit(50).all()
+    # Busca os últimos holerites para exibir no histórico
+    historico_db = Holerite.query.order_by(Holerite.enviado_em.desc()).limit(50).all()
     
-    # Formata os dados para o template 'documentos/dashboard.html'
     historico_view = []
-    for h in historico:
+    for h in historico_db:
+        # A chave 'enviado_em' deve ser a mesma esperada no template
         historico_view.append({
             'id': h.id,
             'tipo': 'Holerite',
             'cor': 'blue',
             'usuario': h.user.real_name if h.user else "Aguardando Revisão",
             'info': h.mes_referencia,
-            'data': h.enviado_em,
-            'visto': h.visualizado,
+            'enviado_em': h.enviado_em,
+            'visualizado': h.visualizado,
             'rota': 'baixar_holerite'
         })
     
@@ -65,83 +65,48 @@ def admin_holerites():
         if not file:
             flash("Selecione um arquivo PDF.", "error")
             return redirect(request.url)
-
         try:
             reader = PdfReader(file)
             sucesso, revisao = 0, 0
             usuarios_sistema = {u.real_name.upper().strip(): u.id for u in User.query.all()}
-
             for page in reader.pages:
-                writer = PdfWriter()
-                writer.add_page(page)
-                buffer = io.BytesIO()
-                writer.write(buffer)
+                writer = PdfWriter(); writer.add_page(page); buffer = io.BytesIO(); writer.write(buffer)
                 pdf_bytes = buffer.getvalue()
-
                 dados = extrair_dados_holerite(pdf_bytes)
                 nome_doc = dados.get('nome', '').upper().strip() if dados else ""
                 mes_ref = dados.get('mes_referencia', '2026-02') if dados else "2026-02"
-
                 caminho_blob = salvar_no_storage(pdf_bytes, mes_ref)
                 if not caminho_blob: continue
-
                 user_id = usuarios_sistema.get(nome_doc)
-                status = 'Enviado' if user_id else 'Revisao'
-
-                novo_h = Holerite(
-                    user_id=user_id,
-                    mes_referencia=mes_ref,
-                    url_arquivo=caminho_blob,
-                    status=status,
-                    enviado_em=get_brasil_time()
-                )
+                novo_h = Holerite(user_id=user_id, mes_referencia=mes_ref, url_arquivo=caminho_blob,
+                                 status='Enviado' if user_id else 'Revisao', enviado_em=get_brasil_time())
                 db.session.add(novo_h)
-                
                 if user_id: sucesso += 1
                 else: revisao += 1
-
             db.session.commit()
-            flash(f"Processado: {sucesso} identificados e {revisao} para revisão manual.", "success")
+            flash(f"Processado: {sucesso} identificados e {revisao} para revisão.", "success")
             return redirect(url_for('documentos.dashboard_documentos'))
         except Exception as e:
-            db.session.rollback()
-            flash(f"Erro no processamento: {e}", "error")
-
+            db.session.rollback(); flash(f"Erro: {e}", "error")
     return render_template('documentos/admin_upload_holerite.html')
-
-@documentos_bp.route('/admin/revisao')
-@login_required
-@permission_required('DOCUMENTOS')
-def revisao_holerites():
-    pendentes = Holerite.query.filter_by(status='Revisao').all()
-    funcionarios = User.query.filter(User.role != 'Terminal').order_by(User.real_name).all()
-    return render_template('documentos/revisao.html', pendentes=pendentes, funcionarios=funcionarios)
-
-@documentos_bp.route('/admin/revisao/vincular', methods=['POST'])
-@login_required
-def vincular_holerite():
-    h_id = request.form.get('holerite_id')
-    u_id = request.form.get('user_id')
-    h = Holerite.query.get(h_id)
-    if h and u_id:
-        h.user_id = u_id
-        h.status = 'Enviado'
-        db.session.commit()
-        flash("Funcionário vinculado com sucesso!", "success")
-    return redirect(url_for('documentos.revisao_holerites'))
 
 @documentos_bp.route('/baixar/holerite/<int:id>', methods=['POST'])
 @login_required
 def baixar_holerite(id):
     doc = Holerite.query.get_or_404(id)
-    if current_user.username != '50097952800' and doc.user_id != current_user.id:
+    if current_user.role != 'Master' and doc.user_id != current_user.id:
         return redirect(url_for('main.dashboard'))
-    
     if doc.url_arquivo:
         link = gerar_url_assinada(doc.url_arquivo)
-        if link:
-            return redirect(link)
-    
-    flash("Arquivo não disponível.", "error")
+        if link: return redirect(link)
+    flash("Arquivo indisponível.", "error")
     return redirect(url_for('documentos.dashboard_documentos'))
+
+@documentos_bp.route('/baixar/recibo/<int:id>', methods=['POST'])
+@login_required
+def baixar_recibo(id):
+    doc = Recibo.query.get_or_404(id)
+    if current_user.role != 'Master' and doc.user_id != current_user.id:
+        return redirect(url_for('main.dashboard'))
+    return send_file(io.BytesIO(doc.conteudo_pdf), mimetype='application/pdf', as_attachment=True, download_name=f"recibo_{id}.pdf")
 

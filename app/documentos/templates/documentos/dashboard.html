@@ -13,7 +13,6 @@
 </div>
 
 <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-    <!-- Cards de Ação (Mantidos os mesmos do passo anterior) -->
     <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition">
         <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center text-blue-600 mb-4">
             <i class="fas fa-file-invoice text-xl"></i>
@@ -48,7 +47,6 @@
     </div>
 </div>
 
-<!-- HISTÓRICO UNIFICADO (REFORMULADO) -->
 <h3 class="font-bold text-slate-700 mb-4 text-xs uppercase px-2 tracking-widest flex items-center gap-2">
     <i class="fas fa-stream text-slate-400"></i> Histórico de Documentos Enviados
 </h3>
@@ -60,7 +58,7 @@
                 <tr>
                     <th class="px-6 py-4">Tipo</th>
                     <th class="px-6 py-4">Funcionário</th>
-                    <th class="px-6 py-4">Informação de Referência</th>
+                    <th class="px-6 py-4">Referência</th>
                     <th class="px-6 py-4">Data do Envio</th>
                     <th class="px-6 py-4 text-center">Assinatura</th>
                     <th class="px-6 py-4 text-right">Arquivo</th>
@@ -76,9 +74,11 @@
                     </td>
                     <td class="px-6 py-4 font-bold text-slate-800">{{ h.usuario }}</td>
                     <td class="px-6 py-4 text-xs font-medium text-slate-600">{{ h.info }}</td>
-                    <td class="px-6 py-4 text-xs text-slate-400">{{ h.enviado_em.strftime('%d/%m/%Y %H:%M') }}</td>
+                    <td class="px-6 py-4 text-xs text-slate-400">
+                        {{ h.enviado_em.strftime('%d/%m/%Y %H:%M') if h.enviado_em else '-' }}
+                    </td>
                     <td class="px-6 py-4 text-center">
-                        {% if h.visto %}
+                        {% if h.visualizado %}
                         <span class="text-emerald-600 font-bold text-[10px] uppercase flex items-center justify-center gap-1">
                             <i class="fas fa-check-circle"></i> Assinado
                         </span>
@@ -105,5 +105,4 @@
     </div>
 </div>
 {% endblock %}
-
 
