@@ -14,3 +14,6 @@ reportlab
 google-cloud-aiplatform
 thefuzz
 google-cloud-storage
+pytz
+itsdangerous
+
