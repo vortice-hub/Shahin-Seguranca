@@ -19,43 +19,31 @@ documentos_bp = Blueprint('documentos', __name__, template_folder='templates', u
 @permission_required('DOCUMENTOS')
 def dashboard_documentos():
     """Painel administrativo unificado de documentos."""
-    # Filtra apenas o que já foi identificado com sucesso (Status != 'Revisao')
     holerites_db = Holerite.query.filter(Holerite.status != 'Revisao').order_by(Holerite.enviado_em.desc()).limit(30).all()
     recibos_db = Recibo.query.order_by(Recibo.created_at.desc()).limit(20).all()
-    
     total_revisao = Holerite.query.filter_by(status='Revisao').count()
+    
     historico_unificado = []
     
-    # Processa Holerites e Espelhos para o histórico
     for h in holerites_db:
         tipo_label = "Espelho de Ponto" if h.conteudo_pdf else "Holerite"
         cor_label = "purple" if h.conteudo_pdf else "blue"
         historico_unificado.append({
             'id': h.id, 'tipo': tipo_label, 'cor': cor_label,
             'usuario': h.user.real_name if h.user else "Identificação Falhou",
-            'info': h.mes_referencia, 
-            'data': h.enviado_em, # Chave 'data' para bater com o template
-            'visualizado': h.visualizado, 
-            'rota': 'baixar_holerite'
+            'info': h.mes_referencia, 'data': h.enviado_em,
+            'visualizado': h.visualizado, 'rota': 'baixar_holerite'
         })
         
-    # Processa Recibos para o histórico
     for r in recibos_db:
         historico_unificado.append({
             'id': r.id, 'tipo': 'Recibo', 'cor': 'emerald',
-            'usuario': r.user.real_name, 
-            'info': f"R$ {r.valor:,.2f}",
-            'data': r.created_at, # Chave 'data' para bater com o template
-            'visualizado': r.visualizado, 
-            'rota': 'baixar_recibo'
+            'usuario': r.user.real_name, 'info': f"R$ {r.valor:,.2f}",
+            'data': r.created_at, 'visualizado': r.visualizado, 'rota': 'baixar_recibo'
         })
 
-    # Ordena o histórico consolidado por data (mais recentes primeiro)
     historico_unificado.sort(key=lambda x: x['data'], reverse=True)
-    
-    return render_template('documentos/dashboard.html', 
-                           historico=historico_unificado, 
-                           pendentes_revisao=total_revisao)
+    return render_template('documentos/dashboard.html', historico=historico_unificado, pendentes_revisao=total_revisao)
 
 @documentos_bp.route('/meus-documentos')
 @login_required
@@ -85,13 +73,57 @@ def meus_documentos():
         })
     return render_template('documentos/meus_documentos.html', docs=docs_formatados)
 
-# --- PROCESSAMENTO E IA ---
+# --- AUDITORIA E REVISÃO ---
+
+@documentos_bp.route('/admin/auditoria')
+@login_required
+@permission_required('AUDITORIA')
+def revisao_auditoria():
+    """Dashboard de assinaturas digitais e conformidade."""
+    usuarios = User.query.filter(User.role != 'Terminal').order_by(User.real_name).all()
+    auditores = []
+    for user in usuarios:
+        assinaturas_db = AssinaturaDigital.query.filter_by(user_id=user.id).order_by(AssinaturaDigital.data_assinatura.desc()).all()
+        
+        # Formata as assinaturas para o template (chave 'data' necessária)
+        lista_formatada = []
+        for a in assinaturas_db:
+            ref = "Doc ID: " + str(a.documento_id)
+            if a.tipo_documento == 'Holerite':
+                h = Holerite.query.get(a.documento_id)
+                if h: ref = h.mes_referencia
+            
+            lista_formatada.append({
+                'id': a.id,
+                'tipo': a.tipo_documento,
+                'referencia': ref,
+                'data': a.data_assinatura, # Corrigido para bater com o template
+                'ip': a.ip_address
+            })
+            
+        auditores.append({
+            'user': user,
+            'total': len(assinaturas_db),
+            'assinaturas': lista_formatada
+        })
+    return render_template('documentos/auditoria.html', auditores=auditores)
+
+@documentos_bp.route('/admin/auditoria/certificado/<int:id>')
+@login_required
+@permission_required('AUDITORIA')
+def baixar_certificado(id):
+    """Gera o comprovante jurídico de entrega digital."""
+    assinatura = AssinaturaDigital.query.get_or_404(id)
+    user = User.query.get(assinatura.user_id)
+    pdf_bytes = gerar_certificado_entrega(assinatura, user)
+    return send_file(io.BytesIO(pdf_bytes), mimetype='application/pdf', as_attachment=True, download_name=f"certificado_{id}.pdf")
+
+# --- PROCESSAMENTO IA E DISPAROS ---
 
 @documentos_bp.route('/admin/holerites', methods=['GET', 'POST'])
 @login_required
 @permission_required('DOCUMENTOS')
 def admin_holerites():
-    """Upload de holerites com Refinamento de IA e Fuzzy Matching."""
     if request.method == 'POST':
         file = request.files.get('arquivo_pdf')
         if not file:
@@ -100,8 +132,6 @@ def admin_holerites():
         try:
             reader = PdfReader(file)
             sucesso, revisao = 0, 0
-            
-            # Normalização de nomes para busca inteligente
             usuarios_db = User.query.filter(User.role != 'Terminal').all()
             usuarios_map = {u.real_name.upper().strip(): u.id for u in usuarios_db}
             nomes_disponiveis = list(usuarios_map.keys())
@@ -109,41 +139,33 @@ def admin_holerites():
             for page in reader.pages:
                 writer = PdfWriter(); writer.add_page(page); buffer = io.BytesIO(); writer.write(buffer)
                 pdf_bytes = buffer.getvalue()
-                
                 dados = extrair_dados_holerite(pdf_bytes)
                 nome_pdf = dados.get('nome', '').upper().strip() if dados else ""
                 mes_ref = dados.get('mes_referencia', '2026-02') if dados else "2026-02"
-
                 caminho_blob = salvar_no_storage(pdf_bytes, mes_ref)
                 if not caminho_blob: continue
 
                 user_id = None
                 if nome_pdf:
-                    # Fuzzy Match: Aceita 90% de similaridade (ex: "JOÃO SILVA" vs "João Silva")
                     match = process.extractOne(nome_pdf, nomes_disponiveis, score_cutoff=90)
-                    if match:
-                        user_id = usuarios_map.get(match[0])
+                    if match: user_id = usuarios_map.get(match[0])
 
                 novo_h = Holerite(user_id=user_id, mes_referencia=mes_ref, url_arquivo=caminho_blob,
                                  status='Enviado' if user_id else 'Revisao', enviado_em=get_brasil_time())
                 db.session.add(novo_h)
                 if user_id: sucesso += 1
                 else: revisao += 1
-
             db.session.commit()
-            flash(f"Processado: {sucesso} identificados e {revisao} para revisão manual.", "success")
+            flash(f"Processamento concluído: {sucesso} identificados.", "success")
             return redirect(url_for('documentos.dashboard_documentos'))
         except Exception as e:
-            db.session.rollback(); flash(f"Erro no processamento: {e}", "error")
+            db.session.rollback(); flash(f"Erro: {e}", "error")
     return render_template('documentos/admin_upload_holerite.html')
-
-# --- DISPARO EM MASSA E APOIO ---
 
 @documentos_bp.route('/admin/disparar-espelhos', methods=['POST'])
 @login_required
 @permission_required('DOCUMENTOS')
 def disparar_espelhos():
-    """Gera e envia o espelho de ponto para todos os funcionários."""
     mes_ref = request.form.get('mes_ref')
     usuarios = User.query.filter(User.role != 'Terminal', User.username != '12345678900').all()
     contador = 0
@@ -153,7 +175,7 @@ def disparar_espelhos():
                          status='Enviado', enviado_em=get_brasil_time())
         db.session.add(novo_h); contador += 1
     db.session.commit()
-    flash(f"Sucesso: {contador} espelhos disparados!", "success")
+    flash(f"{contador} espelhos de ponto enviados!", "success")
     return redirect(url_for('documentos.dashboard_documentos'))
 
 @documentos_bp.route('/api/user-info/<int:id>')
@@ -165,18 +187,7 @@ def get_user_info_api(id):
         'cnpj': user.cnpj_empregador or "50.537.235/0001-95"
     })
 
-# --- AUDITORIA E DOWNLOADS ---
-
-@documentos_bp.route('/admin/auditoria')
-@login_required
-@permission_required('AUDITORIA')
-def revisao_auditoria():
-    usuarios = User.query.filter(User.role != 'Terminal').order_by(User.real_name).all()
-    auditores = []
-    for user in usuarios:
-        assinaturas = AssinaturaDigital.query.filter_by(user_id=user.id).order_by(AssinaturaDigital.data_assinatura.desc()).all()
-        auditores.append({'user': user, 'total': len(assinaturas), 'assinaturas': assinaturas})
-    return render_template('documentos/auditoria.html', auditores=auditores)
+# --- DOWNLOADS E VÍNCULOS ---
 
 @documentos_bp.route('/baixar/holerite/<int:id>', methods=['POST'])
 @login_required
@@ -184,6 +195,22 @@ def baixar_holerite(id):
     doc = Holerite.query.get_or_404(id)
     if current_user.role != 'Master' and doc.user_id != current_user.id:
         return redirect(url_for('main.dashboard'))
+    
+    # Registra a assinatura digital se for o primeiro acesso do colaborador
+    if not doc.visualizado and doc.user_id == current_user.id:
+        doc.visualizado = True
+        doc.visualizado_em = get_brasil_time()
+        nova_assinatura = AssinaturaDigital(
+            user_id=current_user.id,
+            tipo_documento='Holerite',
+            documento_id=doc.id,
+            hash_arquivo="N/A (Storage)" if not doc.conteudo_pdf else "Hash Local",
+            ip_address=request.remote_addr,
+            user_agent=request.user_agent.string
+        )
+        db.session.add(nova_assinatura)
+        db.session.commit()
+
     if doc.conteudo_pdf:
         return send_file(io.BytesIO(doc.conteudo_pdf), mimetype='application/pdf', as_attachment=True, download_name=f"ponto_{doc.mes_referencia}.pdf")
     if doc.url_arquivo:
@@ -199,4 +226,22 @@ def baixar_recibo(id):
     if current_user.role != 'Master' and doc.user_id != current_user.id:
         return redirect(url_for('main.dashboard'))
     return send_file(io.BytesIO(doc.conteudo_pdf), mimetype='application/pdf', as_attachment=True, download_name=f"recibo_{id}.pdf")
+
+@documentos_bp.route('/admin/revisao')
+@login_required
+@permission_required('DOCUMENTOS')
+def revisao_holerites():
+    pendentes = Holerite.query.filter_by(status='Revisao').all()
+    funcionarios = User.query.filter(User.role != 'Terminal').order_by(User.real_name).all()
+    return render_template('documentos/revisao.html', pendentes=pendentes, funcionarios=funcionarios)
+
+@documentos_bp.route('/admin/revisao/vincular', methods=['POST'])
+@login_required
+def vincular_holerite():
+    h = Holerite.query.get(request.form.get('holerite_id'))
+    u_id = request.form.get('user_id')
+    if h and u_id:
+        h.user_id = u_id; h.status = 'Enviado'; db.session.commit()
+        flash("Funcionário vinculado!", "success")
+    return redirect(url_for('documentos.revisao_holerites'))
 
