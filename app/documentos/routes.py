@@ -62,7 +62,6 @@ def admin_holerites():
                 writer = PdfWriter(); writer.add_page(page); buffer = io.BytesIO(); writer.write(buffer)
                 pdf_bytes = buffer.getvalue()
                 
-                # --- AQUI ESTÁ A MUDANÇA ---
                 # Passamos a lista de nomes para o parser fazer a busca local
                 dados = extrair_dados_holerite(pdf_bytes, lista_nomes_banco)
                 
@@ -110,12 +109,23 @@ def baixar_holerite(id):
         return send_file(io.BytesIO(doc.conteudo_pdf), mimetype='application/pdf', as_attachment=True, download_name=f"ponto.pdf")
     
     if doc.url_arquivo:
+        # Usa a função de download direto do Storage
         arquivo_bytes = baixar_bytes_storage(doc.url_arquivo)
         if arquivo_bytes:
             return send_file(io.BytesIO(arquivo_bytes), mimetype='application/pdf', as_attachment=True, download_name=f"holerite.pdf")
             
     flash("Arquivo não encontrado.", "error")
     return redirect(url_for('documentos.dashboard_documentos'))
+
+# --- ROTA QUE ESTAVA FALTANDO ---
+@documentos_bp.route('/baixar/recibo/<int:id>', methods=['POST'])
+@login_required
+def baixar_recibo(id):
+    doc = Recibo.query.get_or_404(id)
+    if not has_permission('DOCUMENTOS') and doc.user_id != current_user.id:
+        return redirect(url_for('main.dashboard'))
+    return send_file(io.BytesIO(doc.conteudo_pdf), mimetype='application/pdf', as_attachment=True, download_name=f"recibo_{id}.pdf")
+# --------------------------------
 
 @documentos_bp.route('/meus-documentos')
 @login_required
@@ -130,7 +140,6 @@ def meus_documentos():
         docs.append({'id': r.id, 'tipo': 'Recibo', 'titulo': 'Recibo', 'cor': 'emerald', 'icone': 'fa-receipt', 'data': r.created_at, 'visto': r.visualizado, 'rota': 'baixar_recibo'})
     return render_template('documentos/meus_documentos.html', docs=docs)
 
-# (Mantenha as rotas de revisão, auditoria, recibo e disparar espelhos exatamente como estavam)
 @documentos_bp.route('/admin/revisao')
 @login_required
 @permission_required('DOCUMENTOS')
