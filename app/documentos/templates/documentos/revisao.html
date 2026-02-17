@@ -1,9 +1,20 @@
 {% extends 'base.html' %}
 {% block content %}
 <div class="max-w-5xl mx-auto py-8">
-    <div class="mb-10">
-        <h2 class="text-3xl font-black text-slate-800 tracking-tight">Aguardando Revisão</h2>
-        <p class="text-slate-500 mt-2">Estes documentos foram salvos no Storage, mas o nome no PDF não coincide exatamente com o cadastro.</p>
+    <div class="mb-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+            <h2 class="text-3xl font-black text-slate-800 tracking-tight">Aguardando Revisão</h2>
+            <p class="text-slate-500 mt-2">Documentos que a IA não conseguiu identificar automaticamente.</p>
+        </div>
+        
+        {% if pendentes %}
+        <form action="{{ url_for('documentos.limpar_revisoes') }}" method="POST" onsubmit="return confirm('ATENÇÃO: Isso apagará permanentemente todos os arquivos que estão aguardando revisão. Continuar?')">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <button type="submit" class="bg-red-50 text-red-600 border border-red-200 px-4 py-2 rounded-xl text-xs font-bold hover:bg-red-600 hover:text-white transition shadow-sm">
+                <i class="fas fa-trash-alt mr-2"></i> LIMPAR TUDO
+            </button>
+        </form>
+        {% endif %}
     </div>
 
     <div class="grid gap-6">
@@ -49,3 +60,4 @@
     </div>
 </div>
 {% endblock %}
+

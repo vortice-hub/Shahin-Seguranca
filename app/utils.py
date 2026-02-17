@@ -20,32 +20,20 @@ def get_client_ip():
         return request.headers.getlist("X-Forwarded-For")[0]
     return request.remote_addr
 
-# --- SISTEMA DE PERMISSÕES (NOVO) ---
+# --- SISTEMA DE PERMISSÕES ---
 
 def has_permission(permission_name):
-    """
-    Verifica se o utilizador atual tem uma permissão específica.
-    Bypass automático para o utilizador Master '50097952800'.
-    """
     if not current_user.is_authenticated:
         return False
-    
     # Master Absoluto
     if current_user.username == '50097952800':
         return True
-    
-    # Se o utilizador não tem nenhuma permissão atribuída
     if not current_user.permissions:
         return False
-        
-    # Verifica se a chave está na string separada por vírgulas
     user_perms = [p.strip().upper() for p in current_user.permissions.split(',')]
     return permission_name.upper() in user_perms
 
 def permission_required(permission_name):
-    """
-    Decorator para proteger rotas baseado em permissões específicas.
-    """
     def decorator(f):
         @wraps(f)
         def decorated_function(*args, **kwargs):
@@ -56,7 +44,6 @@ def permission_required(permission_name):
         return decorated_function
     return decorator
 
-# Manter master_required para compatibilidade (funciona como um super-acesso)
 def master_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
@@ -66,14 +53,22 @@ def master_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
-# (As outras funções utilitárias permanecem iguais)
-def data_por_extenso(data_obj):
-    meses = {1:'Janeiro', 2:'Fevereiro', 3:'Março', 4:'Abril', 5:'Maio', 6:'Junho', 7:'Julho', 8:'Agosto', 9:'Setembro', 10:'Outubro', 11:'Novembro', 12:'Dezembro'}
-    return f"{data_obj.day} de {meses[data_obj.month]} de {data_obj.year}"
+# --- UTILITÁRIOS DE TEXTO E DATA ---
 
 def remove_accents(txt):
     if not txt: return ""
     return "".join(c for c in unicodedata.normalize('NFD', txt) if unicodedata.category(c) != 'Mn')
+
+def limpar_nome(txt):
+    """Limpeza profunda para comparação de nomes (IA vs Banco)."""
+    if not txt: return ""
+    # Remove acentos, passa para maiúsculo e remove espaços duplos/nas pontas
+    txt = remove_accents(txt).upper().strip()
+    return " ".join(txt.split())
+
+def data_por_extenso(data_obj):
+    meses = {1:'Janeiro', 2:'Fevereiro', 3:'Março', 4:'Abril', 5:'Maio', 6:'Junho', 7:'Julho', 8:'Agosto', 9:'Setembro', 10:'Outubro', 11:'Novembro', 12:'Dezembro'}
+    return f"{data_obj.day} de {meses[data_obj.month]} de {data_obj.year}"
 
 def gerar_login_automatico(nome_completo):
     if not nome_completo: return "user"
@@ -119,5 +114,4 @@ def calcular_dia(user_id, data_ref):
     resumo.minutos_trabalhados = trab; resumo.minutos_esperados = meta; resumo.minutos_saldo = saldo; resumo.status_dia = status
     try: db.session.commit()
     except: db.session.rollback()
-
 
