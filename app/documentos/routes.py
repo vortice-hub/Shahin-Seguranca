@@ -3,7 +3,7 @@ from flask_login import login_required, current_user
 from app.extensions import db
 from app.models import User, Holerite, Recibo, AssinaturaDigital
 from app.utils import get_brasil_time, permission_required, has_permission, limpar_nome
-from app.documentos.storage import salvar_no_storage, gerar_url_assinada
+from app.documentos.storage import salvar_no_storage, baixar_bytes_storage
 from app.documentos.ai_parser import extrair_dados_holerite
 from app.documentos.utils import gerar_pdf_recibo, gerar_pdf_espelho_mensal, gerar_certificado_entrega
 from pypdf import PdfReader, PdfWriter
@@ -16,6 +16,7 @@ documentos_bp = Blueprint('documentos', __name__, template_folder='templates', u
 @login_required
 @permission_required('DOCUMENTOS')
 def dashboard_documentos():
+    """Painel administrativo."""
     holerites_db = Holerite.query.filter(Holerite.status != 'Revisao').order_by(Holerite.enviado_em.desc()).limit(30).all()
     recibos_db = Recibo.query.order_by(Recibo.created_at.desc()).limit(20).all()
     total_revisao = Holerite.query.filter_by(status='Revisao').count()
@@ -38,6 +39,42 @@ def dashboard_documentos():
     historico.sort(key=lambda x: x['data'] if x['data'] else get_brasil_time(), reverse=True)
     return render_template('documentos/dashboard.html', historico=historico, pendentes_revisao=total_revisao)
 
+@documentos_bp.route('/baixar/holerite/<int:id>', methods=['POST'])
+@login_required
+def baixar_holerite(id):
+    """Rota de Download Inteligente (Proxy)."""
+    doc = Holerite.query.get_or_404(id)
+    
+    # Verificação de Permissão
+    if not has_permission('DOCUMENTOS') and doc.user_id != current_user.id:
+        flash("Acesso não autorizado.", "error")
+        return redirect(url_for('main.dashboard'))
+    
+    # Cenário 1: PDF Binário no Banco (Espelho de Ponto)
+    if doc.conteudo_pdf:
+        return send_file(
+            io.BytesIO(doc.conteudo_pdf), 
+            mimetype='application/pdf', 
+            as_attachment=True, 
+            download_name=f"ponto_{doc.mes_referencia}.pdf"
+        )
+    
+    # Cenário 2: PDF no Cloud Storage (Holerite)
+    if doc.url_arquivo:
+        # Nova Estratégia: Baixa bytes direto do Storage (Bypass de link assinado)
+        arquivo_bytes = baixar_bytes_storage(doc.url_arquivo)
+        if arquivo_bytes:
+            return send_file(
+                io.BytesIO(arquivo_bytes),
+                mimetype='application/pdf',
+                as_attachment=True,
+                download_name=f"holerite_{doc.mes_referencia}.pdf"
+            )
+            
+    flash("Arquivo não encontrado no servidor de armazenamento.", "error")
+    return redirect(url_for('documentos.dashboard_documentos'))
+
+# (Mantenha as rotas de Upload, Revisão, Auditoria e Recibo iguais às anteriores)
 @documentos_bp.route('/admin/holerites', methods=['GET', 'POST'])
 @login_required
 @permission_required('DOCUMENTOS')
@@ -47,6 +84,7 @@ def admin_holerites():
         if not file: return redirect(request.url)
         try:
             reader = PdfReader(file)
+            sucesso, revisao = 0, 0
             usuarios_db = User.query.filter(User.role != 'Terminal').all()
             usuarios_map = {limpar_nome(u.real_name): u.id for u in usuarios_db}
             nomes_disponiveis = list(usuarios_map.keys())
@@ -54,6 +92,8 @@ def admin_holerites():
             for page in reader.pages:
                 writer = PdfWriter(); writer.add_page(page); buffer = io.BytesIO(); writer.write(buffer)
                 pdf_bytes = buffer.getvalue()
+                
+                # IA agora com modelo novo
                 dados = extrair_dados_holerite(pdf_bytes)
                 nome_pdf = limpar_nome(dados.get('nome', '')) if dados else ""
                 mes_ref = dados.get('mes_referencia', '2026-02') if dados else "2026-02"
@@ -64,11 +104,7 @@ def admin_holerites():
                 user_id = None
                 if nome_pdf:
                     match = process.extractOne(nome_pdf, nomes_disponiveis, score_cutoff=85)
-                    if match:
-                        user_id = usuarios_map.get(match[0])
-                        print(f"DEBUG MATCH: Encontrado {match[0]} para PDF {nome_pdf}")
-                    else:
-                        print(f"DEBUG MATCH: Falha para {nome_pdf}. Disponíveis: {nomes_disponiveis[:3]}...")
+                    if match: user_id = usuarios_map.get(match[0])
 
                 novo_h = Holerite(user_id=user_id, mes_referencia=mes_ref, url_arquivo=caminho_blob,
                                  status='Enviado' if user_id else 'Revisao', enviado_em=get_brasil_time())
@@ -79,29 +115,26 @@ def admin_holerites():
             db.session.rollback(); flash(f"Erro: {e}", "error")
     return render_template('documentos/admin_upload_holerite.html')
 
-@documentos_bp.route('/baixar/holerite/<int:id>', methods=['POST'])
-@login_required
-def baixar_holerite(id):
-    doc = Holerite.query.get_or_404(id)
-    if not has_permission('DOCUMENTOS') and doc.user_id != current_user.id:
-        flash("Não autorizado.", "error")
-        return redirect(url_for('main.dashboard'))
-    if doc.conteudo_pdf:
-        return send_file(io.BytesIO(doc.conteudo_pdf), mimetype='application/pdf', as_attachment=True, download_name=f"ponto_{doc.mes_referencia}.pdf")
-    if doc.url_arquivo:
-        link = gerar_url_assinada(doc.url_arquivo)
-        if link: return redirect(link)
-    flash("Arquivo indisponível.", "error")
-    return redirect(url_for('documentos.dashboard_documentos'))
-
 @documentos_bp.route('/baixar/recibo/<int:id>', methods=['POST'])
 @login_required
 def baixar_recibo(id):
     doc = Recibo.query.get_or_404(id)
     if not has_permission('DOCUMENTOS') and doc.user_id != current_user.id:
-        flash("Não autorizado.", "error")
         return redirect(url_for('main.dashboard'))
     return send_file(io.BytesIO(doc.conteudo_pdf), mimetype='application/pdf', as_attachment=True, download_name=f"recibo_{id}.pdf")
+
+@documentos_bp.route('/meus-documentos')
+@login_required
+def meus_documentos():
+    holerites = Holerite.query.filter_by(user_id=current_user.id).order_by(Holerite.enviado_em.desc()).all()
+    recibos = Recibo.query.filter_by(user_id=current_user.id).order_by(Recibo.created_at.desc()).all()
+    docs = []
+    for h in holerites:
+        e_ponto = True if h.conteudo_pdf else False
+        docs.append({'id': h.id, 'tipo': 'Espelho' if e_ponto else 'Holerite', 'titulo': f"{'Ponto' if e_ponto else 'Holerite'} - {h.mes_referencia}", 'cor': 'purple' if e_ponto else 'blue', 'icone': 'fa-calendar' if e_ponto else 'fa-file', 'data': h.enviado_em, 'visto': h.visualizado, 'rota': 'baixar_holerite'})
+    for r in recibos:
+        docs.append({'id': r.id, 'tipo': 'Recibo', 'titulo': 'Recibo', 'cor': 'emerald', 'icone': 'fa-receipt', 'data': r.created_at, 'visto': r.visualizado, 'rota': 'baixar_recibo'})
+    return render_template('documentos/meus_documentos.html', docs=docs)
 
 @documentos_bp.route('/admin/revisao')
 @login_required
@@ -115,9 +148,7 @@ def revisao_holerites():
 @login_required
 @permission_required('DOCUMENTOS')
 def limpar_revisoes():
-    try:
-        Holerite.query.filter_by(status='Revisao').delete()
-        db.session.commit()
+    try: Holerite.query.filter_by(status='Revisao').delete(); db.session.commit()
     except: db.session.rollback()
     return redirect(url_for('documentos.revisao_holerites'))
 
@@ -126,8 +157,7 @@ def limpar_revisoes():
 def vincular_holerite():
     h = Holerite.query.get(request.form.get('holerite_id'))
     u_id = request.form.get('user_id')
-    if h and u_id:
-        h.user_id = u_id; h.status = 'Enviado'; db.session.commit()
+    if h and u_id: h.user_id = u_id; h.status = 'Enviado'; db.session.commit()
     return redirect(url_for('documentos.revisao_holerites'))
 
 @documentos_bp.route('/admin/auditoria')
@@ -136,15 +166,34 @@ def vincular_holerite():
 def revisao_auditoria():
     usuarios = User.query.filter(User.role != 'Terminal').order_by(User.real_name).all()
     auditores = []
-    for user in usuarios:
-        assinaturas = AssinaturaDigital.query.filter_by(user_id=user.id).order_by(AssinaturaDigital.data_assinatura.desc()).all()
-        lista = []
-        for a in assinaturas:
-            ref = "Doc ID: " + str(a.documento_id)
-            if a.tipo_documento == 'Holerite':
-                h = Holerite.query.get(a.documento_id)
-                if h: ref = h.mes_referencia
-            lista.append({'id': a.id, 'tipo': a.tipo_documento, 'referencia': ref, 'data': a.data_assinatura, 'ip': a.ip_address})
-        auditores.append({'user': user, 'total': len(assinaturas), 'assinaturas': lista})
+    for u in usuarios:
+        assinaturas = AssinaturaDigital.query.filter_by(user_id=u.id).order_by(AssinaturaDigital.data_assinatura.desc()).all()
+        l = [{'id':a.id, 'tipo':a.tipo_documento, 'data':a.data_assinatura, 'ip':a.ip_address} for a in assinaturas]
+        auditores.append({'user': u, 'total': len(assinaturas), 'assinaturas': l})
     return render_template('documentos/auditoria.html', auditores=auditores)
+
+@documentos_bp.route('/admin/recibo/novo', methods=['GET', 'POST'])
+@login_required
+@permission_required('DOCUMENTOS')
+def novo_recibo():
+    if request.method == 'POST':
+        u = User.query.get(request.form.get('user_id'))
+        r = Recibo(user_id=u.id, valor=float(request.form.get('valor', 0)), data_pagamento=get_brasil_time().date())
+        r.conteudo_pdf = gerar_pdf_recibo(r, u)
+        db.session.add(r); db.session.commit()
+        return redirect(url_for('documentos.dashboard_documentos'))
+    users = User.query.filter(User.role!='Terminal').all()
+    return render_template('documentos/novo_recibo.html', users=users, hoje=get_brasil_time().strftime('%Y-%m-%d'))
+
+@documentos_bp.route('/admin/disparar-espelhos', methods=['POST'])
+@login_required
+@permission_required('DOCUMENTOS')
+def disparar_espelhos():
+    mes = request.form.get('mes_ref')
+    users = User.query.filter(User.role!='Terminal', User.username!='12345678900').all()
+    for u in users:
+        pdf = gerar_pdf_espelho_mensal(u, mes)
+        db.session.add(Holerite(user_id=u.id, mes_referencia=mes, conteudo_pdf=pdf, status='Enviado', enviado_em=get_brasil_time()))
+    db.session.commit()
+    return redirect(url_for('documentos.dashboard_documentos'))
 

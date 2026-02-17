@@ -1,12 +1,11 @@
 from google.cloud import storage
-from datetime import timedelta
 import uuid
-import google.auth
-from google.auth.transport import requests
+import io
 
 BUCKET_NAME = "shahin-documentos"
 
 def salvar_no_storage(pdf_bytes, mes_ref):
+    """Salva o PDF no bucket e retorna o caminho relativo."""
     try:
         client = storage.Client()
         bucket = client.bucket(BUCKET_NAME)
@@ -15,32 +14,28 @@ def salvar_no_storage(pdf_bytes, mes_ref):
         blob.upload_from_string(pdf_bytes, content_type='application/pdf')
         return nome_blob
     except Exception as e:
-        print(f"Erro no Cloud Storage: {e}")
+        print(f"Erro no Cloud Storage Upload: {e}")
         return None
 
-def gerar_url_assinada(caminho_blob):
-    """Gera link privado compatível com Cloud Run via IAM Signer."""
+def baixar_bytes_storage(caminho_blob):
+    """
+    Baixa o arquivo do Storage para a memória do servidor.
+    Isso evita problemas de Link Assinado/Chave Privada no Cloud Run.
+    """
     try:
-        credentials, project_id = google.auth.default()
-        auth_request = requests.Request()
-        credentials.refresh(auth_request)
-        
-        client = storage.Client(credentials=credentials)
+        client = storage.Client()
         bucket = client.bucket(BUCKET_NAME)
         blob = bucket.blob(caminho_blob)
-
-        # No Cloud Run, precisamos passar o e-mail da service account explicitamente
-        # para que o SDK use a API de IAM para assinar em vez de tentar assinatura local.
-        service_account_email = credentials.service_account_email
         
-        url = blob.generate_signed_url(
-            version="v4",
-            expiration=timedelta(minutes=15),
-            method="GET",
-            service_account_email=service_account_email
-        )
-        return url
+        if not blob.exists():
+            return None
+            
+        return blob.download_as_bytes()
     except Exception as e:
-        print(f"Erro ao gerar link assinado: {e}")
+        print(f"Erro ao baixar do Storage: {e}")
         return None
+
+# Função legada mantida para compatibilidade, mas não será usada preferencialmente
+def gerar_url_assinada(caminho_blob):
+    return None 
 
