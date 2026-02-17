@@ -7,7 +7,7 @@ from app.documentos.storage import salvar_no_storage, baixar_bytes_storage
 from app.documentos.ai_parser import extrair_dados_holerite
 from app.documentos.utils import gerar_pdf_recibo, gerar_pdf_espelho_mensal, gerar_certificado_entrega
 from pypdf import PdfReader, PdfWriter
-from thefuzz import process
+from thefuzz import process, fuzz  # Importando fuzz para usar o token_set_ratio
 import io
 
 documentos_bp = Blueprint('documentos', __name__, template_folder='templates', url_prefix='/documentos')
@@ -39,52 +39,22 @@ def dashboard_documentos():
     historico.sort(key=lambda x: x['data'] if x['data'] else get_brasil_time(), reverse=True)
     return render_template('documentos/dashboard.html', historico=historico, pendentes_revisao=total_revisao)
 
-@documentos_bp.route('/baixar/holerite/<int:id>', methods=['POST'])
-@login_required
-def baixar_holerite(id):
-    """Rota de Download Inteligente (Proxy)."""
-    doc = Holerite.query.get_or_404(id)
-    
-    # Verificação de Permissão
-    if not has_permission('DOCUMENTOS') and doc.user_id != current_user.id:
-        flash("Acesso não autorizado.", "error")
-        return redirect(url_for('main.dashboard'))
-    
-    # Cenário 1: PDF Binário no Banco (Espelho de Ponto)
-    if doc.conteudo_pdf:
-        return send_file(
-            io.BytesIO(doc.conteudo_pdf), 
-            mimetype='application/pdf', 
-            as_attachment=True, 
-            download_name=f"ponto_{doc.mes_referencia}.pdf"
-        )
-    
-    # Cenário 2: PDF no Cloud Storage (Holerite)
-    if doc.url_arquivo:
-        # Nova Estratégia: Baixa bytes direto do Storage (Bypass de link assinado)
-        arquivo_bytes = baixar_bytes_storage(doc.url_arquivo)
-        if arquivo_bytes:
-            return send_file(
-                io.BytesIO(arquivo_bytes),
-                mimetype='application/pdf',
-                as_attachment=True,
-                download_name=f"holerite_{doc.mes_referencia}.pdf"
-            )
-            
-    flash("Arquivo não encontrado no servidor de armazenamento.", "error")
-    return redirect(url_for('documentos.dashboard_documentos'))
-
-# (Mantenha as rotas de Upload, Revisão, Auditoria e Recibo iguais às anteriores)
 @documentos_bp.route('/admin/holerites', methods=['GET', 'POST'])
 @login_required
 @permission_required('DOCUMENTOS')
 def admin_holerites():
+    """
+    Upload de holerites com TOKEN_SET_RATIO.
+    Essa lógica ignora a ordem das palavras e preposições (de, da, do).
+    """
     if request.method == 'POST':
         file = request.files.get('arquivo_pdf')
         if not file: return redirect(request.url)
         try:
             reader = PdfReader(file)
             sucesso, revisao = 0, 0
+            
+            # Carrega usuários e aplica a limpeza agressiva
             usuarios_db = User.query.filter(User.role != 'Terminal').all()
             usuarios_map = {limpar_nome(u.real_name): u.id for u in usuarios_db}
             nomes_disponiveis = list(usuarios_map.keys())
@@ -93,27 +63,63 @@ def admin_holerites():
                 writer = PdfWriter(); writer.add_page(page); buffer = io.BytesIO(); writer.write(buffer)
                 pdf_bytes = buffer.getvalue()
                 
-                # IA agora com modelo novo
+                # 1. IA Extrai o nome bruto
                 dados = extrair_dados_holerite(pdf_bytes)
-                nome_pdf = limpar_nome(dados.get('nome', '')) if dados else ""
+                nome_pdf_raw = dados.get('nome', '') if dados else ""
                 mes_ref = dados.get('mes_referencia', '2026-02') if dados else "2026-02"
+                
+                # 2. Limpeza Agressiva
+                nome_pdf_limpo = limpar_nome(nome_pdf_raw)
 
                 caminho_blob = salvar_no_storage(pdf_bytes, mes_ref)
                 if not caminho_blob: continue
 
                 user_id = None
-                if nome_pdf:
-                    match = process.extractOne(nome_pdf, nomes_disponiveis, score_cutoff=85)
-                    if match: user_id = usuarios_map.get(match[0])
+                if nome_pdf_limpo:
+                    # 3. COMPARAÇÃO DE CONJUNTO (A Mágica acontece aqui)
+                    # scorer=fuzz.token_set_ratio ignora ordem e palavras extras (de, da)
+                    # score_cutoff=80 aceita pequenas divergências
+                    match = process.extractOne(nome_pdf_limpo, nomes_disponiveis, scorer=fuzz.token_set_ratio, score_cutoff=80)
+                    
+                    if match:
+                        user_id = usuarios_map.get(match[0])
+                        print(f"MATCH SUCESSO: PDF '{nome_pdf_limpo}' == Banco '{match[0]}' (Score: {match[1]})")
+                    else:
+                        print(f"MATCH FALHA: PDF '{nome_pdf_limpo}' não bateu com ninguém.")
 
                 novo_h = Holerite(user_id=user_id, mes_referencia=mes_ref, url_arquivo=caminho_blob,
                                  status='Enviado' if user_id else 'Revisao', enviado_em=get_brasil_time())
                 db.session.add(novo_h)
+                
+                if user_id: sucesso += 1
+                else: revisao += 1
+
             db.session.commit()
+            flash(f"Processado: {sucesso} identificados, {revisao} para revisão.", "success")
             return redirect(url_for('documentos.dashboard_documentos'))
         except Exception as e:
             db.session.rollback(); flash(f"Erro: {e}", "error")
     return render_template('documentos/admin_upload_holerite.html')
+
+@documentos_bp.route('/baixar/holerite/<int:id>', methods=['POST'])
+@login_required
+def baixar_holerite(id):
+    doc = Holerite.query.get_or_404(id)
+    if not has_permission('DOCUMENTOS') and doc.user_id != current_user.id:
+        flash("Não autorizado.", "error")
+        return redirect(url_for('main.dashboard'))
+    
+    if doc.conteudo_pdf:
+        return send_file(io.BytesIO(doc.conteudo_pdf), mimetype='application/pdf', as_attachment=True, download_name=f"ponto_{doc.mes_referencia}.pdf")
+    
+    if doc.url_arquivo:
+        # Usa a função de download direto por bytes (Bypass de chave privada)
+        arquivo_bytes = baixar_bytes_storage(doc.url_arquivo)
+        if arquivo_bytes:
+            return send_file(io.BytesIO(arquivo_bytes), mimetype='application/pdf', as_attachment=True, download_name=f"holerite_{doc.mes_referencia}.pdf")
+            
+    flash("Arquivo não encontrado.", "error")
+    return redirect(url_for('documentos.dashboard_documentos'))
 
 @documentos_bp.route('/baixar/recibo/<int:id>', methods=['POST'])
 @login_required
@@ -196,4 +202,13 @@ def disparar_espelhos():
         db.session.add(Holerite(user_id=u.id, mes_referencia=mes, conteudo_pdf=pdf, status='Enviado', enviado_em=get_brasil_time()))
     db.session.commit()
     return redirect(url_for('documentos.dashboard_documentos'))
+
+@documentos_bp.route('/api/user-info/<int:id>')
+@login_required
+def get_user_info_api(id):
+    user = User.query.get_or_404(id)
+    return jsonify({
+        'razao_social': user.razao_social_empregadora or "LA SHAHIN SERVIÇOS DE SEGURANÇA LTDA",
+        'cnpj': user.cnpj_empregador or "50.537.235/0001-95"
+    })
 

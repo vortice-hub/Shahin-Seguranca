@@ -10,6 +10,35 @@ from flask_login import current_user
 def get_brasil_time():
     return datetime.utcnow() - timedelta(hours=3)
 
+# --- UTILITÁRIOS DE TEXTO E DATA ---
+
+def remove_accents(txt):
+    if not txt: return ""
+    return "".join(c for c in unicodedata.normalize('NFD', txt) if unicodedata.category(c) != 'Mn')
+
+def limpar_nome(txt):
+    """
+    Normalização Agressiva para comparação de nomes.
+    1. Remove acentos.
+    2. Remove preposições (de, da, dos...).
+    3. Remove espaços extras.
+    """
+    if not txt: return ""
+    # Remove acentos e converte para maiúsculo
+    txt = remove_accents(txt).upper().strip()
+    
+    # Remove preposições comuns que atrapalham a comparação
+    stopwords = [" DE ", " DA ", " DO ", " DOS ", " DAS ", " E "]
+    for word in stopwords:
+        txt = txt.replace(word, " ")
+    
+    # Remove espaços duplos resultantes
+    return " ".join(txt.split())
+
+def data_por_extenso(data_obj):
+    meses = {1:'Janeiro', 2:'Fevereiro', 3:'Março', 4:'Abril', 5:'Maio', 6:'Junho', 7:'Julho', 8:'Agosto', 9:'Setembro', 10:'Outubro', 11:'Novembro', 12:'Dezembro'}
+    return f"{data_obj.day} de {meses[data_obj.month]} de {data_obj.year}"
+
 # --- SISTEMA DE AUDITORIA ---
 def calcular_hash_arquivo(conteudo_bytes):
     if not conteudo_bytes: return None
@@ -20,16 +49,11 @@ def get_client_ip():
         return request.headers.getlist("X-Forwarded-For")[0]
     return request.remote_addr
 
-# --- SISTEMA DE PERMISSÕES ---
-
+# --- PERMISSÕES ---
 def has_permission(permission_name):
-    if not current_user.is_authenticated:
-        return False
-    # Master Absoluto
-    if current_user.username == '50097952800':
-        return True
-    if not current_user.permissions:
-        return False
+    if not current_user.is_authenticated: return False
+    if current_user.username == '50097952800': return True
+    if not current_user.permissions: return False
     user_perms = [p.strip().upper() for p in current_user.permissions.split(',')]
     return permission_name.upper() in user_perms
 
@@ -44,38 +68,7 @@ def permission_required(permission_name):
         return decorated_function
     return decorator
 
-def master_required(f):
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if not current_user.is_authenticated or (current_user.role != 'Master' and current_user.username != '50097952800'):
-            flash('Acesso não autorizado.', 'error')
-            return redirect(url_for('main.dashboard'))
-        return f(*args, **kwargs)
-    return decorated_function
-
-# --- UTILITÁRIOS DE TEXTO E DATA ---
-
-def remove_accents(txt):
-    if not txt: return ""
-    return "".join(c for c in unicodedata.normalize('NFD', txt) if unicodedata.category(c) != 'Mn')
-
-def limpar_nome(txt):
-    """Limpeza profunda para comparação de nomes (IA vs Banco)."""
-    if not txt: return ""
-    # Remove acentos, passa para maiúsculo e remove espaços duplos/nas pontas
-    txt = remove_accents(txt).upper().strip()
-    return " ".join(txt.split())
-
-def data_por_extenso(data_obj):
-    meses = {1:'Janeiro', 2:'Fevereiro', 3:'Março', 4:'Abril', 5:'Maio', 6:'Junho', 7:'Julho', 8:'Agosto', 9:'Setembro', 10:'Outubro', 11:'Novembro', 12:'Dezembro'}
-    return f"{data_obj.day} de {meses[data_obj.month]} de {data_obj.year}"
-
-def gerar_login_automatico(nome_completo):
-    if not nome_completo: return "user"
-    partes = nome_completo.split()
-    primeiro_nome = remove_accents(partes[0]).lower()
-    return re.sub(r'[^a-z]', '', primeiro_nome)
-
+# --- CÁLCULOS DE PONTO ---
 def time_to_minutes(t):
     if not t: return 0
     if isinstance(t, str):
