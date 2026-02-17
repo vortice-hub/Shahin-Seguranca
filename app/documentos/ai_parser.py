@@ -5,36 +5,42 @@ import json
 def extrair_dados_holerite(pdf_bytes):
     """
     Usa IA para identificar Nome e Mês.
-    Estratégia: Prompt focado em ignorar cabeçalhos de empresa.
+    Estratégia: Modelo estável 'gemini-1.0-pro' para garantir disponibilidade.
     """
+    # Inicializa Vertex AI
     vertexai.init(project="nimble-gearing-487415-u6", location="us-central1")
     
-    # Tenta carregar o modelo Flash, com fallback para Pro
+    # MUDANÇA CRÍTICA: 'gemini-1.0-pro' é o modelo estável global (GA).
+    # O modelo 'flash' pode estar em preview ou indisponível nesta região.
     try:
-        model = GenerativeModel("gemini-1.5-flash")
-    except:
         model = GenerativeModel("gemini-1.0-pro")
+    except:
+        # Fallback de emergência
+        model = GenerativeModel("gemini-pro")
     
     pdf_part = Part.from_data(data=pdf_bytes, mime_type="application/pdf")
     
     prompt = """
-    Você é um especialista em RH analisando um holerite brasileiro.
-    Tarefa: Extraia o NOME DO FUNCIONÁRIO e o MÊS DE REFERÊNCIA.
+    Aja como um especialista em RH.
+    Analise este documento (Holerite) e extraia:
+    1. O NOME DO FUNCIONÁRIO (Ignore o nome da empresa/empregador).
+    2. O MÊS DE REFERÊNCIA (Data do pagamento ou competência).
     
-    Regras Críticas:
-    1. IGNORE o nome da empresa (ex: Shahin, La Shahin, Empregador).
-    2. Procure por rótulos como "Nome do Funcionário", "Colaborador" ou logo abaixo do nome da empresa.
-    3. Retorne a data no formato AAAA-MM.
-    
-    Retorne APENAS um JSON: {"nome": "NOME ENCONTRADO", "mes_referencia": "AAAA-MM"}
+    Retorne estritamente um JSON neste formato:
+    {"nome": "NOME ENCONTRADO", "mes_referencia": "AAAA-MM"}
     """
     try:
-        response = model.generate_content([pdf_part, prompt])
+        # Configuração de geração conservadora para evitar alucinações
+        response = model.generate_content(
+            [pdf_part, prompt],
+            generation_config={"temperature": 0.2, "max_output_tokens": 1024}
+        )
+        
         res_text = response.text.replace('```json', '').replace('```', '').strip()
         dados = json.loads(res_text)
-        print(f"IA LEITURA: {dados}") # Log para vermos o que ele leu
+        print(f"IA LEITURA SUCESSO: {dados}")
         return dados
     except Exception as e:
-        print(f"IA ERRO: {e}")
+        print(f"IA ERRO DE MODELO: {e}")
         return None
 
