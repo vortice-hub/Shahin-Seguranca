@@ -6,6 +6,7 @@ import google.auth
 BUCKET_NAME = "shahin-documentos"
 
 def salvar_no_storage(pdf_bytes, mes_ref):
+    """Envia o PDF para o bucket e retorna o caminho."""
     try:
         client = storage.Client()
         bucket = client.bucket(BUCKET_NAME)
@@ -18,14 +19,15 @@ def salvar_no_storage(pdf_bytes, mes_ref):
         return None
 
 def gerar_url_assinada(caminho_blob):
-    """Gera link assinado compatível com o ambiente Cloud Run."""
+    """Gera link privado compatível com o Google Cloud Run (IAM Signing)."""
     try:
+        # Obtém as credenciais da conta de serviço do Cloud Run
         credentials, project_id = google.auth.default()
         client = storage.Client(credentials=credentials)
         bucket = client.bucket(BUCKET_NAME)
         blob = bucket.blob(caminho_blob)
 
-        # Tenta gerar o link usando a identidade do Service Account
+        # Assina a URL usando o IAM Service Account Token Creator
         url = blob.generate_signed_url(
             version="v4",
             expiration=timedelta(minutes=15),

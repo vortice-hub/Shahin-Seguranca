@@ -19,42 +19,25 @@
 
 <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
     <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition">
-        <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center text-blue-600 mb-4">
-            <i class="fas fa-file-invoice text-xl"></i>
-        </div>
+        <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center text-blue-600 mb-4"><i class="fas fa-file-invoice text-xl"></i></div>
         <h3 class="font-bold text-md text-slate-800 mb-2">Holerite em massa</h3>
-        <p class="text-xs text-slate-500 mb-4">Importe o PDF unificado. O sistema separa e envia.</p>
-        <a href="/documentos/admin/holerites" class="block w-full text-center bg-slate-50 hover:bg-blue-50 text-blue-600 font-bold py-2 text-xs rounded border border-slate-200 transition">IMPORTAR</a>
+        <a href="/documentos/admin/holerites" class="block w-full text-center bg-slate-50 hover:bg-blue-50 text-blue-600 font-bold py-2 text-xs rounded border border-slate-200 transition uppercase">Importar</a>
     </div>
-
     <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition">
-        <div class="w-10 h-10 bg-emerald-100 rounded-lg flex items-center justify-center text-emerald-600 mb-4">
-            <i class="fas fa-file-signature text-xl"></i>
-        </div>
+        <div class="w-10 h-10 bg-emerald-100 rounded-lg flex items-center justify-center text-emerald-600 mb-4"><i class="fas fa-file-signature text-xl"></i></div>
         <h3 class="font-bold text-md text-slate-800 mb-2">Recibo Avulso</h3>
-        <p class="text-xs text-slate-500 mb-4">Gere recibos de VA, VT ou Pix avulsos.</p>
-        <a href="/documentos/admin/recibo/novo" class="block w-full text-center bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 text-xs rounded shadow transition">NOVO RECIBO</a>
+        <a href="/documentos/admin/recibo/novo" class="block w-full text-center bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 text-xs rounded shadow transition uppercase">Novo Recibo</a>
     </div>
-
     <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition">
-        <div class="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center text-purple-600 mb-4">
-            <i class="fas fa-calendar-check text-xl"></i>
-        </div>
+        <div class="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center text-purple-600 mb-4"><i class="fas fa-calendar-check text-xl"></i></div>
         <h3 class="font-bold text-md text-slate-800 mb-2">Disparar Espelhos</h3>
-        <p class="text-xs text-slate-500 mb-4">Envia o PDF do ponto para todos os ativos.</p>
         <form action="/documentos/admin/disparar-espelhos" method="POST" class="flex gap-2">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
             <input type="month" name="mes_ref" class="w-full border rounded px-2 py-1 text-xs" required>
-            <button type="submit" class="bg-purple-600 hover:bg-purple-700 text-white px-3 py-2 rounded text-xs font-bold transition">
-                <i class="fas fa-paper-plane"></i>
-            </button>
+            <button type="submit" class="bg-purple-600 text-white px-3 py-2 rounded text-xs font-bold transition"><i class="fas fa-paper-plane"></i></button>
         </form>
     </div>
 </div>
-
-<h3 class="font-bold text-slate-700 mb-4 text-xs uppercase px-2 tracking-widest flex items-center gap-2">
-    <i class="fas fa-stream text-slate-400"></i> Histórico Consolidado (Enviados)
-</h3>
 
 <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-10">
     <div class="overflow-x-auto">
@@ -63,47 +46,35 @@
                 <tr>
                     <th class="px-6 py-4">Tipo</th>
                     <th class="px-6 py-4">Funcionário</th>
-                    <th class="px-6 py-4">Referência/Valor</th>
+                    <th class="px-6 py-4">Ref/Valor</th>
                     <th class="px-6 py-4">Enviado em</th>
                     <th class="px-6 py-4 text-center">Status</th>
-                    <th class="px-6 py-4 text-right">Arquivo</th>
+                    <th class="px-6 py-4 text-right">Ação</th>
                 </tr>
             </thead>
             <tbody class="divide-y divide-slate-100">
                 {% for doc in historico %}
                 <tr class="hover:bg-slate-50 transition">
-                    <td class="px-6 py-4">
-                        <span class="bg-{{ doc.cor }}-50 text-{{ doc.cor }}-600 px-2 py-1 rounded text-[10px] font-bold uppercase border border-{{ doc.cor }}-100">
-                            {{ doc.tipo }}
-                        </span>
-                    </td>
+                    <td class="px-6 py-4"><span class="bg-{{ doc.cor }}-50 text-{{ doc.cor }}-600 px-2 py-1 rounded text-[10px] font-bold uppercase">{{ doc.tipo }}</span></td>
                     <td class="px-6 py-4 font-bold text-slate-800">{{ doc.usuario }}</td>
-                    <td class="px-6 py-4 text-xs font-medium text-slate-600">{{ doc.info }}</td>
+                    <td class="px-6 py-4 text-xs">{{ doc.info }}</td>
                     <td class="px-6 py-4 text-xs text-slate-400">
-                        {{ doc.data.strftime('%d/%m/%Y %H:%M') if doc.data else '-' }}
+                        {{ doc.data.strftime('%d/%m/%Y %H:%M') if doc.data else '--' }}
                     </td>
                     <td class="px-6 py-4 text-center">
                         {% if doc.visualizado %}
-                        <span class="text-emerald-600 font-bold text-[10px] uppercase flex items-center justify-center gap-1">
-                            <i class="fas fa-check-circle"></i> Lido
-                        </span>
+                        <span class="text-emerald-600 font-bold text-[10px] uppercase"><i class="fas fa-check-circle"></i> Lido</span>
                         {% else %}
-                        <span class="text-amber-500 font-bold text-[10px] uppercase flex items-center justify-center gap-1">
-                            <i class="fas fa-clock"></i> Enviado
-                        </span>
+                        <span class="text-amber-500 font-bold text-[10px] uppercase"><i class="fas fa-clock"></i> Enviado</span>
                         {% endif %}
                     </td>
                     <td class="px-6 py-4 text-right">
-                        <form action="{{ url_for('documentos.' + doc.rota, id=h.id if h is defined else doc.id) }}" method="POST" target="_blank">
+                        <form action="{{ url_for('documentos.' + doc.rota, id=doc.id) }}" method="POST" target="_blank">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                            <button type="submit" class="text-slate-400 hover:text-blue-600 p-2">
-                                <i class="fas fa-file-pdf text-lg"></i>
-                            </button>
+                            <button type="submit" class="text-slate-400 hover:text-blue-600 p-2"><i class="fas fa-file-pdf text-lg"></i></button>
                         </form>
                     </td>
                 </tr>
-                {% else %}
-                <tr><td colspan="6" class="px-6 py-20 text-center text-slate-400">Nenhum documento enviado recentemente.</td></tr>
                 {% endfor %}
             </tbody>
         </table>
