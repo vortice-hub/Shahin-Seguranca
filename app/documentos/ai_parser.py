@@ -1,75 +1,72 @@
 import io
 import re
 import json
+import unicodedata
 from pypdf import PdfReader
 from thefuzz import process, fuzz
-import vertexai
-from vertexai.language_models import TextGenerationModel
+
+def normalizar_texto_pdf(texto):
+    """Limpa o texto do PDF para facilitar a busca."""
+    if not texto: return ""
+    # Remove acentos
+    texto = "".join(c for c in unicodedata.normalize('NFD', texto) if unicodedata.category(c) != 'Mn')
+    # Tudo maiúsculo e remove quebras de linha excessivas
+    return texto.upper().replace('\n', ' ').strip()
 
 def extrair_dados_holerite(pdf_bytes, lista_nomes_banco=None):
     """
-    Abordagem Híbrida:
-    1. Tenta extrair texto e achar o nome localmente (Sem custo/Sem erro de API).
-    2. Se falhar, usa IA legado (PaLM 2) que é mais estável na região.
+    Abordagem 100% Local (Python Puro).
+    Não usa IA. Usa Regex e Fuzzy Matching.
     """
+    dados_retorno = {"nome": "", "mes_referencia": "2026-02", "origem": "falha"}
     
-    # --- ETAPA 1: EXTRAÇÃO LOCAL (A BALA DE PRATA) ---
-    texto_pdf = ""
+    # 1. Extração do Texto Bruto
+    texto_raw = ""
     try:
         reader = PdfReader(io.BytesIO(pdf_bytes))
         if len(reader.pages) > 0:
-            texto_pdf = reader.pages[0].extract_text()
+            texto_raw = reader.pages[0].extract_text()
     except Exception as e:
-        print(f"ERRO LEITURA LOCAL: {e}")
+        print(f"ERRO DE LEITURA PDF: {e}")
+        return dados_retorno
 
-    # Busca Data por Regex (Procura padrões como 02/2026 ou 2026/02)
-    mes_ref = "2026-02" # Fallback
-    match_data = re.search(r'(\d{2}/\d{4})', texto_pdf)
+    if not texto_raw:
+        return dados_retorno
+
+    texto_limpo = normalizar_texto_pdf(texto_raw)
+
+    # 2. Busca de Data (Regex)
+    # Procura padrões: 02/2026, 02-2026, FEV/2026
+    padrao_data = r'(\d{2})[/-](\d{4})'
+    match_data = re.search(padrao_data, texto_raw)
+    
     if match_data:
-        m, y = match_data.group(1).split('/')
-        mes_ref = f"{y}-{m}"
+        mes = match_data.group(1)
+        ano = match_data.group(2)
+        # Validação básica de mês
+        if 1 <= int(mes) <= 12:
+            dados_retorno["mes_referencia"] = f"{ano}-{mes}"
 
-    # Busca Nome Localmente (Se tivermos a lista do banco)
-    if lista_nomes_banco and texto_pdf:
-        # Limpa o texto do PDF para facilitar
-        texto_upper = texto_pdf.upper()
+    # 3. Busca de Nome (Varredura na Lista)
+    if lista_nomes_banco:
+        # A estratégia aqui é: Verificar qual nome da nossa lista de funcionários
+        # aparece com maior "força" dentro do texto do PDF.
         
-        # Scorer 'partial_ratio' verifica se o nome do funcionário aparece DENTRO do texto do PDF
-        match = process.extractOne(texto_upper, lista_nomes_banco, scorer=fuzz.partial_ratio)
+        # 'partial_ratio': Verifica se o nome do funcionário é uma substring do texto do PDF
+        # Ex: PDF "Nome: JOAO DA SILVA - Mot..." contém "JOAO SILVA" (se normalizado)
+        melhor_match = process.extractOne(texto_limpo, lista_nomes_banco, scorer=fuzz.partial_token_set_ratio)
         
-        # Se a certeza for alta (>90), confiamos e retornamos na hora
-        if match and match[1] >= 90:
-            print(f"MATCH LOCAL SUCESSO: '{match[0]}' encontrado no texto (Score: {match[1]})")
-            return {"nome": match[0], "mes_referencia": mes_ref, "origem": "local"}
-
-    # --- ETAPA 2: FALLBACK PARA IA (PaLM 2) ---
-    # Só executamos se o método local falhar.
-    try:
-        vertexai.init(project="nimble-gearing-487415-u6", location="us-central1")
-        # Usamos text-bison@001 que costuma estar disponível onde o Gemini falha
-        model = TextGenerationModel.from_pretrained("text-bison@001")
-        
-        prompt = f"""
-        Extraia do texto abaixo o NOME COMPLETO do funcionário e a DATA (AAAA-MM).
-        Texto: {texto_pdf[:3000]}
-        
-        Responda apenas JSON: {{"nome": "NOME", "mes_referencia": "AAAA-MM"}}
-        """
-        
-        response = model.predict(prompt, temperature=0.1)
-        txt = response.text.replace('```json', '').replace('```', '').strip()
-        
-        # Tenta extrair o JSON da resposta
-        if '{' in txt and '}' in txt:
-            json_str = txt[txt.find('{'):txt.rfind('}')+1]
-            dados = json.loads(json_str)
-            dados["origem"] = "ia"
-            print(f"IA SUCESSO: {dados}")
-            return dados
+        if melhor_match:
+            nome_encontrado = melhor_match[0]
+            score = melhor_match[1]
             
-    except Exception as e:
-        print(f"IA FALHA CRÍTICA: {e}")
+            # Se a certeza for alta (>85%), assumimos que é esse o dono
+            if score >= 85:
+                print(f"MATCH LOCAL: '{nome_encontrado}' (Score: {score})")
+                dados_retorno["nome"] = nome_encontrado
+                dados_retorno["origem"] = "python_local"
+            else:
+                print(f"MATCH BAIXO: '{nome_encontrado}' (Score: {score}) - Enviando para revisão.")
 
-    # Se tudo falhar, retorna vazio para cair na revisão
-    return {"nome": "", "mes_referencia": mes_ref, "origem": "falha"}
+    return dados_retorno
 
