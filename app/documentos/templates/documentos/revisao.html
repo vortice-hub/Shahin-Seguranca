@@ -1,20 +1,17 @@
 {% extends 'base.html' %}
 {% block content %}
 <div class="max-w-5xl mx-auto py-8">
-    <div class="mb-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+    <div class="mb-10 flex justify-between items-center">
         <div>
             <h2 class="text-3xl font-black text-slate-800 tracking-tight">Aguardando Revisão</h2>
-            <p class="text-slate-500 mt-2">Documentos que a IA não conseguiu identificar automaticamente.</p>
+            <p class="text-slate-500 mt-2">Identifique os nomes que a IA não conseguiu processar.</p>
         </div>
-        
-        {% if pendentes %}
-        <form action="{{ url_for('documentos.limpar_revisoes') }}" method="POST" onsubmit="return confirm('ATENÇÃO: Isso apagará permanentemente todos os arquivos que estão aguardando revisão. Continuar?')">
+        <form action="{{ url_for('documentos.limpar_revisoes') }}" method="POST" onsubmit="return confirm('Apagar tudo na revisão?')">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-            <button type="submit" class="bg-red-50 text-red-600 border border-red-200 px-4 py-2 rounded-xl text-xs font-bold hover:bg-red-600 hover:text-white transition shadow-sm">
-                <i class="fas fa-trash-alt mr-2"></i> LIMPAR TUDO
+            <button type="submit" class="bg-red-50 text-red-600 px-4 py-2 rounded-xl text-xs font-bold hover:bg-red-600 hover:text-white transition">
+                <i class="fas fa-trash mr-2"></i> LIMPAR TUDO
             </button>
         </form>
-        {% endif %}
     </div>
 
     <div class="grid gap-6">
@@ -27,34 +24,22 @@
                     <p class="font-bold text-slate-800">{{ h.mes_referencia }}</p>
                     <form action="{{ url_for('documentos.baixar_holerite', id=h.id) }}" method="POST" target="_blank">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                        <button type="submit" class="text-xs font-bold text-blue-600 hover:text-blue-800 transition">VER PDF COMPLETO</button>
+                        <button type="submit" class="text-xs font-bold text-blue-600 hover:text-blue-800 transition">ABRIR PDF</button>
                     </form>
                 </div>
             </div>
 
-            <form action="{{ url_for('documentos.vincular_holerite') }}" method="POST" class="flex flex-col md:flex-row gap-3 w-full md:w-auto">
+            <form action="{{ url_for('documentos.vincular_holerite') }}" method="POST" class="flex gap-3">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <input type="hidden" name="holerite_id" value="{{ h.id }}">
-                
-                <select name="user_id" class="bg-slate-100 border-2 border-transparent focus:border-blue-500 rounded-2xl px-4 py-3 text-sm font-bold text-slate-700 outline-none transition-all md:w-72" required>
-                    <option value="">Quem é este funcionário?</option>
+                <select name="user_id" class="bg-slate-100 rounded-2xl px-4 py-3 text-sm font-bold md:w-72" required>
+                    <option value="">Selecione o funcionário...</option>
                     {% for u in funcionarios %}
                     <option value="{{ u.id }}">{{ u.real_name }}</option>
                     {% endfor %}
                 </select>
-                
-                <button type="submit" class="bg-slate-900 hover:bg-blue-600 text-white font-bold py-3 px-8 rounded-2xl transition shadow-lg shadow-slate-200">
-                    VINCULAR
-                </button>
+                <button type="submit" class="bg-slate-900 text-white font-bold py-3 px-8 rounded-2xl hover:bg-blue-600 transition">VINCULAR</button>
             </form>
-        </div>
-        {% else %}
-        <div class="text-center py-24 bg-slate-50 rounded-[3rem] border-4 border-dashed border-slate-200">
-            <div class="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center text-3xl mx-auto mb-6">
-                <i class="fas fa-check"></i>
-            </div>
-            <h3 class="text-xl font-black text-slate-800">Tudo em dia!</h3>
-            <p class="text-slate-400 font-medium">Não há holerites pendentes de identificação.</p>
         </div>
         {% endfor %}
     </div>
