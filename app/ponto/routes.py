@@ -13,7 +13,6 @@ logger = logging.getLogger(__name__)
 
 ponto_bp = Blueprint('ponto', __name__, template_folder='templates', url_prefix='/ponto')
 
-# --- APIS DO SISTEMA DE PONTO ---
 @ponto_bp.route('/api/gerar-token', methods=['GET'])
 @login_required
 def gerar_token_qrcode():
@@ -70,7 +69,6 @@ def registrar_leitura_terminal():
     except BadSignature: return jsonify({'error': 'QR Code inválido.'}), 400
     except Exception as e: return jsonify({'error': f'Erro interno: {str(e)}'}), 500
 
-# --- ROTAS DE INTERFACE ---
 @ponto_bp.route('/scanner')
 @login_required
 def terminal_scanner():
@@ -151,18 +149,12 @@ def solicitar_ajuste():
             if original: dados_extras[p.id] = original.hora_registro.strftime('%H:%M')
     return render_template('ponto/solicitar_ajuste.html', pontos=pontos_dia, data_sel=data_selecionada, meus_ajustes=meus_ajustes, extras=dados_extras)
 
-# ==========================================
-# PROJETO ESCALA: NOVO CALENDÁRIO, FÉRIAS E CONTROLE
-# ==========================================
-
 @ponto_bp.route('/escala', methods=['GET'])
 @login_required
 def minha_escala():
-    """Tela dedicada apenas ao Calendário Real visual."""
     hoje = get_brasil_time().date()
     ano = request.args.get('ano', hoje.year, type=int)
     mes = request.args.get('mes', hoje.month, type=int)
-    
     _, num_dias = calendar.monthrange(ano, mes)
     dias_mes = []
     
@@ -177,18 +169,13 @@ def minha_escala():
             SolicitacaoAusencia.data_fim >= dt_atual
         ).first()
         
-        if ausencia:
-            tipo_dia = ausencia.tipo_ausencia
+        if ausencia: tipo_dia = ausencia.tipo_ausencia
         else:
-            if current_user.escala == '5x2' and dt_atual.weekday() >= 5:
-                tipo_dia = 'Folga'
+            if current_user.escala == '5x2' and dt_atual.weekday() >= 5: tipo_dia = 'Folga'
             elif current_user.escala == '12x36' and current_user.data_inicio_escala:
-                if (dt_atual - current_user.data_inicio_escala).days % 2 != 0:
-                    tipo_dia = 'Folga'
+                if (dt_atual - current_user.data_inicio_escala).days % 2 != 0: tipo_dia = 'Folga'
         
-        # O ".weekday()" do Python é 0 (Segunda) a 6 (Domingo). Vamos ajustar para 0(Dom) a 6(Sáb) para o layout de calendário americano.
         dia_semana_layout = (dt_atual.weekday() + 1) % 7 
-        
         dias_mes.append({'data': dt_atual, 'tipo': tipo_dia, 'dia_semana': dia_semana_layout})
 
     return render_template('ponto/minha_escala.html', ano=ano, mes=mes, dias_mes=dias_mes, hoje=hoje)
@@ -196,31 +183,111 @@ def minha_escala():
 @ponto_bp.route('/solicitar-ferias', methods=['GET', 'POST'])
 @login_required
 def solicitar_ferias():
-    """Tela exclusiva para o funcionário pedir férias/licenças."""
+    if not current_user.data_admissao:
+        flash("Sua data de admissão não está cadastrada. Solicite ao RH para regularizar.", "warning")
+
+    # Módulo Analítico de Férias CLT (Cálculo de Faltas e Direitos)
+    dias_direito = 30
+    faltas = 0
+    saldo = 0
+    dias_usados = 0
+
+    if current_user.data_admissao:
+        hoje = get_brasil_time().date()
+        um_ano_atras = hoje - timedelta(days=365)
+        # Conta faltas injustificadas no último ano de trabalho
+        faltas = PontoResumo.query.filter(
+            PontoResumo.user_id == current_user.id,
+            PontoResumo.data_referencia >= um_ano_atras,
+            PontoResumo.status_dia == 'Falta'
+        ).count()
+
+        # Regra CLT: Redução de dias por faltas injustificadas
+        if faltas <= 5: dias_direito = 30
+        elif faltas <= 14: dias_direito = 24
+        elif faltas <= 23: dias_direito = 18
+        elif faltas <= 32: dias_direito = 12
+        else: dias_direito = 0
+
+        # Conta dias já aprovados/pendentes no sistema
+        ausencias_ano = SolicitacaoAusencia.query.filter(
+            SolicitacaoAusencia.user_id == current_user.id,
+            SolicitacaoAusencia.tipo_ausencia == 'Férias',
+            SolicitacaoAusencia.status.in_(['Aprovado', 'Pendente'])
+        ).all()
+        dias_usados = sum(a.quantidade_dias for a in ausencias_ano)
+        saldo = dias_direito - dias_usados
+
     if request.method == 'POST':
         tipo = request.form.get('tipo_ausencia')
         dt_inicio = datetime.strptime(request.form.get('data_inicio'), '%Y-%m-%d').date()
         dt_fim = datetime.strptime(request.form.get('data_fim'), '%Y-%m-%d').date()
         obs = request.form.get('observacao', '')
         
+        # Abono Pecuniário (Vender Férias)
+        vender_ferias = request.form.get('vender_ferias') == 'sim'
+        
         if dt_inicio > dt_fim:
             flash("A data de início não pode ser maior que a data de fim.", "error")
             return redirect(url_for('ponto.solicitar_ferias'))
             
         qtd_dias = (dt_fim - dt_inicio).days + 1
-        
+        dias_abono = 0
+
+        # --- VALIDAÇÕES ESTRITAS DA CLT PARA FÉRIAS ---
+        if tipo == 'Férias':
+            if not current_user.data_admissao:
+                flash("Data de admissão ausente. O RH deve configurar seu perfil antes de solicitar férias.", "error")
+                return redirect(url_for('ponto.solicitar_ferias'))
+
+            # Validação de Saldo e Venda (Abono)
+            if vender_ferias:
+                dias_abono = qtd_dias // 2 # A lógica de venda costuma ser vender o terço. Ex: tira 20, vende 10.
+                if dias_abono > (dias_direito / 3):
+                    flash(f"A CLT permite vender no máximo 1/3 das férias (Max: {int(dias_direito/3)} dias).", "error")
+                    return redirect(url_for('ponto.solicitar_ferias'))
+                
+                total_descontado = qtd_dias + dias_abono
+                if total_descontado > saldo:
+                    flash(f"Saldo insuficiente. Você tem {saldo} dias disponíveis, mas o pedido (Descanso + Venda) totaliza {total_descontado} dias.", "error")
+                    return redirect(url_for('ponto.solicitar_ferias'))
+            else:
+                if qtd_dias > saldo:
+                    flash(f"Saldo insuficiente. Você possui apenas {saldo} dias.", "error")
+                    return redirect(url_for('ponto.solicitar_ferias'))
+
+            # Validação: Fracionamento (mínimo de 5 dias)
+            if qtd_dias < 5:
+                flash("Pela CLT (Reforma 2017), o período fracionado de férias não pode ser inferior a 5 dias.", "error")
+                return redirect(url_for('ponto.solicitar_ferias'))
+
+            # Validação: Início antes do DSR (Art. 134, §3º CLT)
+            # Ex: Se escala é 5x2 (folga Sáb/Dom), não pode começar Quinta(3) ou Sexta(4)
+            if current_user.escala == '5x2' and dt_inicio.weekday() in [3, 4]:
+                flash("Ilegal: O início das férias não pode ocorrer nos 2 dias que antecedem o repouso semanal (Sáb/Dom).", "error")
+                return redirect(url_for('ponto.solicitar_ferias'))
+
         nova_solicitacao = SolicitacaoAusencia(
             user_id=current_user.id, tipo_ausencia=tipo,
             data_inicio=dt_inicio, data_fim=dt_fim,
-            quantidade_dias=qtd_dias, observacao=obs
+            quantidade_dias=qtd_dias, abono_pecuniario=vender_ferias,
+            dias_abono=dias_abono, observacao=obs
         )
         db.session.add(nova_solicitacao)
         db.session.commit()
-        flash("Solicitação enviada com sucesso! Aguarde a aprovação do RH.", "success")
+        flash("Solicitação validada e enviada com sucesso ao RH!", "success")
         return redirect(url_for('ponto.solicitar_ferias'))
 
     minhas_solicitacoes = SolicitacaoAusencia.query.filter_by(user_id=current_user.id).order_by(SolicitacaoAusencia.data_solicitacao.desc()).all()
-    return render_template('ponto/solicitar_ferias.html', minhas_solicitacoes=minhas_solicitacoes)
+    
+    return render_template(
+        'ponto/solicitar_ferias.html', 
+        minhas_solicitacoes=minhas_solicitacoes,
+        dias_direito=dias_direito,
+        faltas=faltas,
+        saldo=saldo,
+        dias_usados=dias_usados
+    )
 
 @ponto_bp.route('/admin/ausencias', methods=['GET', 'POST'])
 @login_required
@@ -252,7 +319,6 @@ def gestao_ausencias():
             
         elif acao == 'remover':
             if solicitacao.status == 'Aprovado':
-                # Restaura as horas devidas no espelho de ponto do funcionário
                 user = solicitacao.user
                 for i in range(solicitacao.quantidade_dias):
                     dia_atual = solicitacao.data_inicio + timedelta(days=i)
@@ -278,20 +344,16 @@ def gestao_ausencias():
 @ponto_bp.route('/admin/controle-escala', methods=['GET'])
 @login_required
 def controle_escala():
-    """Tela Operacional do Master para ver quem deve trabalhar no dia."""
     if current_user.role != 'Master' and current_user.username != '50097952800': return redirect(url_for('main.dashboard'))
-    
     data_str = request.args.get('data_ref')
     if data_str: data_ref = datetime.strptime(data_str, '%Y-%m-%d').date()
     else: data_ref = get_brasil_time().date()
     
     usuarios = User.query.filter(User.username != '12345678900').order_by(User.real_name).all()
-    trabalhando = []
-    folga = []
+    trabalhando, folga = [], []
     
     for u in usuarios:
         ausencia = SolicitacaoAusencia.query.filter(SolicitacaoAusencia.user_id == u.id, SolicitacaoAusencia.status == 'Aprovado', SolicitacaoAusencia.data_inicio <= data_ref, SolicitacaoAusencia.data_fim >= data_ref).first()
-        
         escala_trabalho = True
         if u.escala == '5x2' and data_ref.weekday() >= 5: escala_trabalho = False
         elif u.escala == '12x36' and u.data_inicio_escala:
@@ -299,17 +361,11 @@ def controle_escala():
         
         pontos = PontoRegistro.query.filter_by(user_id=u.id, data_registro=data_ref).order_by(PontoRegistro.hora_registro).all()
         status_batida = f"{len(pontos)} marcações" if pontos else "Sem marcação"
-        
         info = {'user': u, 'ausencia': ausencia, 'batidas': status_batida}
         
-        if ausencia:
-            info['motivo'] = ausencia.tipo_ausencia
-            folga.append(info)
-        elif not escala_trabalho:
-            info['motivo'] = 'Folga Escala'
-            folga.append(info)
-        else:
-            trabalhando.append(info)
+        if ausencia: info['motivo'] = ausencia.tipo_ausencia; folga.append(info)
+        elif not escala_trabalho: info['motivo'] = 'Folga Escala'; folga.append(info)
+        else: trabalhando.append(info)
             
     return render_template('ponto/controle_escala.html', trabalhando=trabalhando, folga=folga, data_ref=data_ref)
 

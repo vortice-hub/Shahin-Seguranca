@@ -9,7 +9,6 @@ from datetime import date, timedelta, datetime
 from app.utils import data_por_extenso, time_to_minutes, format_minutes_to_hm
 
 def gerar_pdf_recibo(recibo, user):
-    """Gera o PDF do Recibo Financeiro."""
     buffer = io.BytesIO()
     p = canvas.Canvas(buffer, pagesize=A4)
     width, height = A4
@@ -82,18 +81,13 @@ def gerar_pdf_recibo(recibo, user):
     return buffer.read()
 
 def gerar_pdf_espelho_mensal(user, mes_ano_str):
-    """Gera PDF com a tabela de pontos do mês e integra atestados médicos e férias."""
     from app.models import PontoRegistro, PontoResumo
-    
     buffer = io.BytesIO()
     p = canvas.Canvas(buffer, pagesize=A4)
     width, height = A4
     
-    try:
-        ano, mes = map(int, mes_ano_str.split('-'))
-    except:
-        now = datetime.now()
-        ano, mes = now.year, now.month
+    try: ano, mes = map(int, mes_ano_str.split('-'))
+    except: now = datetime.now(); ano, mes = now.year, now.month
 
     p.setFont("Helvetica-Bold", 16)
     p.drawString(2*cm, height - 2*cm, "ESPELHO DE PONTO ELETRÔNICO")
@@ -114,12 +108,8 @@ def gerar_pdf_espelho_mensal(user, mes_ano_str):
     
     for dia in range(1, last_day + 1):
         dt_atual = date(ano, mes, dia)
-        
-        # Busca batidas no registro
         pontos = PontoRegistro.query.filter_by(user_id=user.id, data_registro=dt_atual).order_by(PontoRegistro.hora_registro).all()
         horarios_str = "  ".join([pt.hora_registro.strftime('%H:%M') for pt in pontos])
-        
-        # Busca o status consolidado do dia (Para ver se teve Atestado Aprovado, Férias, etc.)
         resumo_dia = PontoResumo.query.filter_by(user_id=user.id, data_referencia=dt_atual).first()
         
         meta = user.carga_horaria or 528
@@ -130,18 +120,15 @@ def gerar_pdf_espelho_mensal(user, mes_ano_str):
             
         trabalhado = 0
         for i in range(0, len(pontos), 2):
-            if i+1 < len(pontos):
-                trabalhado += (time_to_minutes(pontos[i+1].hora_registro) - time_to_minutes(pontos[i].hora_registro))
+            if i+1 < len(pontos): trabalhado += (time_to_minutes(pontos[i+1].hora_registro) - time_to_minutes(pontos[i].hora_registro))
         
         saldo = trabalhado - meta
-        
-        # LÓGICA DE AFASTAMENTO - Substitui tudo se o funcionário estiver afastado (Férias, Licença, Atestado)
         status_abonados = ['Atestado', 'Férias', 'Licença', 'Folga Prêmio', 'Ferias', 'Licenca', 'Folga Premio']
         
         if resumo_dia and resumo_dia.status_dia in status_abonados:
-            horarios_str = str(resumo_dia.status_dia).upper() # Escreve no PDF: "FÉRIAS", "ATESTADO"...
+            horarios_str = str(resumo_dia.status_dia).upper() 
             trabalhado = 0
-            saldo = 0  # Zera as horas devidas
+            saldo = 0  
             status = "Abono"
         else:
             status = "OK"
@@ -154,7 +141,6 @@ def gerar_pdf_espelho_mensal(user, mes_ano_str):
         dados.append([dt_atual.strftime('%d/%m'), dias_semana[dt_atual.weekday()], horarios_str, format_minutes_to_hm(trabalhado).replace('-', ''), format_minutes_to_hm(saldo), status])
     
     dados.append(['', '', 'TOTAL MENSAL', '', format_minutes_to_hm(total_saldo_min), ''])
-
     t = Table(dados, colWidths=[2*cm, 1.5*cm, 6*cm, 2*cm, 2*cm, 2.5*cm])
     t.setStyle(TableStyle([('BACKGROUND', (0,0), (-1,0), colors.navy), ('TEXTCOLOR', (0,0), (-1,0), colors.whitesmoke), ('ALIGN', (0,0), (-1,-1), 'CENTER'), ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'), ('FONTSIZE', (0,0), (-1,0), 9), ('BOTTOMPADDING', (0,0), (-1,0), 8), ('BACKGROUND', (0,-1), (-1,-1), colors.lightgrey), ('GRID', (0,0), (-1,-1), 0.5, colors.grey), ('FONTSIZE', (0,1), (-1,-1), 8)]))
     w, h = t.wrapOn(p, width, height)
@@ -174,22 +160,16 @@ def gerar_pdf_espelho_mensal(user, mes_ano_str):
     return buffer.read()
 
 def gerar_certificado_entrega(assinatura, user):
-    """Gera um PDF de auditoria (Certificado de Entrega Digital)."""
     buffer = io.BytesIO()
     p = canvas.Canvas(buffer, pagesize=A4)
     width, height = A4
-    
-    # Cabeçalho Oficial
     p.setFillColor(colors.navy)
     p.rect(0, height - 3*cm, width, 3*cm, fill=True, stroke=False)
     p.setFillColor(colors.white)
     p.setFont("Helvetica-Bold", 18)
     p.drawCentredString(width/2, height - 2*cm, "CERTIFICADO DE ENTREGA DIGITAL")
-    
-    # Corpo
     p.setFillColor(colors.black)
     p.setFont("Helvetica", 12)
-    
     texto = p.beginText(2.5*cm, height - 5*cm)
     texto.setLeading(20)
     texto.textLines(f"Certificamos, para os devidos fins de direito e prova, que o colaborador:")
@@ -199,31 +179,77 @@ def gerar_certificado_entrega(assinatura, user):
     texto.textLines(f"Realizou o ACESSO e CONFIRMAÇÃO DE RECEBIMENTO do documento digital")
     texto.textLines(f"identificado abaixo, através da plataforma SHAHIN GESTÃO.")
     p.drawText(texto)
-    
-    # Caixa de Dados Forenses
     p.setStrokeColor(colors.grey)
     p.rect(2.5*cm, height - 16*cm, 16*cm, 7*cm)
-    
     p.setFont("Helvetica-Bold", 12)
     p.drawString(3*cm, height - 10*cm, "DADOS DA TRANSAÇÃO DIGITAL")
-    
     p.setFont("Helvetica", 10)
     y_forense = height - 11*cm
     p.drawString(3*cm, y_forense, f"Documento: {assinatura.tipo_documento} (ID: {assinatura.documento_id})")
     p.drawString(3*cm, y_forense - 1*cm, f"Data/Hora do Acesso: {assinatura.data_assinatura.strftime('%d/%m/%Y %H:%M:%S')} (UTC-3)")
     p.drawString(3*cm, y_forense - 2*cm, f"Endereço IP de Origem: {assinatura.ip_address}")
     p.drawString(3*cm, y_forense - 3*cm, f"Dispositivo/Navegador: {assinatura.user_agent[:60]}...")
-    
     p.setFont("Helvetica-Bold", 10)
     p.drawString(3*cm, y_forense - 4.5*cm, "Hash de Integridade (SHA-256):")
     p.setFont("Courier", 8)
     p.drawString(3*cm, y_forense - 5*cm, f"{assinatura.hash_arquivo}")
-    
-    # Rodapé Legal
     p.setFont("Helvetica-Oblique", 9)
     p.drawCentredString(width/2, 3*cm, "Este registro eletrônico possui validade jurídica conforme MP 2.200-2/2001.")
     p.drawCentredString(width/2, 2.5*cm, "A integridade do arquivo pode ser verificada através do Hash acima.")
+    p.showPage()
+    p.save()
+    buffer.seek(0)
+    return buffer.read()
+
+# --- NOVO: GERADOR DE AVISO DE FÉRIAS OFICIAL (CLT) ---
+def gerar_aviso_ferias_pdf(solicitacao, user):
+    """Gera o documento legal de Aviso e Recibo de Férias."""
+    buffer = io.BytesIO()
+    p = canvas.Canvas(buffer, pagesize=A4)
+    width, height = A4
     
+    empresa = user.razao_social_empregadora or "LA SHAHIN SERVIÇOS DE SEGURANÇA LTDA"
+    cnpj = user.cnpj_empregador or "50.537.235/0001-95"
+    
+    p.setFont("Helvetica-Bold", 14)
+    p.drawCentredString(width/2, height - 3*cm, "AVISO DE FÉRIAS")
+    
+    p.setFont("Helvetica", 11)
+    texto = p.beginText(2.5*cm, height - 5*cm)
+    texto.setLeading(22)
+    texto.textLines(f"Empregador: {empresa} - CNPJ: {cnpj}")
+    texto.textLines(f"Empregado(a): {user.real_name}")
+    
+    cpf_fmt = user.cpf if user.cpf else "00000000000"
+    if len(cpf_fmt) == 11: cpf_fmt = f"{cpf_fmt[:3]}.{cpf_fmt[3:6]}.{cpf_fmt[6:9]}-{cpf_fmt[9:]}"
+    texto.textLines(f"CPF: {cpf_fmt}")
+    
+    texto.textLines("")
+    texto.textLines("Nos termos das disposições legais vigentes, avisamos que lhe serão concedidas")
+    texto.textLines(f"férias regulares de {solicitacao.quantidade_dias} dias.")
+    texto.textLines("")
+    texto.textLines(f"Período de Gozo: de {solicitacao.data_inicio.strftime('%d/%m/%Y')} a {solicitacao.data_fim.strftime('%d/%m/%Y')}.")
+    
+    if solicitacao.abono_pecuniario:
+        texto.textLines("")
+        texto.textLines(f"Abono Pecuniário Solicitado: SIM ({solicitacao.dias_abono} dias vendidas).")
+    
+    texto.textLines("")
+    texto.textLines("Solicitamos a devolução da via anexa com sua assinatura, confirmando o")
+    texto.textLines("recebimento deste aviso com a antecedência mínima legal de 30 (trinta) dias.")
+    p.drawText(texto)
+    
+    y_ass = height - 14*cm
+    p.line(2.5*cm, y_ass, 9*cm, y_ass)
+    p.setFont("Helvetica", 10)
+    p.drawString(3*cm, y_ass - 0.5*cm, "Assinatura do Empregado")
+    p.line(11*cm, y_ass, 17.5*cm, y_ass)
+    p.drawString(11.5*cm, y_ass - 0.5*cm, "Assinatura do Empregador")
+    
+    data_extenso = data_por_extenso(datetime.now().date())
+    p.setFont("Helvetica-Bold", 11)
+    p.drawCentredString(width/2, y_ass - 2.5*cm, f"Data da emissão do aviso: {data_extenso}.")
+
     p.showPage()
     p.save()
     buffer.seek(0)
