@@ -8,13 +8,43 @@
     <div class="flex gap-2">
         {% if pendentes_revisao > 0 %}
         <a href="/documentos/admin/revisao" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg shadow-lg text-xs transition flex items-center gap-2 animate-pulse">
-            <i class="fas fa-exclamation-circle"></i> REVISAR NOMES ({{ pendentes_revisao }})
+            <i class="fas fa-exclamation-circle"></i> REVISAR ({{ pendentes_revisao }})
         </a>
         {% endif %}
         <a href="/documentos/admin/auditoria" class="bg-slate-800 hover:bg-slate-900 text-white font-bold py-2 px-4 rounded-lg shadow-lg text-xs transition flex items-center gap-2">
             <i class="fas fa-shield-alt"></i> AUDITORIA
         </a>
     </div>
+</div>
+
+<div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm mb-6">
+    <form method="GET" action="{{ url_for('documentos.dashboard_documentos') }}" class="flex flex-col md:flex-row gap-3 items-end">
+        <div class="flex-1 w-full">
+            <label class="text-[10px] uppercase font-bold text-slate-400 mb-1 block">Nome do Funcionário</label>
+            <input type="text" name="nome" value="{{ f_nome }}" placeholder="Buscar por nome..." class="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm font-bold text-slate-700 outline-none focus:border-blue-500 transition">
+        </div>
+        <div class="w-full md:w-48">
+            <label class="text-[10px] uppercase font-bold text-slate-400 mb-1 block">Tipo de Documento</label>
+            <select name="tipo" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm font-bold text-slate-700 outline-none focus:border-blue-500 transition">
+                <option value="">Todos</option>
+                <option value="Holerite" {% if f_tipo == 'Holerite' %}selected{% endif %}>Holerite</option>
+                <option value="Espelho" {% if f_tipo == 'Espelho' %}selected{% endif %}>Espelho de Ponto</option>
+                <option value="Recibo" {% if f_tipo == 'Recibo' %}selected{% endif %}>Recibo</option>
+            </select>
+        </div>
+        <div class="w-full md:w-40">
+            <label class="text-[10px] uppercase font-bold text-slate-400 mb-1 block">Referência</label>
+            <input type="month" name="mes" value="{{ f_mes }}" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm font-bold text-slate-700 outline-none focus:border-blue-500 transition">
+        </div>
+        <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg text-sm transition shadow-md w-full md:w-auto">
+            <i class="fas fa-filter mr-1"></i> FILTRAR
+        </button>
+        {% if f_nome or f_mes or f_tipo %}
+        <a href="{{ url_for('documentos.dashboard_documentos') }}" class="bg-slate-200 hover:bg-slate-300 text-slate-600 font-bold py-2 px-4 rounded-lg text-sm transition w-full md:w-auto text-center">
+            LIMPAR
+        </a>
+        {% endif %}
+    </form>
 </div>
 
 <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
@@ -49,12 +79,12 @@
                     <th class="px-6 py-4">Ref/Valor</th>
                     <th class="px-6 py-4">Enviado em</th>
                     <th class="px-6 py-4 text-center">Status</th>
-                    <th class="px-6 py-4 text-right">Arquivo</th>
+                    <th class="px-6 py-4 text-right">Ações</th>
                 </tr>
             </thead>
             <tbody class="divide-y divide-slate-100">
                 {% for doc in historico %}
-                <tr class="hover:bg-slate-50 transition">
+                <tr class="hover:bg-slate-50 transition group">
                     <td class="px-6 py-4"><span class="bg-{{ doc['cor'] }}-50 text-{{ doc['cor'] }}-600 px-2 py-1 rounded text-[10px] font-bold uppercase border border-{{ doc['cor'] }}-100">{{ doc['tipo'] }}</span></td>
                     <td class="px-6 py-4 font-bold text-slate-800">{{ doc['usuario'] }}</td>
                     <td class="px-6 py-4 text-xs font-medium text-slate-600">{{ doc['info'] }}</td>
@@ -68,13 +98,19 @@
                         <span class="text-amber-500 font-bold text-[10px] uppercase flex items-center justify-center gap-1"><i class="fas fa-clock"></i> Enviado</span>
                         {% endif %}
                     </td>
-                    <td class="px-6 py-4 text-right">
+                    <td class="px-6 py-4 text-right flex items-center justify-end gap-2">
                         <form action="{{ url_for('documentos.' + doc['rota'], id=doc['id']) }}" method="POST" target="_blank">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                            <button type="submit" class="text-slate-400 hover:text-blue-600 p-2"><i class="fas fa-file-pdf text-lg"></i></button>
+                            <button type="submit" class="text-slate-400 hover:text-blue-600 p-2" title="Visualizar"><i class="fas fa-file-pdf text-lg"></i></button>
+                        </form>
+                        <form action="{{ url_for('documentos.excluir_documento', doc_type=doc['doc_type'], id=doc['id']) }}" method="POST" onsubmit="return confirm('ATENÇÃO: Deseja realmente excluir este documento? O funcionário perderá o acesso.');">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                            <button type="submit" class="text-slate-300 hover:text-red-500 p-2 transition" title="Excluir"><i class="fas fa-trash-alt text-lg"></i></button>
                         </form>
                     </td>
                 </tr>
+                {% else %}
+                <tr><td colspan="6" class="px-6 py-20 text-center text-slate-400 font-medium">Nenhum documento encontrado.</td></tr>
                 {% endfor %}
             </tbody>
         </table>
