@@ -1,0 +1,86 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="mb-8">
+    <h2 class="text-2xl font-bold text-slate-800 flex items-center gap-2">
+        <i class="fas fa-umbrella-beach text-emerald-600"></i> Gestão de Férias e Ausências
+    </h2>
+    <p class="text-sm text-slate-500">Aprove ou recuse os pedidos de férias, licenças e folgas programadas.</p>
+</div>
+
+<div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-10">
+    <div class="overflow-x-auto">
+        <table class="w-full text-left text-sm text-slate-600">
+            <thead class="bg-slate-50 text-[10px] uppercase text-slate-400 font-bold border-b border-slate-100">
+                <tr>
+                    <th class="px-6 py-4">Data do Pedido</th>
+                    <th class="px-6 py-4">Funcionário</th>
+                    <th class="px-6 py-4">Tipo</th>
+                    <th class="px-6 py-4">Período Solicitado</th>
+                    <th class="px-6 py-4">Dias</th>
+                    <th class="px-6 py-4 text-center">Status</th>
+                    <th class="px-6 py-4 text-right">Ações</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+                {% for solic in solicitacoes %}
+                <tr class="hover:bg-slate-50 transition">
+                    <td class="px-6 py-4 text-xs">{{ solic.data_solicitacao.strftime('%d/%m/%Y %H:%M') }}</td>
+                    <td class="px-6 py-4 font-bold text-slate-800">{{ solic.user.real_name }}</td>
+                    <td class="px-6 py-4">
+                        <span class="bg-slate-100 text-slate-600 px-2 py-1 rounded text-[10px] font-bold uppercase border border-slate-200">
+                            {{ solic.tipo_ausencia }}
+                        </span>
+                    </td>
+                    <td class="px-6 py-4 text-xs font-bold text-blue-600">
+                        {{ solic.data_inicio.strftime('%d/%m/%Y') }} a {{ solic.data_fim.strftime('%d/%m/%Y') }}
+                    </td>
+                    <td class="px-6 py-4 font-bold text-slate-700">
+                        {{ solic.quantidade_dias }}
+                    </td>
+                    <td class="px-6 py-4 text-center">
+                        {% if solic.status == 'Pendente' %}
+                            <span class="bg-amber-100 text-amber-600 px-2 py-1 rounded text-[10px] font-bold uppercase"><i class="fas fa-clock"></i> Pendente</span>
+                        {% elif solic.status == 'Aprovado' %}
+                            <span class="bg-emerald-100 text-emerald-600 px-2 py-1 rounded text-[10px] font-bold uppercase"><i class="fas fa-check"></i> Aprovado</span>
+                        {% else %}
+                            <span class="bg-red-100 text-red-600 px-2 py-1 rounded text-[10px] font-bold uppercase"><i class="fas fa-times"></i> Recusado</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-6 py-4 text-right flex items-center justify-end gap-2">
+                        
+                        {% if solic.observacao %}
+                        <button onclick="alert('Observação do Funcionário:\n\n{{ solic.observacao }}')" class="text-slate-400 hover:text-blue-500 p-2 rounded transition" title="Ler Observação">
+                            <i class="fas fa-comment-dots text-lg"></i>
+                        </button>
+                        {% endif %}
+
+                        {% if solic.status == 'Pendente' %}
+                            <form action="{{ url_for('ponto.gestao_ausencias') }}" method="POST" class="inline" onsubmit="return confirm('ATENÇÃO: Ao aprovar, o sistema irá preencher o espelho de ponto deste funcionário automaticamente com {{ solic.tipo_ausencia }}. Confirmar?');">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                <input type="hidden" name="solicitacao_id" value="{{ solic.id }}"/>
+                                <input type="hidden" name="acao" value="aprovar"/>
+                                <button type="submit" class="text-white bg-emerald-500 hover:bg-emerald-600 p-2 rounded transition" title="Aprovar e Lançar no Ponto">
+                                    <i class="fas fa-check"></i>
+                                </button>
+                            </form>
+                            
+                            <form action="{{ url_for('ponto.gestao_ausencias') }}" method="POST" class="inline" onsubmit="return confirm('Tem a certeza que deseja recusar este pedido?');">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                <input type="hidden" name="solicitacao_id" value="{{ solic.id }}"/>
+                                <input type="hidden" name="acao" value="recusar"/>
+                                <button type="submit" class="text-white bg-red-500 hover:bg-red-600 p-2 rounded transition" title="Recusar">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="7" class="px-6 py-20 text-center text-slate-400 font-medium">Nenhum pedido de ausência encontrado.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+

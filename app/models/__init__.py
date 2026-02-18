@@ -100,8 +100,8 @@ class Recibo(db.Model):
     tipo_assiduidade = db.Column(db.Boolean, default=False)
     tipo_cesta_basica = db.Column(db.Boolean, default=False)
     forma_pagamento = db.Column(db.String(50), default="Transferência")
-    url_arquivo = db.Column(db.String(500), nullable=True) # NOVA COLUNA DO CLOUD STORAGE
-    conteudo_pdf = db.Column(db.LargeBinary, nullable=True) # MANTIDO PARA FALLBACK DOS ANTIGOS
+    url_arquivo = db.Column(db.String(500), nullable=True) 
+    conteudo_pdf = db.Column(db.LargeBinary, nullable=True) 
     visualizado = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=get_brasil_time)
     user = db.relationship('User', backref=db.backref('recibos', lazy=True))
@@ -165,4 +165,18 @@ class Atestado(db.Model):
     status = db.Column(db.String(50), default='Processando')
     motivo_recusa = db.Column(db.String(500), nullable=True)
     user = db.relationship('User', backref=db.backref('atestados', lazy=True))
+
+# --- PROJETO ESCALA: Tabela de Férias e Ausências ---
+class SolicitacaoAusencia(db.Model):
+    __tablename__ = 'solicitacoes_ausencia'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    tipo_ausencia = db.Column(db.String(50), nullable=False) # Ferias, Folga Premio, Licenca
+    data_inicio = db.Column(db.Date, nullable=False)
+    data_fim = db.Column(db.Date, nullable=False)
+    quantidade_dias = db.Column(db.Integer, nullable=False)
+    observacao = db.Column(db.Text, nullable=True)
+    status = db.Column(db.String(20), default='Pendente') # Pendente, Aprovado, Recusado
+    data_solicitacao = db.Column(db.DateTime, default=get_brasil_time)
+    user = db.relationship('User', backref=db.backref('ausencias', lazy=True))
 

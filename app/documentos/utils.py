@@ -82,7 +82,7 @@ def gerar_pdf_recibo(recibo, user):
     return buffer.read()
 
 def gerar_pdf_espelho_mensal(user, mes_ano_str):
-    """Gera PDF com a tabela de pontos do mês e integra atestados médicos."""
+    """Gera PDF com a tabela de pontos do mês e integra atestados médicos e férias."""
     from app.models import PontoRegistro, PontoResumo
     
     buffer = io.BytesIO()
@@ -119,7 +119,7 @@ def gerar_pdf_espelho_mensal(user, mes_ano_str):
         pontos = PontoRegistro.query.filter_by(user_id=user.id, data_registro=dt_atual).order_by(PontoRegistro.hora_registro).all()
         horarios_str = "  ".join([pt.hora_registro.strftime('%H:%M') for pt in pontos])
         
-        # Busca o status consolidado do dia (Para ver se teve Atestado Aprovado)
+        # Busca o status consolidado do dia (Para ver se teve Atestado Aprovado, Férias, etc.)
         resumo_dia = PontoResumo.query.filter_by(user_id=user.id, data_referencia=dt_atual).first()
         
         meta = user.carga_horaria or 528
@@ -135,11 +135,13 @@ def gerar_pdf_espelho_mensal(user, mes_ano_str):
         
         saldo = trabalhado - meta
         
-        # LÓGICA DO ATESTADO - Substitui tudo se o funcionário estiver afastado
-        if resumo_dia and resumo_dia.status_dia == 'Atestado':
-            horarios_str = "Atestado Médico"
+        # LÓGICA DE AFASTAMENTO - Substitui tudo se o funcionário estiver afastado (Férias, Licença, Atestado)
+        status_abonados = ['Atestado', 'Férias', 'Licença', 'Folga Prêmio', 'Ferias', 'Licenca', 'Folga Premio']
+        
+        if resumo_dia and resumo_dia.status_dia in status_abonados:
+            horarios_str = str(resumo_dia.status_dia).upper() # Escreve no PDF: "FÉRIAS", "ATESTADO"...
             trabalhado = 0
-            saldo = 0  # Ele não fica devendo e nem ganha hora extra
+            saldo = 0  # Zera as horas devidas
             status = "Abono"
         else:
             status = "OK"

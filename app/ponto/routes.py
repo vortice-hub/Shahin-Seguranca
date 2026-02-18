@@ -2,12 +2,13 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from flask_login import login_required, current_user
 # ADICIONADO: Importação do 'csrf' para permitir a isenção na rota da API
 from app.extensions import db, csrf
-from app.models import PontoRegistro, PontoResumo, User, PontoAjuste
+from app.models import PontoRegistro, PontoResumo, User, PontoAjuste, SolicitacaoAusencia
 from app.utils import get_brasil_time, calcular_dia, format_minutes_to_hm, data_por_extenso
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from sqlalchemy import func
 from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadSignature
 import logging
+import calendar
 
 # Configuração de Log
 logger = logging.getLogger(__name__)
@@ -142,7 +143,18 @@ def registrar_ponto():
     bloqueado = False
     motivo = ""
     
-    if current_user.escala == '5x2' and hoje.weekday() >= 5: 
+    # Verifica ausência aprovada (Férias) antes de bloquear por escala
+    ausencia = SolicitacaoAusencia.query.filter(
+        SolicitacaoAusencia.user_id == current_user.id,
+        SolicitacaoAusencia.status == 'Aprovado',
+        SolicitacaoAusencia.data_inicio <= hoje,
+        SolicitacaoAusencia.data_fim >= hoje
+    ).first()
+
+    if ausencia:
+        bloqueado = True
+        motivo = f"Afastamento programado: {ausencia.tipo_ausencia}"
+    elif current_user.escala == '5x2' and hoje.weekday() >= 5: 
         bloqueado = True
         motivo = "Fim de semana (Escala 5x2)."
     elif current_user.escala == '12x36' and current_user.data_inicio_escala:
@@ -268,3 +280,127 @@ def solicitar_ajuste():
                          data_sel=data_selecionada, 
                          meus_ajustes=meus_ajustes, 
                          extras=dados_extras)
+
+# ==========================================
+# PROJETO ESCALA: CALENDÁRIO E AUSÊNCIAS
+# ==========================================
+
+@ponto_bp.route('/calendario', methods=['GET', 'POST'])
+@login_required
+def meu_calendario():
+    hoje = get_brasil_time().date()
+    ano = request.args.get('ano', hoje.year, type=int)
+    mes = request.args.get('mes', hoje.month, type=int)
+    
+    # Processa Solicitação de Férias/Licença
+    if request.method == 'POST':
+        tipo = request.form.get('tipo_ausencia')
+        dt_inicio = datetime.strptime(request.form.get('data_inicio'), '%Y-%m-%d').date()
+        dt_fim = datetime.strptime(request.form.get('data_fim'), '%Y-%m-%d').date()
+        obs = request.form.get('observacao', '')
+        
+        if dt_inicio > dt_fim:
+            flash("A data de início não pode ser maior que a data de fim.", "error")
+            return redirect(url_for('ponto.meu_calendario', ano=ano, mes=mes))
+            
+        qtd_dias = (dt_fim - dt_inicio).days + 1
+        
+        nova_solicitacao = SolicitacaoAusencia(
+            user_id=current_user.id,
+            tipo_ausencia=tipo,
+            data_inicio=dt_inicio,
+            data_fim=dt_fim,
+            quantidade_dias=qtd_dias,
+            observacao=obs
+        )
+        db.session.add(nova_solicitacao)
+        db.session.commit()
+        flash("Solicitação enviada com sucesso! Aguarde a aprovação do RH.", "success")
+        return redirect(url_for('ponto.meu_calendario', ano=ano, mes=mes))
+
+    # Constrói o Calendário do Mês
+    _, num_dias = calendar.monthrange(ano, mes)
+    dias_mes = []
+    
+    for dia in range(1, num_dias + 1):
+        dt_atual = date(ano, mes, dia)
+        tipo_dia = 'Trabalho'
+        
+        # 1. Verifica se tem Férias/Licença aprovada neste dia
+        ausencia = SolicitacaoAusencia.query.filter(
+            SolicitacaoAusencia.user_id == current_user.id,
+            SolicitacaoAusencia.status == 'Aprovado',
+            SolicitacaoAusencia.data_inicio <= dt_atual,
+            SolicitacaoAusencia.data_fim >= dt_atual
+        ).first()
+        
+        if ausencia:
+            tipo_dia = ausencia.tipo_ausencia # "Férias", "Licença", etc.
+        else:
+            # 2. Verifica a regra da Escala
+            if current_user.escala == '5x2' and dt_atual.weekday() >= 5:
+                tipo_dia = 'Folga'
+            elif current_user.escala == '12x36' and current_user.data_inicio_escala:
+                if (dt_atual - current_user.data_inicio_escala).days % 2 != 0:
+                    tipo_dia = 'Folga'
+        
+        dias_mes.append({'data': dt_atual, 'tipo': tipo_dia, 'dia_semana': dt_atual.weekday()})
+
+    # Busca as solicitações do usuário para exibir o histórico
+    minhas_solicitacoes = SolicitacaoAusencia.query.filter_by(user_id=current_user.id).order_by(SolicitacaoAusencia.data_solicitacao.desc()).limit(10).all()
+
+    return render_template('ponto/meu_calendario.html', 
+                           ano=ano, 
+                           mes=mes, 
+                           dias_mes=dias_mes, 
+                           minhas_solicitacoes=minhas_solicitacoes,
+                           hoje=hoje)
+
+@ponto_bp.route('/admin/ausencias', methods=['GET', 'POST'])
+@login_required
+def gestao_ausencias():
+    # Permissão restrita ao Master ou RH
+    if current_user.role != 'Master' and current_user.username != '50097952800':
+        flash("Acesso restrito.", "error")
+        return redirect(url_for('main.dashboard'))
+
+    if request.method == 'POST':
+        solic_id = request.form.get('solicitacao_id')
+        acao = request.form.get('acao')
+        solicitacao = SolicitacaoAusencia.query.get_or_404(solic_id)
+        
+        if acao == 'aprovar':
+            solicitacao.status = 'Aprovado'
+            
+            # Mágica de Ponto: Abater as horas de todos os dias
+            for i in range(solicitacao.quantidade_dias):
+                dia_atual = solicitacao.data_inicio + timedelta(days=i)
+                ponto = PontoResumo.query.filter_by(user_id=solicitacao.user_id, data_referencia=dia_atual).first()
+                
+                if ponto:
+                    ponto.status_dia = solicitacao.tipo_ausencia
+                    ponto.minutos_esperados = 0
+                    ponto.minutos_saldo = ponto.minutos_trabalhados
+                else:
+                    novo_ponto = PontoResumo(
+                        user_id=solicitacao.user_id,
+                        data_referencia=dia_atual,
+                        minutos_trabalhados=0,
+                        minutos_esperados=0,
+                        minutos_saldo=0,
+                        status_dia=solicitacao.tipo_ausencia
+                    )
+                    db.session.add(novo_ponto)
+            
+            flash(f"Solicitação aprovada. O ponto do(a) {solicitacao.user.real_name} foi atualizado.", "success")
+            
+        elif acao == 'recusar':
+            solicitacao.status = 'Recusado'
+            flash("Solicitação recusada.", "success")
+            
+        db.session.commit()
+        return redirect(url_for('ponto.gestao_ausencias'))
+
+    todas_solicitacoes = SolicitacaoAusencia.query.order_by(SolicitacaoAusencia.data_solicitacao.desc()).all()
+    return render_template('ponto/gestao_ausencias.html', solicitacoes=todas_solicitacoes)
+

@@ -1,0 +1,147 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="mb-6 flex flex-col md:flex-row justify-between items-center gap-4">
+    <div>
+        <h2 class="text-2xl font-bold text-slate-800 flex items-center gap-2">
+            <i class="fas fa-calendar-alt text-emerald-600"></i> Meu Calendário e Escala
+        </h2>
+        <p class="text-sm text-slate-500 mt-1">Veja seus dias de trabalho e solicite ausências programadas.</p>
+    </div>
+    <div class="flex gap-2">
+        <a href="{{ url_for('ponto.meu_calendario', ano=ano if mes > 1 else ano-1, mes=mes-1 if mes > 1 else 12) }}" class="bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 font-bold py-2 px-4 rounded shadow-sm transition">
+            <i class="fas fa-chevron-left"></i>
+        </a>
+        <div class="bg-white border border-slate-200 text-slate-800 font-bold py-2 px-6 rounded shadow-sm flex items-center justify-center min-w-[150px]">
+            {{ '%02d' % mes }} / {{ ano }}
+        </div>
+        <a href="{{ url_for('ponto.meu_calendario', ano=ano if mes < 12 else ano+1, mes=mes+1 if mes < 12 else 1) }}" class="bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 font-bold py-2 px-4 rounded shadow-sm transition">
+            <i class="fas fa-chevron-right"></i>
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+    
+    <div class="lg:col-span-2 bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+        <h3 class="font-bold text-slate-800 mb-4 border-b pb-2 uppercase text-sm">Escala do Mês</h3>
+        
+        <div class="flex flex-wrap gap-4 mb-6 text-xs font-bold text-slate-600">
+            <div class="flex items-center gap-1"><span class="w-3 h-3 rounded bg-blue-100 border border-blue-200 inline-block"></span> Trabalho</div>
+            <div class="flex items-center gap-1"><span class="w-3 h-3 rounded bg-slate-100 border border-slate-200 inline-block"></span> Folga</div>
+            <div class="flex items-center gap-1"><span class="w-3 h-3 rounded bg-emerald-100 border border-emerald-200 inline-block"></span> Férias/Licença</div>
+        </div>
+
+        <div class="grid grid-cols-7 gap-2 text-center mb-2">
+            <div class="text-[10px] font-bold text-slate-400 uppercase">Seg</div>
+            <div class="text-[10px] font-bold text-slate-400 uppercase">Ter</div>
+            <div class="text-[10px] font-bold text-slate-400 uppercase">Qua</div>
+            <div class="text-[10px] font-bold text-slate-400 uppercase">Qui</div>
+            <div class="text-[10px] font-bold text-slate-400 uppercase">Sex</div>
+            <div class="text-[10px] font-bold text-slate-400 uppercase">Sáb</div>
+            <div class="text-[10px] font-bold text-slate-400 uppercase">Dom</div>
+        </div>
+
+        <div class="grid grid-cols-7 gap-2">
+            {% if dias_mes %}
+                {% for _ in range(dias_mes[0].dia_semana) %}
+                    <div class="p-2 rounded bg-transparent"></div>
+                {% endfor %}
+            {% endif %}
+
+            {% for d in dias_mes %}
+                {% set is_today = (d.data == hoje) %}
+                
+                {% if d.tipo == 'Trabalho' %}
+                    <div class="p-2 rounded border border-blue-200 bg-blue-50 text-blue-800 flex flex-col items-center justify-center relative {{ 'ring-2 ring-blue-500 font-black' if is_today else '' }}">
+                        <span class="text-lg font-bold">{{ d.data.day }}</span>
+                        <span class="text-[9px] uppercase font-bold mt-1 text-blue-500 opacity-80"><i class="fas fa-briefcase"></i></span>
+                    </div>
+                {% elif d.tipo == 'Folga' %}
+                    <div class="p-2 rounded border border-slate-200 bg-slate-50 text-slate-400 flex flex-col items-center justify-center {{ 'ring-2 ring-slate-400 font-black text-slate-600' if is_today else '' }}">
+                        <span class="text-lg font-bold">{{ d.data.day }}</span>
+                        <span class="text-[9px] uppercase font-bold mt-1 opacity-50"><i class="fas fa-bed"></i></span>
+                    </div>
+                {% else %}
+                    <div class="p-2 rounded border border-emerald-200 bg-emerald-50 text-emerald-800 flex flex-col items-center justify-center {{ 'ring-2 ring-emerald-500 font-black' if is_today else '' }}" title="{{ d.tipo }}">
+                        <span class="text-lg font-bold">{{ d.data.day }}</span>
+                        <span class="text-[8px] uppercase font-bold mt-1 text-emerald-600 truncate w-full text-center">{{ d.tipo[:6] }}..</span>
+                    </div>
+                {% endif %}
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="flex flex-col gap-6">
+        
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <div class="bg-emerald-600 p-4 text-white">
+                <h3 class="font-bold flex items-center gap-2"><i class="fas fa-plane-departure"></i> Solicitar Ausência</h3>
+                <p class="text-xs text-emerald-100 mt-1">Férias, Licenças ou Folga Prêmio</p>
+            </div>
+            <div class="p-5">
+                <form method="POST" action="{{ url_for('ponto.meu_calendario', ano=ano, mes=mes) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                    
+                    <div class="mb-3">
+                        <label class="block text-[10px] uppercase font-bold text-slate-500 mb-1">Tipo de Ausência</label>
+                        <select name="tipo_ausencia" required class="w-full bg-slate-50 border border-slate-200 rounded px-3 py-2 text-sm font-bold text-slate-700 outline-none focus:border-emerald-500 transition">
+                            <option value="Férias">Férias</option>
+                            <option value="Folga Prêmio">Folga Prêmio</option>
+                            <option value="Licença Maternidade/Paternidade">Licença Maternidade/Paternidade</option>
+                            <option value="Licença Casamento/Óbito">Licença Casamento/Óbito</option>
+                            <option value="Outros">Outros</option>
+                        </select>
+                    </div>
+                    
+                    <div class="grid grid-cols-2 gap-3 mb-3">
+                        <div>
+                            <label class="block text-[10px] uppercase font-bold text-slate-500 mb-1">Data Início</label>
+                            <input type="date" name="data_inicio" required class="w-full bg-slate-50 border border-slate-200 rounded px-2 py-2 text-xs font-bold text-slate-700 outline-none focus:border-emerald-500 transition">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] uppercase font-bold text-slate-500 mb-1">Data Fim</label>
+                            <input type="date" name="data_fim" required class="w-full bg-slate-50 border border-slate-200 rounded px-2 py-2 text-xs font-bold text-slate-700 outline-none focus:border-emerald-500 transition">
+                        </div>
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="block text-[10px] uppercase font-bold text-slate-500 mb-1">Observações (Opcional)</label>
+                        <textarea name="observacao" rows="2" class="w-full bg-slate-50 border border-slate-200 rounded px-3 py-2 text-xs text-slate-700 outline-none focus:border-emerald-500 transition" placeholder="Detalhes adicionais..."></textarea>
+                    </div>
+
+                    <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 rounded shadow transition text-sm flex items-center justify-center gap-2">
+                        <i class="fas fa-paper-plane"></i> ENVIAR SOLICITAÇÃO
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+            <h3 class="font-bold text-slate-800 mb-3 border-b pb-2 text-sm">Minhas Solicitações</h3>
+            <div class="space-y-3 max-h-[250px] overflow-y-auto pr-2">
+                {% for sol in minhas_solicitacoes %}
+                <div class="p-3 border border-slate-100 rounded bg-slate-50 flex flex-col gap-1">
+                    <div class="flex justify-between items-start">
+                        <span class="font-bold text-xs text-slate-800">{{ sol.tipo_ausencia }}</span>
+                        {% if sol.status == 'Pendente' %}
+                            <span class="text-[9px] bg-amber-100 text-amber-600 px-2 py-0.5 rounded font-bold uppercase">Pendente</span>
+                        {% elif sol.status == 'Aprovado' %}
+                            <span class="text-[9px] bg-emerald-100 text-emerald-600 px-2 py-0.5 rounded font-bold uppercase">Aprovado</span>
+                        {% else %}
+                            <span class="text-[9px] bg-red-100 text-red-600 px-2 py-0.5 rounded font-bold uppercase">Recusado</span>
+                        {% endif %}
+                    </div>
+                    <div class="text-[10px] text-slate-500 font-medium">
+                        De {{ sol.data_inicio.strftime('%d/%m') }} a {{ sol.data_fim.strftime('%d/%m') }} ({{ sol.quantidade_dias }} dias)
+                    </div>
+                </div>
+                {% else %}
+                <div class="text-center py-4 text-xs text-slate-400">Nenhuma solicitação recente.</div>
+                {% endfor %}
+            </div>
+        </div>
+
+    </div>
+</div>
+{% endblock %}
+
