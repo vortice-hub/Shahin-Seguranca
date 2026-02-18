@@ -1,0 +1,97 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="mb-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+    <div>
+        <h2 class="text-2xl font-bold text-slate-800 flex items-center gap-2">
+            <i class="fas fa-users-cog text-blue-600"></i> Controle de Escala
+        </h2>
+        <p class="text-sm text-slate-500 mt-1">Visão operacional: Saiba quem deve estar no posto e quem está de folga.</p>
+    </div>
+    
+    <div class="bg-white p-2 rounded-lg border border-slate-200 shadow-sm flex items-center gap-3">
+        <label class="text-xs font-bold text-slate-500 uppercase ml-2"><i class="fas fa-calendar-day mr-1"></i> Data Base:</label>
+        <form action="{{ url_for('ponto.controle_escala') }}" method="GET" class="m-0 p-0">
+            <input type="date" name="data_ref" value="{{ data_ref.strftime('%Y-%m-%d') }}" onchange="this.form.submit()" 
+                   class="bg-slate-50 border border-slate-200 text-slate-800 font-bold py-1.5 px-3 rounded outline-none focus:border-blue-500 transition text-sm cursor-pointer">
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
+    
+    <div class="bg-white rounded-xl border border-blue-200 shadow-sm overflow-hidden flex flex-col h-full">
+        <div class="bg-blue-600 p-4 text-white flex justify-between items-center">
+            <h3 class="font-bold flex items-center gap-2"><i class="fas fa-briefcase"></i> Escala de Trabalho</h3>
+            <span class="bg-white text-blue-700 font-black text-xs px-2.5 py-1 rounded-full">{{ trabalhando|length }}</span>
+        </div>
+        
+        <div class="p-4 space-y-3 max-h-[600px] overflow-y-auto bg-slate-50/50">
+            {% for item in trabalhando %}
+            <div class="bg-white p-4 rounded-lg border border-slate-200 shadow-sm flex flex-col md:flex-row justify-between md:items-center gap-3 hover:border-blue-300 transition relative overflow-hidden">
+                <div class="absolute left-0 top-0 bottom-0 w-1 {{ 'bg-amber-400' if 'Sem' in item.batidas else 'bg-emerald-500' }}"></div>
+                
+                <div class="pl-2">
+                    <h4 class="font-bold text-slate-800 text-sm">{{ item.user.real_name }}</h4>
+                    <p class="text-[10px] text-slate-400 font-bold uppercase mt-0.5"><i class="fas fa-id-badge mr-1"></i> {{ item.user.escala }} | {{ item.user.cargo or item.user.role }}</p>
+                </div>
+                
+                <div>
+                    {% if 'Sem' in item.batidas %}
+                        <span class="inline-flex items-center gap-1.5 bg-amber-50 text-amber-700 border border-amber-200 px-2.5 py-1 rounded-md text-[10px] font-black uppercase">
+                            <i class="fas fa-clock"></i> Pendente Batida
+                        </span>
+                    {% else %}
+                        <span class="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-1 rounded-md text-[10px] font-black uppercase">
+                            <i class="fas fa-check-double"></i> {{ item.batidas }}
+                        </span>
+                    {% endif %}
+                </div>
+            </div>
+            {% else %}
+            <div class="text-center py-10 text-slate-400">
+                <i class="fas fa-bed text-4xl mb-3 opacity-30 block"></i>
+                <p class="text-sm">Nenhum funcionário escalado para trabalhar nesta data.</p>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col h-full">
+        <div class="bg-slate-700 p-4 text-white flex justify-between items-center">
+            <h3 class="font-bold flex items-center gap-2"><i class="fas fa-bed"></i> Folgas e Ausências</h3>
+            <span class="bg-slate-900 text-white font-black text-xs px-2.5 py-1 rounded-full">{{ folga|length }}</span>
+        </div>
+        
+        <div class="p-4 space-y-3 max-h-[600px] overflow-y-auto bg-slate-50">
+            {% for item in folga %}
+            <div class="bg-white p-4 rounded-lg border border-slate-200 shadow-sm flex flex-col md:flex-row justify-between md:items-center gap-3 opacity-80 hover:opacity-100 transition">
+                
+                <div>
+                    <h4 class="font-bold text-slate-700 text-sm line-through decoration-slate-300">{{ item.user.real_name }}</h4>
+                    <p class="text-[10px] text-slate-400 font-bold uppercase mt-0.5">{{ item.user.escala }}</p>
+                </div>
+                
+                <div>
+                    {% if item.motivo == 'Folga Escala' %}
+                        <span class="inline-flex items-center gap-1.5 bg-slate-100 text-slate-600 border border-slate-200 px-2.5 py-1 rounded-md text-[10px] font-black uppercase shadow-sm">
+                            <i class="fas fa-mug-hot"></i> Folga (Escala)
+                        </span>
+                    {% else %}
+                        <span class="inline-flex items-center gap-1.5 bg-emerald-100 text-emerald-700 border border-emerald-200 px-2.5 py-1 rounded-md text-[10px] font-black uppercase shadow-sm" title="Ausência Programada">
+                            <i class="fas fa-plane-departure"></i> {{ item.motivo }}
+                        </span>
+                    {% endif %}
+                </div>
+            </div>
+            {% else %}
+            <div class="text-center py-10 text-slate-400">
+                <i class="fas fa-users text-4xl mb-3 opacity-30 block"></i>
+                <p class="text-sm">Nenhum funcionário de folga nesta data.</p>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+</div>
+{% endblock %}
+

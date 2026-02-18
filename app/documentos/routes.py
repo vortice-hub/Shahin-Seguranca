@@ -137,7 +137,6 @@ def baixar_holerite(id):
     arquivo_bytes = None
     nome_download = "documento.pdf"
     
-    # Fallback seguro: Tenta na nuvem primeiro, depois no banco de dados (para os antigos)
     if doc.url_arquivo:
         arquivo_bytes = baixar_bytes_storage(doc.url_arquivo)
         nome_download = f"holerite_{doc.mes_referencia}.pdf"
@@ -181,8 +180,6 @@ def baixar_recibo(id):
         return redirect(url_for('main.dashboard'))
         
     arquivo_bytes = None
-    
-    # Fallback seguro: Tenta na nuvem primeiro, se não tiver vai no banco
     if doc.url_arquivo:
         arquivo_bytes = baixar_bytes_storage(doc.url_arquivo)
     elif doc.conteudo_pdf:
@@ -194,21 +191,15 @@ def baixar_recibo(id):
         
     if doc.user_id == current_user.id and not doc.visualizado:
         doc.visualizado = True
-        
         user_agent_info = request.headers.get('User-Agent')
-        if user_agent_info:
-            user_agent_info = user_agent_info[:250]
-        else:
-            user_agent_info = 'Desconhecido'
+        if user_agent_info: user_agent_info = user_agent_info[:250]
+        else: user_agent_info = 'Desconhecido'
 
         assinatura = AssinaturaDigital(
-            user_id=current_user.id,
-            documento_id=doc.id,
+            user_id=current_user.id, documento_id=doc.id,
             tipo_documento=f"Recibo - R$ {doc.valor}",
             hash_arquivo=calcular_hash_arquivo(arquivo_bytes),
-            data_assinatura=get_brasil_time(),
-            ip_address=get_client_ip(),
-            user_agent=user_agent_info
+            data_assinatura=get_brasil_time(), ip_address=get_client_ip(), user_agent=user_agent_info
         )
         db.session.add(assinatura)
         db.session.commit()
@@ -233,7 +224,7 @@ def meus_documentos():
 @permission_required('DOCUMENTOS')
 def revisao_holerites():
     pendentes = Holerite.query.filter_by(status='Revisao').all()
-    funcionarios = User.query.filter(User.role != 'Terminal').order_by(User.real_name).all()
+    funcionarios = User.query.filter(User.username != '12345678900').order_by(User.real_name).all()
     return render_template('documentos/revisao.html', pendentes=pendentes, funcionarios=funcionarios)
 
 @documentos_bp.route('/admin/revisao/limpar', methods=['POST'])
@@ -256,7 +247,7 @@ def vincular_holerite():
 @login_required
 @permission_required('AUDITORIA')
 def revisao_auditoria():
-    usuarios = User.query.filter(User.role != 'Terminal').order_by(User.real_name).all()
+    usuarios = User.query.filter(User.username != '12345678900').order_by(User.real_name).all()
     auditores = []
     for u in usuarios:
         assinaturas = AssinaturaDigital.query.filter_by(user_id=u.id).order_by(AssinaturaDigital.data_assinatura.desc()).all()
@@ -271,17 +262,13 @@ def novo_recibo():
     if request.method == 'POST':
         u = User.query.get(request.form.get('user_id'))
         r = Recibo(user_id=u.id, valor=float(request.form.get('valor', 0)), data_pagamento=get_brasil_time().date())
-        
-        # Gera o PDF e salva DIRETO NO CLOUD STORAGE, sem encher o banco de dados
         pdf_bytes = gerar_pdf_recibo(r, u)
         mes_ref = get_brasil_time().strftime('%Y-%m')
         caminho_blob = salvar_no_storage(pdf_bytes, f"recibos/{mes_ref}")
-        
         r.url_arquivo = caminho_blob
-        
         db.session.add(r); db.session.commit()
         return redirect(url_for('documentos.dashboard_documentos'))
-    users = User.query.filter(User.role!='Terminal').all()
+    users = User.query.filter(User.username != '12345678900').all()
     return render_template('documentos/novo_recibo.html', users=users, hoje=get_brasil_time().strftime('%Y-%m-%d'))
 
 @documentos_bp.route('/admin/disparar-espelhos', methods=['POST'])
@@ -289,15 +276,21 @@ def novo_recibo():
 @permission_required('DOCUMENTOS')
 def disparar_espelhos():
     mes = request.form.get('mes_ref')
-    users = User.query.filter(User.role!='Terminal', User.username!='12345678900').all()
+    # CORREÇÃO: Garante que todos (inclusive o Master) recebam o espelho, isolando erros num bloco try-except
+    users = User.query.filter(User.username != '12345678900').all()
+    sucessos = 0
+    
     for u in users:
-        pdf_bytes = gerar_pdf_espelho_mensal(u, mes)
-        
-        # Salva o PDF gerado DIRETO NO CLOUD STORAGE
-        caminho_blob = salvar_no_storage(pdf_bytes, f"espelhos/{mes}")
-        
-        db.session.add(Holerite(user_id=u.id, mes_referencia=mes, url_arquivo=caminho_blob, status='Enviado', enviado_em=get_brasil_time()))
+        try:
+            pdf_bytes = gerar_pdf_espelho_mensal(u, mes)
+            caminho_blob = salvar_no_storage(pdf_bytes, f"espelhos/{mes}")
+            db.session.add(Holerite(user_id=u.id, mes_referencia=mes, url_arquivo=caminho_blob, status='Enviado', enviado_em=get_brasil_time()))
+            sucessos += 1
+        except Exception as e:
+            print(f"Erro ao gerar espelho para {u.real_name}: {e}")
+            
     db.session.commit()
+    flash(f'Processamento concluído. {sucessos} espelhos gerados com sucesso!', 'success')
     return redirect(url_for('documentos.dashboard_documentos'))
 
 @documentos_bp.route('/api/user-info/<int:id>')
@@ -312,28 +305,17 @@ def get_user_info_api(id):
 def baixar_certificado_auditoria(id):
     assinatura = AssinaturaDigital.query.get_or_404(id)
     usuario = User.query.get(assinatura.user_id)
-    
-    if not usuario:
-        flash("Usuário vinculado à assinatura não encontrado.", "error")
-        return redirect(url_for('documentos.revisao_auditoria'))
-
+    if not usuario: return redirect(url_for('documentos.revisao_auditoria'))
     usuario.nome = usuario.real_name
 
     try:
         pdf_bytes = gerar_certificado_entrega(assinatura, usuario)
-        return send_file(
-            io.BytesIO(pdf_bytes),
-            mimetype='application/pdf',
-            as_attachment=True,
-            download_name=f"Auditoria_{usuario.real_name}_{assinatura.id}.pdf"
-        )
+        return send_file(io.BytesIO(pdf_bytes), mimetype='application/pdf', as_attachment=True, download_name=f"Auditoria_{usuario.real_name}_{assinatura.id}.pdf")
     except Exception as e:
-        print(f"Erro ao gerar certificado de auditoria: {e}")
-        flash("Erro interno ao gerar o documento de auditoria. Verifique os logs.", "error")
+        print(f"Erro: {e}")
         return redirect(url_for('documentos.revisao_auditoria'))
 
-# --- ROTAS DE ATESTADO (COLABORADOR E MASTER) ---
-
+# --- ROTAS DE ATESTADO ---
 @documentos_bp.route('/atestados/meus')
 @login_required
 def meus_atestados():
@@ -348,43 +330,26 @@ def enviar_atestado():
         if not file or file.filename == '':
             flash('Nenhum arquivo selecionado.', 'error')
             return redirect(request.url)
-        
         try:
             file_bytes = file.read()
             mes_ref = get_brasil_time().strftime('%Y-%m')
-            
             caminho_blob = salvar_no_storage(file_bytes, f"atestados/{mes_ref}")
-            if not caminho_blob:
-                flash('Erro ao salvar o arquivo no servidor.', 'error')
-                return redirect(request.url)
+            if not caminho_blob: return redirect(request.url)
 
             dados_ia = analisar_atestado_vision(file_bytes, current_user.real_name)
-            
-            data_inicio_db = None
-            if dados_ia['data_inicio']:
-                data_inicio_db = datetime.strptime(dados_ia['data_inicio'], '%Y-%m-%d').date()
+            data_inicio_db = datetime.strptime(dados_ia['data_inicio'], '%Y-%m-%d').date() if dados_ia['data_inicio'] else None
 
             novo_atestado = Atestado(
-                user_id=current_user.id,
-                data_envio=get_brasil_time(),
-                url_arquivo=caminho_blob,
-                data_inicio_afastamento=data_inicio_db,
-                quantidade_dias=dados_ia['dias_afastamento'],
-                texto_extraido=dados_ia['texto_bruto'],
-                status='Revisao' 
+                user_id=current_user.id, data_envio=get_brasil_time(), url_arquivo=caminho_blob,
+                data_inicio_afastamento=data_inicio_db, quantidade_dias=dados_ia['dias_afastamento'],
+                texto_extraido=dados_ia['texto_bruto'], status='Revisao' 
             )
-            db.session.add(novo_atestado)
-            db.session.commit()
-            
-            flash('Atestado enviado com sucesso! O RH fará a análise em breve.', 'success')
+            db.session.add(novo_atestado); db.session.commit()
+            flash('Atestado enviado com sucesso!', 'success')
             return redirect(url_for('documentos.meus_atestados'))
-            
         except Exception as e:
-            db.session.rollback()
-            print(f"Erro no envio de atestado: {e}")
-            flash('Ocorreu um erro ao processar seu atestado.', 'error')
+            db.session.rollback(); flash('Ocorreu um erro ao processar seu atestado.', 'error')
             return redirect(request.url)
-
     return render_template('documentos/enviar_atestado.html')
 
 @documentos_bp.route('/admin/atestados')
@@ -398,18 +363,13 @@ def gestao_atestados():
 @login_required
 def baixar_atestado(id):
     atestado = Atestado.query.get_or_404(id)
-    if not has_permission('DOCUMENTOS') and atestado.user_id != current_user.id:
-        flash("Acesso negado.", "error")
-        return redirect(url_for('main.dashboard'))
-    
+    if not has_permission('DOCUMENTOS') and atestado.user_id != current_user.id: return redirect(url_for('main.dashboard'))
     if atestado.url_arquivo:
         arquivo_bytes = baixar_bytes_storage(atestado.url_arquivo)
         if arquivo_bytes:
             ext = 'pdf' if 'pdf' in atestado.url_arquivo.lower() else 'jpeg'
             mimetype = 'application/pdf' if ext == 'pdf' else f'image/{ext}'
             return send_file(io.BytesIO(arquivo_bytes), mimetype=mimetype, as_attachment=False, download_name=f"atestado_{id}.{ext}")
-    
-    flash("Arquivo não encontrado no servidor.", "error")
     return redirect(request.referrer or url_for('main.dashboard'))
 
 @documentos_bp.route('/admin/atestados/<int:id>/avaliar', methods=['POST'])
@@ -418,89 +378,56 @@ def baixar_atestado(id):
 def avaliar_atestado(id):
     atestado = Atestado.query.get_or_404(id)
     acao = request.form.get('acao')
-    
     try:
         if acao == 'aprovar':
             data_inicio_str = request.form.get('data_inicio')
             qtd_dias_str = request.form.get('quantidade_dias')
-            
-            if not data_inicio_str or not qtd_dias_str:
-                flash('Para aprovar, preencha a Data de Início e a Quantidade de Dias.', 'error')
-                return redirect(url_for('documentos.gestao_atestados'))
+            if not data_inicio_str or not qtd_dias_str: return redirect(url_for('documentos.gestao_atestados'))
 
             atestado.data_inicio_afastamento = datetime.strptime(data_inicio_str, '%Y-%m-%d').date()
             atestado.quantidade_dias = int(qtd_dias_str)
             atestado.status = 'Aprovado'
             
-            # ABATER HORAS NO PONTO
             for i in range(atestado.quantidade_dias):
                 dia_atual = atestado.data_inicio_afastamento + timedelta(days=i)
                 ponto = PontoResumo.query.filter_by(user_id=atestado.user_id, data_referencia=dia_atual).first()
-                
                 if ponto:
                     ponto.status_dia = 'Atestado'
                     ponto.minutos_esperados = 0
                     ponto.minutos_saldo = ponto.minutos_trabalhados
                 else:
-                    novo_ponto = PontoResumo(
-                        user_id=atestado.user_id,
-                        data_referencia=dia_atual,
-                        minutos_trabalhados=0,
-                        minutos_esperados=0,
-                        minutos_saldo=0,
-                        status_dia='Atestado'
-                    )
+                    novo_ponto = PontoResumo(user_id=atestado.user_id, data_referencia=dia_atual, minutos_trabalhados=0, minutos_esperados=0, minutos_saldo=0, status_dia='Atestado')
                     db.session.add(novo_ponto)
-                        
         elif acao == 'recusar':
             atestado.status = 'Recusado'
             atestado.motivo_recusa = request.form.get('motivo_recusa', 'Recusado pelo RH')
-        
-        db.session.commit()
-        flash(f'Atestado avaliado com sucesso!', 'success')
+        db.session.commit(); flash(f'Atestado avaliado com sucesso!', 'success')
     except Exception as e:
-        db.session.rollback()
-        flash(f'Erro ao avaliar atestado: {e}', 'error')
-        
+        db.session.rollback(); flash(f'Erro: {e}', 'error')
     return redirect(url_for('documentos.gestao_atestados'))
 
-
-# --- ROTA DE FAXINA DO BANCO DE DADOS (USO EXCLUSIVO DO MASTER) ---
 @documentos_bp.route('/admin/faxina-pdfs')
 @login_required
 @permission_required('DOCUMENTOS')
 def migrar_pdfs_para_nuvem():
-    """Rota secreta para migrar PDFs antigos do banco para o Storage e liberar espaço."""
     migrados_holerite = 0
     migrados_recibo = 0
-    
-    # 1. Migrar Holerites/Espelhos
     holerites_antigos = Holerite.query.filter(Holerite.conteudo_pdf.isnot(None)).all()
     for h in holerites_antigos:
         if h.conteudo_pdf:
             caminho = salvar_no_storage(h.conteudo_pdf, f"espelhos_migrados/{h.mes_referencia}")
-            if caminho:
-                h.url_arquivo = caminho
-                h.conteudo_pdf = None # Apaga o arquivo pesado do banco
-                migrados_holerite += 1
+            if caminho: h.url_arquivo = caminho; h.conteudo_pdf = None; migrados_holerite += 1
     
-    # 2. Migrar Recibos
     recibos_antigos = Recibo.query.filter(Recibo.conteudo_pdf.isnot(None)).all()
     for r in recibos_antigos:
         if r.conteudo_pdf:
             mes_ref = r.data_pagamento.strftime('%Y-%m')
             caminho = salvar_no_storage(r.conteudo_pdf, f"recibos_migrados/{mes_ref}")
-            if caminho:
-                r.url_arquivo = caminho
-                r.conteudo_pdf = None # Apaga o arquivo pesado do banco
-                migrados_recibo += 1
+            if caminho: r.url_arquivo = caminho; r.conteudo_pdf = None; migrados_recibo += 1
                 
     try:
         db.session.commit()
-        flash(f"Migração concluída! {migrados_holerite} Espelhos e {migrados_recibo} Recibos movidos para a nuvem. Banco de dados aliviado!", "success")
-    except Exception as e:
-        db.session.rollback()
-        flash(f"Erro na migração: {e}", "error")
-        
+        flash(f"Migração concluída! {migrados_holerite} Espelhos e {migrados_recibo} Recibos movidos para a nuvem.", "success")
+    except Exception as e: db.session.rollback(); flash(f"Erro: {e}", "error")
     return redirect(url_for('documentos.dashboard_documentos'))
 

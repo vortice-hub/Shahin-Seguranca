@@ -1,0 +1,87 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="mb-6">
+    <h2 class="text-2xl font-bold text-slate-800 flex items-center gap-2">
+        <i class="fas fa-plane-departure text-emerald-600"></i> Férias e Licenças
+    </h2>
+    <p class="text-sm text-slate-500 mt-1">Envie as suas solicitações de ausência programada para o RH.</p>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
+    
+    <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="bg-emerald-600 p-5 text-white">
+            <h3 class="font-bold text-lg"><i class="fas fa-edit mr-2"></i> Nova Solicitação</h3>
+        </div>
+        <div class="p-6">
+            <form method="POST" action="{{ url_for('ponto.solicitar_ferias') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                
+                <div class="mb-4">
+                    <label class="block text-xs uppercase font-bold text-slate-500 mb-1">Motivo / Tipo de Ausência</label>
+                    <select name="tipo_ausencia" required class="w-full bg-slate-50 border border-slate-200 rounded px-4 py-3 text-sm font-bold text-slate-800 outline-none focus:border-emerald-500 transition focus:ring-2 focus:ring-emerald-200">
+                        <option value="Férias">Férias Anuais</option>
+                        <option value="Folga Prêmio">Folga Prêmio</option>
+                        <option value="Licença Maternidade/Paternidade">Licença Maternidade/Paternidade</option>
+                        <option value="Licença Casamento/Óbito">Licença (Casamento/Óbito)</option>
+                        <option value="Outros">Outros</option>
+                    </select>
+                </div>
+                
+                <div class="grid grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <label class="block text-xs uppercase font-bold text-slate-500 mb-1">Data Início</label>
+                        <input type="date" name="data_inicio" required class="w-full bg-slate-50 border border-slate-200 rounded px-4 py-3 text-sm font-bold text-slate-800 outline-none focus:border-emerald-500 transition focus:ring-2 focus:ring-emerald-200">
+                    </div>
+                    <div>
+                        <label class="block text-xs uppercase font-bold text-slate-500 mb-1">Data Fim</label>
+                        <input type="date" name="data_fim" required class="w-full bg-slate-50 border border-slate-200 rounded px-4 py-3 text-sm font-bold text-slate-800 outline-none focus:border-emerald-500 transition focus:ring-2 focus:ring-emerald-200">
+                    </div>
+                </div>
+
+                <div class="mb-6">
+                    <label class="block text-xs uppercase font-bold text-slate-500 mb-1">Observações ao RH (Opcional)</label>
+                    <textarea name="observacao" rows="3" class="w-full bg-slate-50 border border-slate-200 rounded px-4 py-3 text-sm text-slate-800 outline-none focus:border-emerald-500 transition focus:ring-2 focus:ring-emerald-200" placeholder="Digite detalhes se necessário..."></textarea>
+                </div>
+
+                <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3.5 rounded shadow-lg transition flex items-center justify-center gap-2">
+                    <i class="fas fa-paper-plane"></i> ENVIAR SOLICITAÇÃO
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+        <h3 class="font-bold text-slate-800 text-lg mb-4 border-b pb-3"><i class="fas fa-history text-slate-400 mr-2"></i> Meu Histórico</h3>
+        <div class="space-y-4 max-h-[500px] overflow-y-auto pr-2">
+            {% for sol in minhas_solicitacoes %}
+            <div class="p-4 border border-slate-100 rounded-lg bg-slate-50 flex flex-col gap-2 hover:bg-slate-100 transition">
+                <div class="flex justify-between items-start">
+                    <span class="font-bold text-sm text-slate-800">{{ sol.tipo_ausencia }}</span>
+                    {% if sol.status == 'Pendente' %}
+                        <span class="text-[10px] bg-amber-100 text-amber-600 px-2.5 py-1 rounded font-black uppercase tracking-wide">Pendente</span>
+                    {% elif sol.status == 'Aprovado' %}
+                        <span class="text-[10px] bg-emerald-100 text-emerald-600 px-2.5 py-1 rounded font-black uppercase tracking-wide">Aprovado</span>
+                    {% elif sol.status == 'Cancelado' %}
+                        <span class="text-[10px] bg-slate-200 text-slate-600 px-2.5 py-1 rounded font-black uppercase tracking-wide">Cancelado</span>
+                    {% else %}
+                        <span class="text-[10px] bg-red-100 text-red-600 px-2.5 py-1 rounded font-black uppercase tracking-wide">Recusado</span>
+                    {% endif %}
+                </div>
+                <div class="text-xs text-slate-500 font-medium">
+                    <i class="far fa-calendar-alt mr-1"></i> {{ sol.data_inicio.strftime('%d/%m/%Y') }} até {{ sol.data_fim.strftime('%d/%m/%Y') }} 
+                    <span class="ml-2 font-bold text-blue-600">({{ sol.quantidade_dias }} dias)</span>
+                </div>
+            </div>
+            {% else %}
+            <div class="text-center py-12 text-sm text-slate-400">
+                <i class="fas fa-box-open text-4xl mb-3 opacity-20 block"></i>
+                Você não tem solicitações de férias recentes.
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+</div>
+{% endblock %}
+
