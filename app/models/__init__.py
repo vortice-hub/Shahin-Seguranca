@@ -152,3 +152,25 @@ class PontoAjuste(db.Model):
     created_at = db.Column(db.DateTime, default=get_brasil_time)
     user = db.relationship('User', backref=db.backref('ajustes', lazy=True))
 
+class Atestado(db.Model):
+    __tablename__ = 'atestados'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    
+    # Metadados do Arquivo
+    data_envio = db.Column(db.DateTime, nullable=False)
+    url_arquivo = db.Column(db.String(500), nullable=False) # Caminho no Cloud Storage
+    
+    # Dados extraídos pela IA
+    data_inicio_afastamento = db.Column(db.Date, nullable=True) 
+    quantidade_dias = db.Column(db.Integer, nullable=True)
+    texto_extraido = db.Column(db.Text, nullable=True) # Guardamos o que a IA leu para facilitar a revisão manual
+    
+    # Controle de Fluxo
+    status = db.Column(db.String(50), default='Processando') # Processando, Aprovado, Recusado, Revisao
+    motivo_recusa = db.Column(db.String(500), nullable=True)
+    
+    # Relação com o Usuário
+    user = db.relationship('User', backref=db.backref('atestados', lazy=True))
+
