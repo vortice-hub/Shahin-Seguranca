@@ -1,13 +1,13 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, send_file, jsonify
 from flask_login import login_required, current_user
 from app.extensions import db
-from app.models import User, Holerite, Recibo, AssinaturaDigital, Atestado
+from app.models import User, Holerite, Recibo, AssinaturaDigital, Atestado, PontoResumo
 from app.utils import get_brasil_time, permission_required, has_permission, limpar_nome, get_client_ip, calcular_hash_arquivo
 from app.documentos.storage import salvar_no_storage, baixar_bytes_storage
 from app.documentos.ai_parser import extrair_dados_holerite
 from app.documentos.utils import gerar_pdf_recibo, gerar_pdf_espelho_mensal, gerar_certificado_entrega
 from app.documentos.atestado_parser import analisar_atestado_vision
-from datetime import datetime
+from datetime import datetime, timedelta
 from pypdf import PdfReader, PdfWriter
 from thefuzz import process, fuzz
 import io
@@ -134,7 +134,6 @@ def baixar_holerite(id):
     if not has_permission('DOCUMENTOS') and doc.user_id != current_user.id:
         return redirect(url_for('main.dashboard'))
     
-    # 1. Pegar os bytes do arquivo primeiro
     arquivo_bytes = None
     nome_download = "documento.pdf"
     
@@ -149,15 +148,13 @@ def baixar_holerite(id):
         flash("Erro ao baixar o arquivo. Arquivo não encontrado no servidor.", "error")
         return redirect(url_for('documentos.dashboard_documentos'))
 
-    # 2. Registrar Assinatura com HASH do arquivo
     if doc.user_id == current_user.id and not doc.visualizado:
         doc.visualizado = True
         tipo_doc = "Espelho de Ponto" if doc.conteudo_pdf else "Holerite"
         
-        # Pega o User-Agent do navegador de forma segura
         user_agent_info = request.headers.get('User-Agent')
         if user_agent_info:
-            user_agent_info = user_agent_info[:250] # Limite para o banco
+            user_agent_info = user_agent_info[:250]
         else:
             user_agent_info = 'Desconhecido'
 
@@ -165,7 +162,7 @@ def baixar_holerite(id):
             user_id=current_user.id,
             documento_id=doc.id,
             tipo_documento=f"{tipo_doc} - {doc.mes_referencia}",
-            hash_arquivo=calcular_hash_arquivo(arquivo_bytes), # Hash gerado aqui
+            hash_arquivo=calcular_hash_arquivo(arquivo_bytes),
             data_assinatura=get_brasil_time(),
             ip_address=get_client_ip(),
             user_agent=user_agent_info
@@ -173,7 +170,6 @@ def baixar_holerite(id):
         db.session.add(assinatura)
         db.session.commit()
 
-    # 3. Enviar o arquivo para o usuário
     return send_file(io.BytesIO(arquivo_bytes), mimetype='application/pdf', as_attachment=True, download_name=nome_download)
 
 @documentos_bp.route('/baixar/recibo/<int:id>', methods=['POST'])
@@ -188,7 +184,6 @@ def baixar_recibo(id):
         flash("Erro: Recibo vazio.", "error")
         return redirect(url_for('documentos.dashboard_documentos'))
         
-    # Registrar Assinatura com HASH
     if doc.user_id == current_user.id and not doc.visualizado:
         doc.visualizado = True
         
@@ -202,7 +197,7 @@ def baixar_recibo(id):
             user_id=current_user.id,
             documento_id=doc.id,
             tipo_documento=f"Recibo - R$ {doc.valor}",
-            hash_arquivo=calcular_hash_arquivo(arquivo_bytes), # Hash gerado aqui
+            hash_arquivo=calcular_hash_arquivo(arquivo_bytes),
             data_assinatura=get_brasil_time(),
             ip_address=get_client_ip(),
             user_agent=user_agent_info
@@ -296,9 +291,6 @@ def get_user_info_api(id):
 @login_required
 @permission_required('AUDITORIA')
 def baixar_certificado_auditoria(id):
-    """
-    Gera o PDF comprobatório da Assinatura Digital com os metadados.
-    """
     assinatura = AssinaturaDigital.query.get_or_404(id)
     usuario = User.query.get(assinatura.user_id)
     
@@ -306,15 +298,17 @@ def baixar_certificado_auditoria(id):
         flash("Usuário vinculado à assinatura não encontrado.", "error")
         return redirect(url_for('documentos.revisao_auditoria'))
 
+    # CORREÇÃO DO ERRO DO CERTIFICADO:
+    # O script de geração de PDF espera o atributo "nome", então nós o adicionamos temporariamente.
+    usuario.nome = usuario.real_name
+
     try:
-        # A função gerar_certificado_entrega já deve existir no seu app/documentos/utils.py
         pdf_bytes = gerar_certificado_entrega(assinatura, usuario)
-        
         return send_file(
             io.BytesIO(pdf_bytes),
             mimetype='application/pdf',
             as_attachment=True,
-            download_name=f"Auditoria_{usuario.nome}_{assinatura.id}.pdf"
+            download_name=f"Auditoria_{usuario.real_name}_{assinatura.id}.pdf"
         )
     except Exception as e:
         print(f"Erro ao gerar certificado de auditoria: {e}")
@@ -334,21 +328,17 @@ def enviar_atestado():
             file_bytes = file.read()
             mes_ref = get_brasil_time().strftime('%Y-%m')
             
-            # Reutiliza a função de salvar no bucket do Google
             caminho_blob = salvar_no_storage(file_bytes, f"atestado_{mes_ref}")
             if not caminho_blob:
                 flash('Erro ao salvar o arquivo no servidor.', 'error')
                 return redirect(request.url)
 
-            # Chama a Inteligência Artificial (Vision)
             dados_ia = analisar_atestado_vision(file_bytes, current_user.real_name)
             
-            # Converte a data encontrada pela IA (se houver)
             data_inicio_db = None
             if dados_ia['data_inicio']:
                 data_inicio_db = datetime.strptime(dados_ia['data_inicio'], '%Y-%m-%d').date()
 
-            # Salva no banco de dados com status "Revisao" por segurança inicial
             novo_atestado = Atestado(
                 user_id=current_user.id,
                 data_envio=get_brasil_time(),
@@ -371,4 +361,77 @@ def enviar_atestado():
             return redirect(request.url)
 
     return render_template('documentos/enviar_atestado.html')
+
+@documentos_bp.route('/admin/atestados')
+@login_required
+@permission_required('DOCUMENTOS')
+def gestao_atestados():
+    """Painel do Master para revisar atestados enviados."""
+    atestados = Atestado.query.order_by(Atestado.data_envio.desc()).all()
+    return render_template('documentos/gestao_atestados.html', atestados=atestados)
+
+@documentos_bp.route('/atestado/baixar/<int:id>')
+@login_required
+def baixar_atestado(id):
+    """Rota para abrir a foto ou PDF do atestado no navegador."""
+    atestado = Atestado.query.get_or_404(id)
+    if not has_permission('DOCUMENTOS') and atestado.user_id != current_user.id:
+        flash("Acesso negado.", "error")
+        return redirect(url_for('main.dashboard'))
+    
+    if atestado.url_arquivo:
+        arquivo_bytes = baixar_bytes_storage(atestado.url_arquivo)
+        if arquivo_bytes:
+            ext = 'pdf' if 'pdf' in atestado.url_arquivo.lower() else 'jpeg'
+            mimetype = 'application/pdf' if ext == 'pdf' else f'image/{ext}'
+            return send_file(io.BytesIO(arquivo_bytes), mimetype=mimetype, as_attachment=False, download_name=f"atestado_{id}.{ext}")
+    
+    flash("Arquivo não encontrado no servidor.", "error")
+    return redirect(request.referrer or url_for('main.dashboard'))
+
+@documentos_bp.route('/admin/atestados/<int:id>/avaliar', methods=['POST'])
+@login_required
+@permission_required('DOCUMENTOS')
+def avaliar_atestado(id):
+    """Aprova ou Recusa um atestado e desconta as horas automaticamente."""
+    atestado = Atestado.query.get_or_404(id)
+    acao = request.form.get('acao')
+    
+    try:
+        if acao == 'aprovar':
+            atestado.status = 'Aprovado'
+            
+            # MÁGICA: Abater horas no PontoResumo
+            if atestado.data_inicio_afastamento and atestado.quantidade_dias:
+                for i in range(atestado.quantidade_dias):
+                    dia_atual = atestado.data_inicio_afastamento + timedelta(days=i)
+                    ponto = PontoResumo.query.filter_by(user_id=atestado.user_id, data_referencia=dia_atual).first()
+                    
+                    if ponto:
+                        ponto.status_dia = 'Atestado'
+                        ponto.minutos_esperados = 0
+                        ponto.minutos_saldo = ponto.minutos_trabalhados - ponto.minutos_esperados
+                    else:
+                        # Se o dia ainda não existe no Ponto, cria zerado
+                        novo_ponto = PontoResumo(
+                            user_id=atestado.user_id,
+                            data_referencia=dia_atual,
+                            minutos_trabalhados=0,
+                            minutos_esperados=0,
+                            minutos_saldo=0,
+                            status_dia='Atestado'
+                        )
+                        db.session.add(novo_ponto)
+                        
+        elif acao == 'recusar':
+            atestado.status = 'Recusado'
+            atestado.motivo_recusa = request.form.get('motivo_recusa', 'Recusado pelo RH')
+        
+        db.session.commit()
+        flash(f'Atestado {atestado.status} com sucesso!', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Erro ao avaliar atestado: {e}', 'error')
+        
+    return redirect(url_for('documentos.gestao_atestados'))
 

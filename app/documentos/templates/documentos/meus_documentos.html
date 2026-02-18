@@ -2,6 +2,18 @@
 {% block content %}
 <div class="mb-6"><h2 class="text-2xl font-bold text-slate-800">Meus Documentos</h2></div>
 
+<div class="mb-8 flex flex-col md:flex-row justify-between items-center bg-blue-50 p-6 rounded-xl border border-blue-100 shadow-sm">
+    <div class="mb-4 md:mb-0">
+        <h3 class="text-blue-800 font-bold text-lg flex items-center gap-2">
+            <i class="fas fa-file-medical text-2xl"></i> Atestados Médicos
+        </h3>
+        <p class="text-blue-600 text-sm mt-1">Envie atestados médicos diretamente pelo telemóvel para justificar faltas.</p>
+    </div>
+    <a href="{{ url_for('documentos.enviar_atestado') }}" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg shadow-md transition text-sm flex items-center gap-2 whitespace-nowrap">
+        <i class="fas fa-camera"></i> ENVIAR ATESTADO
+    </a>
+</div>
+
 <div class="space-y-4">
     {% for doc in docs %}
     <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 transition hover:shadow-md">
@@ -49,6 +61,4 @@
     {% endfor %}
 </div>
 {% endblock %}
-
-
 
