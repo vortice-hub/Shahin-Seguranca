@@ -132,12 +132,13 @@ def baixar_holerite(id):
     if not has_permission('DOCUMENTOS') and doc.user_id != current_user.id:
         return redirect(url_for('main.dashboard'))
     
-    # --- LÓGICA DE ASSINATURA E LEITURA ---
+    # --- CORREÇÃO AQUI: Adicionado documento_id ---
     if doc.user_id == current_user.id and not doc.visualizado:
         doc.visualizado = True
         tipo_doc = "Espelho de Ponto" if doc.conteudo_pdf else "Holerite"
         assinatura = AssinaturaDigital(
             user_id=current_user.id,
+            documento_id=doc.id,  # <-- LINHA ADICIONADA
             tipo_documento=f"{tipo_doc} - {doc.mes_referencia}",
             data_assinatura=get_brasil_time(),
             ip_address=get_client_ip()
@@ -147,10 +148,10 @@ def baixar_holerite(id):
     # --------------------------------------
 
     if doc.conteudo_pdf:
-        return send_file(io.BytesIO(doc.conteudo_pdf), mimetype='application/pdf', as_attachment=True, download_name=f"ponto.pdf")
+        return send_file(io.BytesIO(doc.conteudo_pdf), mimetype='application/pdf', as_attachment=True, download_name=f"ponto_{doc.mes_referencia}.pdf")
     if doc.url_arquivo:
         b = baixar_bytes_storage(doc.url_arquivo)
-        if b: return send_file(io.BytesIO(b), mimetype='application/pdf', as_attachment=True, download_name=f"holerite.pdf")
+        if b: return send_file(io.BytesIO(b), mimetype='application/pdf', as_attachment=True, download_name=f"holerite_{doc.mes_referencia}.pdf")
     
     flash("Erro ao baixar o arquivo.", "error")
     return redirect(url_for('documentos.dashboard_documentos'))
@@ -162,11 +163,12 @@ def baixar_recibo(id):
     if not has_permission('DOCUMENTOS') and doc.user_id != current_user.id:
         return redirect(url_for('main.dashboard'))
         
-    # --- LÓGICA DE ASSINATURA E LEITURA ---
+    # --- CORREÇÃO AQUI: Adicionado documento_id ---
     if doc.user_id == current_user.id and not doc.visualizado:
         doc.visualizado = True
         assinatura = AssinaturaDigital(
             user_id=current_user.id,
+            documento_id=doc.id,  # <-- LINHA ADICIONADA
             tipo_documento=f"Recibo - R$ {doc.valor}",
             data_assinatura=get_brasil_time(),
             ip_address=get_client_ip()
