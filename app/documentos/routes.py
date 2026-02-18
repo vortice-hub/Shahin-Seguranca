@@ -290,3 +290,32 @@ def get_user_info_api(id):
     user = User.query.get_or_404(id)
     return jsonify({'razao_social': user.razao_social_empregadora, 'cnpj': user.cnpj_empregador})
 
+@documentos_bp.route('/admin/auditoria/certificado/<int:id>')
+@login_required
+@permission_required('AUDITORIA')
+def baixar_certificado_auditoria(id):
+    """
+    Gera o PDF comprobatório da Assinatura Digital com os metadados.
+    """
+    assinatura = AssinaturaDigital.query.get_or_404(id)
+    usuario = User.query.get(assinatura.user_id)
+    
+    if not usuario:
+        flash("Usuário vinculado à assinatura não encontrado.", "error")
+        return redirect(url_for('documentos.revisao_auditoria'))
+
+    try:
+        # A função gerar_certificado_entrega já deve existir no seu app/documentos/utils.py
+        pdf_bytes = gerar_certificado_entrega(assinatura, usuario)
+        
+        return send_file(
+            io.BytesIO(pdf_bytes),
+            mimetype='application/pdf',
+            as_attachment=True,
+            download_name=f"Auditoria_{usuario.nome}_{assinatura.id}.pdf"
+        )
+    except Exception as e:
+        print(f"Erro ao gerar certificado de auditoria: {e}")
+        flash("Erro interno ao gerar o documento de auditoria. Verifique os logs.", "error")
+        return redirect(url_for('documentos.revisao_auditoria'))
+
