@@ -1,19 +1,30 @@
 import io
 import re
-import json
 import unicodedata
 from pypdf import PdfReader
-from thefuzz import process, fuzz
 
-def normalizar_texto_pdf(texto):
-    """Limpa o texto do PDF para facilitar a busca."""
+def limpar_texto_pdf_para_busca(texto):
+    """
+    Aplica a mesma limpeza usada no banco de dados para garantir
+    que o texto do PDF e o nome do funcionário falem a exata mesma língua.
+    """
     if not texto: return ""
+    # Remove acentos
     texto = "".join(c for c in unicodedata.normalize('NFD', texto) if unicodedata.category(c) != 'Mn')
-    return texto.upper().replace('\n', ' ').strip()
+    texto = texto.upper().replace('\n', ' ').strip()
+    
+    # Remove preposições (para focar apenas nos nomes fortes)
+    stopwords = [" DE ", " DA ", " DO ", " DOS ", " DAS ", " E "]
+    for word in stopwords:
+        texto = texto.replace(word, " ")
+    
+    # Remove múltiplos espaços
+    return " ".join(texto.split())
 
 def extrair_dados_holerite(pdf_bytes, lista_nomes_banco=None):
     """
-    Abordagem 100% Local com RIGOR MÁXIMO (95%).
+    Abordagem de MATCH EXATO E COMPLETO.
+    Sem margem para "adivinhação" ou envios errados.
     """
     dados_retorno = {"nome": "", "mes_referencia": "2026-02", "origem": "falha"}
     
@@ -29,9 +40,7 @@ def extrair_dados_holerite(pdf_bytes, lista_nomes_banco=None):
     if not texto_raw:
         return dados_retorno
 
-    texto_limpo = normalizar_texto_pdf(texto_raw)
-
-    # Busca de Data (Regex)
+    # 1. Busca de Data
     padrao_data = r'(\d{2})[/-](\d{4})'
     match_data = re.search(padrao_data, texto_raw)
     if match_data:
@@ -40,22 +49,25 @@ def extrair_dados_holerite(pdf_bytes, lista_nomes_banco=None):
         if 1 <= int(mes) <= 12:
             dados_retorno["mes_referencia"] = f"{ano}-{mes}"
 
-    # Busca de Nome (Rigorosa)
+    # 2. Busca de Nome (RIGOROSA E EXATA)
     if lista_nomes_banco:
-        # partial_token_set_ratio é bom, mas vamos exigir score alto
-        melhor_match = process.extractOne(texto_limpo, lista_nomes_banco, scorer=fuzz.partial_token_set_ratio)
+        # Limpa o texto inteiro da página do PDF
+        texto_pdf_limpo = limpar_texto_pdf_para_busca(texto_raw)
         
-        if melhor_match:
-            nome_encontrado = melhor_match[0]
-            score = melhor_match[1]
-            
-            # MUDANÇA CRÍTICA: Subiu de 85 para 95 para evitar falso positivo
-            if score >= 95:
-                print(f"MATCH LOCAL SEGURO: '{nome_encontrado}' (Score: {score})")
-                dados_retorno["nome"] = nome_encontrado
-                dados_retorno["origem"] = "python_local"
-            else:
-                print(f"MATCH RECUSADO (BAIXO SCORE): '{nome_encontrado}' (Score: {score}) - Vai para revisão.")
+        # ORDENA OS NOMES POR TAMANHO (Do maior para o menor)
+        # Motivo: Se tivermos "João Marcos Silva" e "João Marcos", 
+        # o sistema testa o nome mais longo primeiro. Isso impede 
+        # que nomes curtos roubem o holerite de nomes compostos.
+        nomes_ordenados = sorted(lista_nomes_banco, key=len, reverse=True)
+        
+        for nome_banco in nomes_ordenados:
+            # Adiciona espaços ao redor (f" {nome} ") para garantir a busca da palavra exata.
+            # Impede que o sistema ache "ANA" no meio da palavra "JULIANA".
+            if f" {nome_banco} " in f" {texto_pdf_limpo} ":
+                print(f"MATCH EXATO COMPLETO: '{nome_banco}' encontrado no PDF.")
+                dados_retorno["nome"] = nome_banco
+                dados_retorno["origem"] = "python_exato"
+                break  # Para a busca no primeiro match perfeito
 
     return dados_retorno
 
