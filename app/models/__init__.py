@@ -100,7 +100,8 @@ class Recibo(db.Model):
     tipo_assiduidade = db.Column(db.Boolean, default=False)
     tipo_cesta_basica = db.Column(db.Boolean, default=False)
     forma_pagamento = db.Column(db.String(50), default="Transferência")
-    conteudo_pdf = db.Column(db.LargeBinary, nullable=True)
+    url_arquivo = db.Column(db.String(500), nullable=True) # NOVA COLUNA DO CLOUD STORAGE
+    conteudo_pdf = db.Column(db.LargeBinary, nullable=True) # MANTIDO PARA FALLBACK DOS ANTIGOS
     visualizado = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=get_brasil_time)
     user = db.relationship('User', backref=db.backref('recibos', lazy=True))
@@ -154,23 +155,14 @@ class PontoAjuste(db.Model):
 
 class Atestado(db.Model):
     __tablename__ = 'atestados'
-    
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
-    
-    # Metadados do Arquivo
     data_envio = db.Column(db.DateTime, nullable=False)
-    url_arquivo = db.Column(db.String(500), nullable=False) # Caminho no Cloud Storage
-    
-    # Dados extraídos pela IA
+    url_arquivo = db.Column(db.String(500), nullable=False) 
     data_inicio_afastamento = db.Column(db.Date, nullable=True) 
     quantidade_dias = db.Column(db.Integer, nullable=True)
-    texto_extraido = db.Column(db.Text, nullable=True) # Guardamos o que a IA leu para facilitar a revisão manual
-    
-    # Controle de Fluxo
-    status = db.Column(db.String(50), default='Processando') # Processando, Aprovado, Recusado, Revisao
+    texto_extraido = db.Column(db.Text, nullable=True) 
+    status = db.Column(db.String(50), default='Processando')
     motivo_recusa = db.Column(db.String(500), nullable=True)
-    
-    # Relação com o Usuário
     user = db.relationship('User', backref=db.backref('atestados', lazy=True))
 

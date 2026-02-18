@@ -42,7 +42,7 @@ def dashboard_documentos():
     
     if not f_tipo or f_tipo in ['Holerite', 'Espelho']:
         for h in holerites_db:
-            is_ponto = True if h.conteudo_pdf else False
+            is_ponto = True if h.url_arquivo and 'espelhos' in h.url_arquivo or h.conteudo_pdf else False
             if f_tipo == 'Holerite' and is_ponto: continue
             if f_tipo == 'Espelho' and not is_ponto: continue
             
@@ -107,7 +107,7 @@ def admin_holerites():
                 nome_identificado = dados.get('nome', '')
                 mes_ref = dados.get('mes_referencia', '2026-02')
 
-                caminho_blob = salvar_no_storage(pdf_bytes, mes_ref)
+                caminho_blob = salvar_no_storage(pdf_bytes, f"holerites/{mes_ref}")
                 if not caminho_blob: continue
 
                 user_id = None
@@ -137,12 +137,13 @@ def baixar_holerite(id):
     arquivo_bytes = None
     nome_download = "documento.pdf"
     
-    if doc.conteudo_pdf:
-        arquivo_bytes = doc.conteudo_pdf
-        nome_download = f"ponto_{doc.mes_referencia}.pdf"
-    elif doc.url_arquivo:
+    # Fallback seguro: Tenta na nuvem primeiro, depois no banco de dados (para os antigos)
+    if doc.url_arquivo:
         arquivo_bytes = baixar_bytes_storage(doc.url_arquivo)
         nome_download = f"holerite_{doc.mes_referencia}.pdf"
+    elif doc.conteudo_pdf:
+        arquivo_bytes = doc.conteudo_pdf
+        nome_download = f"ponto_{doc.mes_referencia}.pdf"
         
     if not arquivo_bytes:
         flash("Erro ao baixar o arquivo. Arquivo não encontrado no servidor.", "error")
@@ -150,7 +151,7 @@ def baixar_holerite(id):
 
     if doc.user_id == current_user.id and not doc.visualizado:
         doc.visualizado = True
-        tipo_doc = "Espelho de Ponto" if doc.conteudo_pdf else "Holerite"
+        tipo_doc = "Espelho de Ponto" if (doc.url_arquivo and 'espelhos' in doc.url_arquivo) or doc.conteudo_pdf else "Holerite"
         
         user_agent_info = request.headers.get('User-Agent')
         if user_agent_info:
@@ -179,9 +180,16 @@ def baixar_recibo(id):
     if not has_permission('DOCUMENTOS') and doc.user_id != current_user.id:
         return redirect(url_for('main.dashboard'))
         
-    arquivo_bytes = doc.conteudo_pdf
+    arquivo_bytes = None
+    
+    # Fallback seguro: Tenta na nuvem primeiro, se não tiver vai no banco
+    if doc.url_arquivo:
+        arquivo_bytes = baixar_bytes_storage(doc.url_arquivo)
+    elif doc.conteudo_pdf:
+        arquivo_bytes = doc.conteudo_pdf
+        
     if not arquivo_bytes:
-        flash("Erro: Recibo vazio.", "error")
+        flash("Erro: Recibo não encontrado ou corrompido.", "error")
         return redirect(url_for('documentos.dashboard_documentos'))
         
     if doc.user_id == current_user.id and not doc.visualizado:
@@ -214,7 +222,7 @@ def meus_documentos():
     recibos = Recibo.query.filter_by(user_id=current_user.id).order_by(Recibo.created_at.desc()).all()
     docs = []
     for h in holerites:
-        e_ponto = True if h.conteudo_pdf else False
+        e_ponto = True if (h.url_arquivo and 'espelhos' in h.url_arquivo) or h.conteudo_pdf else False
         docs.append({'id': h.id, 'tipo': 'Espelho' if e_ponto else 'Holerite', 'titulo': f"{'Ponto' if e_ponto else 'Holerite'} - {h.mes_referencia}", 'cor': 'purple' if e_ponto else 'blue', 'icone': 'fa-calendar' if e_ponto else 'fa-file', 'data': h.enviado_em, 'visto': h.visualizado, 'rota': 'baixar_holerite'})
     for r in recibos:
         docs.append({'id': r.id, 'tipo': 'Recibo', 'titulo': 'Recibo', 'cor': 'emerald', 'icone': 'fa-receipt', 'data': r.created_at, 'visto': r.visualizado, 'rota': 'baixar_recibo'})
@@ -263,7 +271,14 @@ def novo_recibo():
     if request.method == 'POST':
         u = User.query.get(request.form.get('user_id'))
         r = Recibo(user_id=u.id, valor=float(request.form.get('valor', 0)), data_pagamento=get_brasil_time().date())
-        r.conteudo_pdf = gerar_pdf_recibo(r, u)
+        
+        # Gera o PDF e salva DIRETO NO CLOUD STORAGE, sem encher o banco de dados
+        pdf_bytes = gerar_pdf_recibo(r, u)
+        mes_ref = get_brasil_time().strftime('%Y-%m')
+        caminho_blob = salvar_no_storage(pdf_bytes, f"recibos/{mes_ref}")
+        
+        r.url_arquivo = caminho_blob
+        
         db.session.add(r); db.session.commit()
         return redirect(url_for('documentos.dashboard_documentos'))
     users = User.query.filter(User.role!='Terminal').all()
@@ -276,8 +291,12 @@ def disparar_espelhos():
     mes = request.form.get('mes_ref')
     users = User.query.filter(User.role!='Terminal', User.username!='12345678900').all()
     for u in users:
-        pdf = gerar_pdf_espelho_mensal(u, mes)
-        db.session.add(Holerite(user_id=u.id, mes_referencia=mes, conteudo_pdf=pdf, status='Enviado', enviado_em=get_brasil_time()))
+        pdf_bytes = gerar_pdf_espelho_mensal(u, mes)
+        
+        # Salva o PDF gerado DIRETO NO CLOUD STORAGE
+        caminho_blob = salvar_no_storage(pdf_bytes, f"espelhos/{mes}")
+        
+        db.session.add(Holerite(user_id=u.id, mes_referencia=mes, url_arquivo=caminho_blob, status='Enviado', enviado_em=get_brasil_time()))
     db.session.commit()
     return redirect(url_for('documentos.dashboard_documentos'))
 
@@ -318,7 +337,6 @@ def baixar_certificado_auditoria(id):
 @documentos_bp.route('/atestados/meus')
 @login_required
 def meus_atestados():
-    """Tela do funcionário com o histórico de atestados."""
     atestados = Atestado.query.filter_by(user_id=current_user.id).order_by(Atestado.data_envio.desc()).all()
     return render_template('documentos/meus_atestados.html', atestados=atestados)
 
@@ -335,7 +353,7 @@ def enviar_atestado():
             file_bytes = file.read()
             mes_ref = get_brasil_time().strftime('%Y-%m')
             
-            caminho_blob = salvar_no_storage(file_bytes, f"atestado_{mes_ref}")
+            caminho_blob = salvar_no_storage(file_bytes, f"atestados/{mes_ref}")
             if not caminho_blob:
                 flash('Erro ao salvar o arquivo no servidor.', 'error')
                 return redirect(request.url)
@@ -402,7 +420,6 @@ def avaliar_atestado(id):
     acao = request.form.get('acao')
     
     try:
-        # Se for para aprovar, o Master pode ter editado os campos na tela. Pegamos os valores do form.
         if acao == 'aprovar':
             data_inicio_str = request.form.get('data_inicio')
             qtd_dias_str = request.form.get('quantidade_dias')
@@ -423,7 +440,7 @@ def avaliar_atestado(id):
                 if ponto:
                     ponto.status_dia = 'Atestado'
                     ponto.minutos_esperados = 0
-                    ponto.minutos_saldo = ponto.minutos_trabalhados  # Se trabalhou 0, saldo é 0
+                    ponto.minutos_saldo = ponto.minutos_trabalhados
                 else:
                     novo_ponto = PontoResumo(
                         user_id=atestado.user_id,
@@ -446,4 +463,44 @@ def avaliar_atestado(id):
         flash(f'Erro ao avaliar atestado: {e}', 'error')
         
     return redirect(url_for('documentos.gestao_atestados'))
+
+
+# --- ROTA DE FAXINA DO BANCO DE DADOS (USO EXCLUSIVO DO MASTER) ---
+@documentos_bp.route('/admin/faxina-pdfs')
+@login_required
+@permission_required('DOCUMENTOS')
+def migrar_pdfs_para_nuvem():
+    """Rota secreta para migrar PDFs antigos do banco para o Storage e liberar espaço."""
+    migrados_holerite = 0
+    migrados_recibo = 0
+    
+    # 1. Migrar Holerites/Espelhos
+    holerites_antigos = Holerite.query.filter(Holerite.conteudo_pdf.isnot(None)).all()
+    for h in holerites_antigos:
+        if h.conteudo_pdf:
+            caminho = salvar_no_storage(h.conteudo_pdf, f"espelhos_migrados/{h.mes_referencia}")
+            if caminho:
+                h.url_arquivo = caminho
+                h.conteudo_pdf = None # Apaga o arquivo pesado do banco
+                migrados_holerite += 1
+    
+    # 2. Migrar Recibos
+    recibos_antigos = Recibo.query.filter(Recibo.conteudo_pdf.isnot(None)).all()
+    for r in recibos_antigos:
+        if r.conteudo_pdf:
+            mes_ref = r.data_pagamento.strftime('%Y-%m')
+            caminho = salvar_no_storage(r.conteudo_pdf, f"recibos_migrados/{mes_ref}")
+            if caminho:
+                r.url_arquivo = caminho
+                r.conteudo_pdf = None # Apaga o arquivo pesado do banco
+                migrados_recibo += 1
+                
+    try:
+        db.session.commit()
+        flash(f"Migração concluída! {migrados_holerite} Espelhos e {migrados_recibo} Recibos movidos para a nuvem. Banco de dados aliviado!", "success")
+    except Exception as e:
+        db.session.rollback()
+        flash(f"Erro na migração: {e}", "error")
+        
+    return redirect(url_for('documentos.dashboard_documentos'))
 

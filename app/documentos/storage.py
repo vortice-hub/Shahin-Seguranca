@@ -2,14 +2,16 @@ from google.cloud import storage
 import uuid
 import io
 
-BUCKET_NAME = "shahin-documentos"
+# NOVO BUCKET GRATUITO NOS EUA
+BUCKET_NAME = "shahin-docs-us"
 
-def salvar_no_storage(pdf_bytes, mes_ref):
+def salvar_no_storage(pdf_bytes, pasta_ref):
     """Salva o PDF no bucket e retorna o caminho relativo."""
     try:
         client = storage.Client()
         bucket = client.bucket(BUCKET_NAME)
-        nome_blob = f"holerites/{mes_ref}/{uuid.uuid4()}.pdf"
+        # O arquivo será salvo com a estrutura: pasta_ref/uuid.pdf
+        nome_blob = f"{pasta_ref}/{uuid.uuid4()}.pdf"
         blob = bucket.blob(nome_blob)
         blob.upload_from_string(pdf_bytes, content_type='application/pdf')
         return nome_blob
@@ -37,5 +39,5 @@ def baixar_bytes_storage(caminho_blob):
 
 # Função legada mantida para compatibilidade, mas não será usada preferencialmente
 def gerar_url_assinada(caminho_blob):
-    return None 
+    return None
 
