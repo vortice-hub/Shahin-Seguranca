@@ -2,10 +2,10 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from flask_login import login_required, current_user
 from app.extensions import db
 from app.models import User, Holerite, Recibo, AssinaturaDigital
-from app.utils import get_brasil_time, permission_required, has_permission, limpar_nome
+from app.utils import get_brasil_time, permission_required, has_permission, limpar_nome, get_client_ip
 from app.documentos.storage import salvar_no_storage, baixar_bytes_storage
 from app.documentos.ai_parser import extrair_dados_holerite
-from app.documentos.utils import gerar_pdf_recibo, gerar_pdf_espelho_mensal, gerar_certificado_entrega
+from app.documentos.utils import gerar_pdf_recibo, gerar_pdf_espelho_mensal
 from pypdf import PdfReader, PdfWriter
 from thefuzz import process, fuzz
 import io
@@ -16,65 +16,50 @@ documentos_bp = Blueprint('documentos', __name__, template_folder='templates', u
 @login_required
 @permission_required('DOCUMENTOS')
 def dashboard_documentos():
-    """Painel administrativo com FILTROS e GESTÃO."""
-    # Filtros
     f_nome = request.args.get('nome', '').strip()
     f_mes = request.args.get('mes', '')
     f_tipo = request.args.get('tipo', '')
 
-    # Query Base
     q_holerite = Holerite.query.filter(Holerite.status != 'Revisao')
     q_recibo = Recibo.query
 
-    # Aplica Filtros
     if f_nome:
         q_holerite = q_holerite.join(User).filter(User.real_name.ilike(f'%{f_nome}%'))
         q_recibo = q_recibo.join(User).filter(User.real_name.ilike(f'%{f_nome}%'))
     
     if f_mes:
         q_holerite = q_holerite.filter(Holerite.mes_referencia == f_mes)
-        # Recibo usa data exata, filtro aproximado por mês
         q_recibo = q_recibo.filter(db.extract('month', Recibo.data_pagamento) == int(f_mes.split('-')[1]),
                                    db.extract('year', Recibo.data_pagamento) == int(f_mes.split('-')[0]))
 
-    # Executa Queries
     holerites_db = q_holerite.order_by(Holerite.enviado_em.desc()).limit(50).all()
     recibos_db = q_recibo.order_by(Recibo.created_at.desc()).limit(50).all()
     total_revisao = Holerite.query.filter_by(status='Revisao').count()
     
     historico = []
     
-    # Processa se o filtro permitir (ou se estiver vazio)
     if not f_tipo or f_tipo in ['Holerite', 'Espelho']:
         for h in holerites_db:
             is_ponto = True if h.conteudo_pdf else False
-            # Se filtrou por tipo específico, ignora o outro
             if f_tipo == 'Holerite' and is_ponto: continue
             if f_tipo == 'Espelho' and not is_ponto: continue
             
             tipo_label = "Espelho de Ponto" if is_ponto else "Holerite"
             historico.append({
-                'id': h.id, 'doc_type': 'holerite', # Usado para exclusão
-                'tipo': tipo_label, 
-                'cor': 'purple' if is_ponto else 'blue',
+                'id': h.id, 'doc_type': 'holerite',
+                'tipo': tipo_label, 'cor': 'purple' if is_ponto else 'blue',
                 'usuario': h.user.real_name if h.user else "N/A",
-                'info': h.mes_referencia, 
-                'data': h.enviado_em,
-                'visualizado': h.visualizado, 
-                'rota': 'baixar_holerite'
+                'info': h.mes_referencia, 'data': h.enviado_em,
+                'visualizado': h.visualizado, 'rota': 'baixar_holerite'
             })
 
     if not f_tipo or f_tipo == 'Recibo':
         for r in recibos_db:
             historico.append({
-                'id': r.id, 'doc_type': 'recibo', # Usado para exclusão
-                'tipo': 'Recibo', 
-                'cor': 'emerald',
-                'usuario': r.user.real_name, 
-                'info': f"R$ {r.valor:,.2f}",
-                'data': r.created_at, 
-                'visualizado': r.visualizado, 
-                'rota': 'baixar_recibo'
+                'id': r.id, 'doc_type': 'recibo',
+                'tipo': 'Recibo', 'cor': 'emerald',
+                'usuario': r.user.real_name, 'info': f"R$ {r.valor:,.2f}",
+                'data': r.created_at, 'visualizado': r.visualizado, 'rota': 'baixar_recibo'
             })
 
     historico.sort(key=lambda x: x['data'] if x['data'] else get_brasil_time(), reverse=True)
@@ -84,7 +69,6 @@ def dashboard_documentos():
 @login_required
 @permission_required('DOCUMENTOS')
 def excluir_documento(doc_type, id):
-    """Remove um documento enviado incorretamente."""
     try:
         if doc_type == 'holerite':
             item = Holerite.query.get_or_404(id)
@@ -92,7 +76,6 @@ def excluir_documento(doc_type, id):
         elif doc_type == 'recibo':
             item = Recibo.query.get_or_404(id)
             db.session.delete(item)
-        
         db.session.commit()
         flash("Documento removido com sucesso.", "success")
     except Exception as e:
@@ -118,9 +101,7 @@ def admin_holerites():
                 writer = PdfWriter(); writer.add_page(page); buffer = io.BytesIO(); writer.write(buffer)
                 pdf_bytes = buffer.getvalue()
                 
-                # Extração Híbrida (Local preferencial)
                 dados = extrair_dados_holerite(pdf_bytes, lista_nomes_banco)
-                
                 nome_identificado = dados.get('nome', '')
                 mes_ref = dados.get('mes_referencia', '2026-02')
 
@@ -128,7 +109,6 @@ def admin_holerites():
                 if not caminho_blob: continue
 
                 user_id = None
-                # Se achou nome, tenta vincular
                 if nome_identificado and nome_identificado in usuarios_map:
                     user_id = usuarios_map[nome_identificado]
 
@@ -151,12 +131,28 @@ def baixar_holerite(id):
     doc = Holerite.query.get_or_404(id)
     if not has_permission('DOCUMENTOS') and doc.user_id != current_user.id:
         return redirect(url_for('main.dashboard'))
+    
+    # --- LÓGICA DE ASSINATURA E LEITURA ---
+    if doc.user_id == current_user.id and not doc.visualizado:
+        doc.visualizado = True
+        tipo_doc = "Espelho de Ponto" if doc.conteudo_pdf else "Holerite"
+        assinatura = AssinaturaDigital(
+            user_id=current_user.id,
+            tipo_documento=f"{tipo_doc} - {doc.mes_referencia}",
+            data_assinatura=get_brasil_time(),
+            ip_address=get_client_ip()
+        )
+        db.session.add(assinatura)
+        db.session.commit()
+    # --------------------------------------
+
     if doc.conteudo_pdf:
         return send_file(io.BytesIO(doc.conteudo_pdf), mimetype='application/pdf', as_attachment=True, download_name=f"ponto.pdf")
     if doc.url_arquivo:
         b = baixar_bytes_storage(doc.url_arquivo)
         if b: return send_file(io.BytesIO(b), mimetype='application/pdf', as_attachment=True, download_name=f"holerite.pdf")
-    flash("Erro ao baixar.", "error")
+    
+    flash("Erro ao baixar o arquivo.", "error")
     return redirect(url_for('documentos.dashboard_documentos'))
 
 @documentos_bp.route('/baixar/recibo/<int:id>', methods=['POST'])
@@ -165,9 +161,22 @@ def baixar_recibo(id):
     doc = Recibo.query.get_or_404(id)
     if not has_permission('DOCUMENTOS') and doc.user_id != current_user.id:
         return redirect(url_for('main.dashboard'))
+        
+    # --- LÓGICA DE ASSINATURA E LEITURA ---
+    if doc.user_id == current_user.id and not doc.visualizado:
+        doc.visualizado = True
+        assinatura = AssinaturaDigital(
+            user_id=current_user.id,
+            tipo_documento=f"Recibo - R$ {doc.valor}",
+            data_assinatura=get_brasil_time(),
+            ip_address=get_client_ip()
+        )
+        db.session.add(assinatura)
+        db.session.commit()
+    # --------------------------------------
+
     return send_file(io.BytesIO(doc.conteudo_pdf), mimetype='application/pdf', as_attachment=True, download_name=f"recibo_{id}.pdf")
 
-# (Rotas auxiliares mantidas: meus-documentos, revisao, limpar, vincular, auditoria, novo_recibo, disparar, api)
 @documentos_bp.route('/meus-documentos')
 @login_required
 def meus_documentos():
