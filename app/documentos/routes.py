@@ -298,8 +298,6 @@ def baixar_certificado_auditoria(id):
         flash("Usuário vinculado à assinatura não encontrado.", "error")
         return redirect(url_for('documentos.revisao_auditoria'))
 
-    # CORREÇÃO DO ERRO DO CERTIFICADO:
-    # O script de geração de PDF espera o atributo "nome", então nós o adicionamos temporariamente.
     usuario.nome = usuario.real_name
 
     try:
@@ -314,6 +312,15 @@ def baixar_certificado_auditoria(id):
         print(f"Erro ao gerar certificado de auditoria: {e}")
         flash("Erro interno ao gerar o documento de auditoria. Verifique os logs.", "error")
         return redirect(url_for('documentos.revisao_auditoria'))
+
+# --- ROTAS DE ATESTADO (COLABORADOR E MASTER) ---
+
+@documentos_bp.route('/atestados/meus')
+@login_required
+def meus_atestados():
+    """Tela do funcionário com o histórico de atestados."""
+    atestados = Atestado.query.filter_by(user_id=current_user.id).order_by(Atestado.data_envio.desc()).all()
+    return render_template('documentos/meus_atestados.html', atestados=atestados)
 
 @documentos_bp.route('/atestado/novo', methods=['GET', 'POST'])
 @login_required
@@ -352,7 +359,7 @@ def enviar_atestado():
             db.session.commit()
             
             flash('Atestado enviado com sucesso! O RH fará a análise em breve.', 'success')
-            return redirect(url_for('documentos.meus_documentos'))
+            return redirect(url_for('documentos.meus_atestados'))
             
         except Exception as e:
             db.session.rollback()
@@ -366,14 +373,12 @@ def enviar_atestado():
 @login_required
 @permission_required('DOCUMENTOS')
 def gestao_atestados():
-    """Painel do Master para revisar atestados enviados."""
     atestados = Atestado.query.order_by(Atestado.data_envio.desc()).all()
     return render_template('documentos/gestao_atestados.html', atestados=atestados)
 
 @documentos_bp.route('/atestado/baixar/<int:id>')
 @login_required
 def baixar_atestado(id):
-    """Rota para abrir a foto ou PDF do atestado no navegador."""
     atestado = Atestado.query.get_or_404(id)
     if not has_permission('DOCUMENTOS') and atestado.user_id != current_user.id:
         flash("Acesso negado.", "error")
@@ -393,42 +398,49 @@ def baixar_atestado(id):
 @login_required
 @permission_required('DOCUMENTOS')
 def avaliar_atestado(id):
-    """Aprova ou Recusa um atestado e desconta as horas automaticamente."""
     atestado = Atestado.query.get_or_404(id)
     acao = request.form.get('acao')
     
     try:
+        # Se for para aprovar, o Master pode ter editado os campos na tela. Pegamos os valores do form.
         if acao == 'aprovar':
+            data_inicio_str = request.form.get('data_inicio')
+            qtd_dias_str = request.form.get('quantidade_dias')
+            
+            if not data_inicio_str or not qtd_dias_str:
+                flash('Para aprovar, preencha a Data de Início e a Quantidade de Dias.', 'error')
+                return redirect(url_for('documentos.gestao_atestados'))
+
+            atestado.data_inicio_afastamento = datetime.strptime(data_inicio_str, '%Y-%m-%d').date()
+            atestado.quantidade_dias = int(qtd_dias_str)
             atestado.status = 'Aprovado'
             
-            # MÁGICA: Abater horas no PontoResumo
-            if atestado.data_inicio_afastamento and atestado.quantidade_dias:
-                for i in range(atestado.quantidade_dias):
-                    dia_atual = atestado.data_inicio_afastamento + timedelta(days=i)
-                    ponto = PontoResumo.query.filter_by(user_id=atestado.user_id, data_referencia=dia_atual).first()
-                    
-                    if ponto:
-                        ponto.status_dia = 'Atestado'
-                        ponto.minutos_esperados = 0
-                        ponto.minutos_saldo = ponto.minutos_trabalhados - ponto.minutos_esperados
-                    else:
-                        # Se o dia ainda não existe no Ponto, cria zerado
-                        novo_ponto = PontoResumo(
-                            user_id=atestado.user_id,
-                            data_referencia=dia_atual,
-                            minutos_trabalhados=0,
-                            minutos_esperados=0,
-                            minutos_saldo=0,
-                            status_dia='Atestado'
-                        )
-                        db.session.add(novo_ponto)
+            # ABATER HORAS NO PONTO
+            for i in range(atestado.quantidade_dias):
+                dia_atual = atestado.data_inicio_afastamento + timedelta(days=i)
+                ponto = PontoResumo.query.filter_by(user_id=atestado.user_id, data_referencia=dia_atual).first()
+                
+                if ponto:
+                    ponto.status_dia = 'Atestado'
+                    ponto.minutos_esperados = 0
+                    ponto.minutos_saldo = ponto.minutos_trabalhados  # Se trabalhou 0, saldo é 0
+                else:
+                    novo_ponto = PontoResumo(
+                        user_id=atestado.user_id,
+                        data_referencia=dia_atual,
+                        minutos_trabalhados=0,
+                        minutos_esperados=0,
+                        minutos_saldo=0,
+                        status_dia='Atestado'
+                    )
+                    db.session.add(novo_ponto)
                         
         elif acao == 'recusar':
             atestado.status = 'Recusado'
             atestado.motivo_recusa = request.form.get('motivo_recusa', 'Recusado pelo RH')
         
         db.session.commit()
-        flash(f'Atestado {atestado.status} com sucesso!', 'success')
+        flash(f'Atestado avaliado com sucesso!', 'success')
     except Exception as e:
         db.session.rollback()
         flash(f'Erro ao avaliar atestado: {e}', 'error')

@@ -1,0 +1,56 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="mb-6"><h2 class="text-2xl font-bold text-slate-800">Meus Atestados Médicos</h2></div>
+
+<div class="mb-8">
+    <a href="{{ url_for('documentos.enviar_atestado') }}" class="w-full md:w-auto text-center inline-block bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg shadow-md transition text-sm">
+        <i class="fas fa-camera mr-2"></i> ENVIAR NOVO ATESTADO
+    </a>
+</div>
+
+<div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+    <div class="overflow-x-auto">
+        <table class="w-full text-left text-sm text-slate-600">
+            <thead class="bg-slate-50 text-[10px] uppercase text-slate-400 font-bold border-b border-slate-100">
+                <tr>
+                    <th class="px-6 py-4">Enviado em</th>
+                    <th class="px-6 py-4">Início</th>
+                    <th class="px-6 py-4">Dias</th>
+                    <th class="px-6 py-4 text-center">Status</th>
+                    <th class="px-6 py-4 text-right">Arquivo</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+                {% for atestado in atestados %}
+                <tr class="hover:bg-slate-50 transition">
+                    <td class="px-6 py-4 text-xs">{{ atestado.data_envio.strftime('%d/%m/%Y %H:%M') }}</td>
+                    <td class="px-6 py-4 font-medium text-slate-700">
+                        {{ atestado.data_inicio_afastamento.strftime('%d/%m/%Y') if atestado.data_inicio_afastamento else '--' }}
+                    </td>
+                    <td class="px-6 py-4 font-bold text-blue-600">
+                        {{ atestado.quantidade_dias if atestado.quantidade_dias else '--' }}
+                    </td>
+                    <td class="px-6 py-4 text-center">
+                        {% if atestado.status == 'Processando' or atestado.status == 'Revisao' %}
+                            <span class="bg-amber-100 text-amber-600 px-2 py-1 rounded text-[10px] font-bold uppercase"><i class="fas fa-clock"></i> Em Análise</span>
+                        {% elif atestado.status == 'Aprovado' %}
+                            <span class="bg-emerald-100 text-emerald-600 px-2 py-1 rounded text-[10px] font-bold uppercase"><i class="fas fa-check"></i> Aprovado</span>
+                        {% else %}
+                            <span class="bg-red-100 text-red-600 px-2 py-1 rounded text-[10px] font-bold uppercase"><i class="fas fa-times"></i> Recusado</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-6 py-4 text-right">
+                        <a href="{{ url_for('documentos.baixar_atestado', id=atestado.id) }}" target="_blank" class="text-slate-500 hover:text-blue-600 p-2 bg-slate-100 rounded transition" title="Ver Arquivo Enviado">
+                            <i class="fas fa-eye"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="5" class="px-6 py-20 text-center text-slate-400 font-medium">Você ainda não enviou nenhum atestado.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+

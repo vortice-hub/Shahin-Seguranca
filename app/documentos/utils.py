@@ -82,8 +82,8 @@ def gerar_pdf_recibo(recibo, user):
     return buffer.read()
 
 def gerar_pdf_espelho_mensal(user, mes_ano_str):
-    """Gera PDF com a tabela de pontos do mês."""
-    from app.models import PontoRegistro
+    """Gera PDF com a tabela de pontos do mês e integra atestados médicos."""
+    from app.models import PontoRegistro, PontoResumo
     
     buffer = io.BytesIO()
     p = canvas.Canvas(buffer, pagesize=A4)
@@ -114,8 +114,13 @@ def gerar_pdf_espelho_mensal(user, mes_ano_str):
     
     for dia in range(1, last_day + 1):
         dt_atual = date(ano, mes, dia)
+        
+        # Busca batidas no registro
         pontos = PontoRegistro.query.filter_by(user_id=user.id, data_registro=dt_atual).order_by(PontoRegistro.hora_registro).all()
-        horarios_str = "  ".join([p.hora_registro.strftime('%H:%M') for p in pontos])
+        horarios_str = "  ".join([pt.hora_registro.strftime('%H:%M') for pt in pontos])
+        
+        # Busca o status consolidado do dia (Para ver se teve Atestado Aprovado)
+        resumo_dia = PontoResumo.query.filter_by(user_id=user.id, data_referencia=dt_atual).first()
         
         meta = user.carga_horaria or 528
         if user.escala == '5x2' and dt_atual.weekday() >= 5: meta = 0
@@ -129,13 +134,21 @@ def gerar_pdf_espelho_mensal(user, mes_ano_str):
                 trabalhado += (time_to_minutes(pontos[i+1].hora_registro) - time_to_minutes(pontos[i].hora_registro))
         
         saldo = trabalhado - meta
-        total_saldo_min += saldo
-        status = "OK"
-        if not pontos: status = "Folga" if meta == 0 else "Falta"
-        elif len(pontos) % 2 != 0: status = "Inc."
-        elif saldo > 10: status = "+ Extra"
-        elif saldo < -10: status = "Débito" if meta > 0 else "Extra"
         
+        # LÓGICA DO ATESTADO - Substitui tudo se o funcionário estiver afastado
+        if resumo_dia and resumo_dia.status_dia == 'Atestado':
+            horarios_str = "Atestado Médico"
+            trabalhado = 0
+            saldo = 0  # Ele não fica devendo e nem ganha hora extra
+            status = "Abono"
+        else:
+            status = "OK"
+            if not pontos: status = "Folga" if meta == 0 else "Falta"
+            elif len(pontos) % 2 != 0: status = "Inc."
+            elif saldo > 10: status = "+ Extra"
+            elif saldo < -10: status = "Débito" if meta > 0 else "Extra"
+
+        total_saldo_min += saldo
         dados.append([dt_atual.strftime('%d/%m'), dias_semana[dt_atual.weekday()], horarios_str, format_minutes_to_hm(trabalhado).replace('-', ''), format_minutes_to_hm(saldo), status])
     
     dados.append(['', '', 'TOTAL MENSAL', '', format_minutes_to_hm(total_saldo_min), ''])
@@ -159,9 +172,7 @@ def gerar_pdf_espelho_mensal(user, mes_ano_str):
     return buffer.read()
 
 def gerar_certificado_entrega(assinatura, user):
-    """
-    Gera um PDF de auditoria (Certificado de Entrega Digital).
-    """
+    """Gera um PDF de auditoria (Certificado de Entrega Digital)."""
     buffer = io.BytesIO()
     p = canvas.Canvas(buffer, pagesize=A4)
     width, height = A4
@@ -215,6 +226,4 @@ def gerar_certificado_entrega(assinatura, user):
     p.save()
     buffer.seek(0)
     return buffer.read()
-
-
 

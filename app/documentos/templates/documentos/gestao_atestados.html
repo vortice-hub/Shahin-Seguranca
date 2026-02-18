@@ -4,7 +4,7 @@
     <h2 class="text-2xl font-bold text-slate-800 flex items-center gap-2">
         <i class="fas fa-file-medical text-teal-600"></i> Gestão de Atestados
     </h2>
-    <p class="text-sm text-slate-500">Verifique e valide os atestados lidos pela Inteligência Artificial.</p>
+    <p class="text-sm text-slate-500">Verifique, edite (se necessário) e valide os atestados médicos.</p>
 </div>
 
 <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-10">
@@ -14,7 +14,7 @@
                 <tr>
                     <th class="px-6 py-4">Funcionário</th>
                     <th class="px-6 py-4">Enviado em</th>
-                    <th class="px-6 py-4">Início (Leitura IA)</th>
+                    <th class="px-6 py-4">Início (Afastamento)</th>
                     <th class="px-6 py-4">Dias</th>
                     <th class="px-6 py-4 text-center">Status</th>
                     <th class="px-6 py-4 text-right">Ações</th>
@@ -25,52 +25,53 @@
                 <tr class="hover:bg-slate-50 transition">
                     <td class="px-6 py-4 font-bold text-slate-800">{{ atestado.user.real_name }}</td>
                     <td class="px-6 py-4 text-xs">{{ atestado.data_envio.strftime('%d/%m/%Y %H:%M') }}</td>
+                    
+                    {% if atestado.status == 'Revisao' or atestado.status == 'Processando' %}
+                    <form action="{{ url_for('documentos.avaliar_atestado', id=atestado.id) }}" method="POST">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                        
+                        <td class="px-6 py-4">
+                            <input type="date" name="data_inicio" value="{{ atestado.data_inicio_afastamento.strftime('%Y-%m-%d') if atestado.data_inicio_afastamento else '' }}" required class="border border-slate-300 rounded px-2 py-1 text-xs w-full">
+                        </td>
+                        <td class="px-6 py-4">
+                            <input type="number" name="quantidade_dias" value="{{ atestado.quantidade_dias if atestado.quantidade_dias else '' }}" min="1" max="180" required class="border border-slate-300 rounded px-2 py-1 text-xs w-20">
+                        </td>
+                        <td class="px-6 py-4 text-center">
+                            <span class="bg-amber-100 text-amber-600 px-2 py-1 rounded text-[10px] font-bold uppercase"><i class="fas fa-search"></i> Em Revisão</span>
+                        </td>
+                        <td class="px-6 py-4 text-right flex items-center justify-end gap-2">
+                            <a href="{{ url_for('documentos.baixar_atestado', id=atestado.id) }}" target="_blank" class="text-slate-500 hover:text-blue-600 p-2 bg-slate-100 rounded transition" title="Ver Documento">
+                                <i class="fas fa-eye"></i>
+                            </a>
+                            <button type="submit" name="acao" value="aprovar" class="text-white bg-emerald-500 hover:bg-emerald-600 p-2 rounded transition" title="Aprovar e Abonar Horas">
+                                <i class="fas fa-check"></i>
+                            </button>
+                            <button type="submit" name="acao" value="recusar" class="text-white bg-red-500 hover:bg-red-600 p-2 rounded transition" title="Recusar" onclick="return confirm('Tem a certeza que deseja recusar este atestado?');">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </td>
+                    </form>
+                    
+                    {% else %}
                     <td class="px-6 py-4 font-medium text-slate-700">
-                        {% if atestado.data_inicio_afastamento %}
-                            {{ atestado.data_inicio_afastamento.strftime('%d/%m/%Y') }}
-                        {% else %}
-                            <span class="text-red-500 text-xs"><i class="fas fa-exclamation-triangle"></i> Não lido</span>
-                        {% endif %}
+                        {{ atestado.data_inicio_afastamento.strftime('%d/%m/%Y') if atestado.data_inicio_afastamento else '--' }}
                     </td>
                     <td class="px-6 py-4 font-bold text-blue-600">
-                        {% if atestado.quantidade_dias %}
-                            {{ atestado.quantidade_dias }} dia(s)
-                        {% else %}
-                            <span class="text-red-500 text-xs">?</span>
-                        {% endif %}
+                        {{ atestado.quantidade_dias }} dia(s)
                     </td>
                     <td class="px-6 py-4 text-center">
-                        {% if atestado.status == 'Revisao' or atestado.status == 'Processando' %}
-                            <span class="bg-amber-100 text-amber-600 px-2 py-1 rounded text-[10px] font-bold uppercase"><i class="fas fa-search"></i> Em Revisão</span>
-                        {% elif atestado.status == 'Aprovado' %}
+                        {% if atestado.status == 'Aprovado' %}
                             <span class="bg-emerald-100 text-emerald-600 px-2 py-1 rounded text-[10px] font-bold uppercase"><i class="fas fa-check"></i> Aprovado</span>
                         {% else %}
                             <span class="bg-red-100 text-red-600 px-2 py-1 rounded text-[10px] font-bold uppercase"><i class="fas fa-times"></i> Recusado</span>
                         {% endif %}
                     </td>
-                    <td class="px-6 py-4 text-right flex items-center justify-end gap-2">
-                        <a href="{{ url_for('documentos.baixar_atestado', id=atestado.id) }}" target="_blank" class="text-slate-500 hover:text-blue-600 p-2 bg-slate-100 rounded transition" title="Ver Documento">
-                            <i class="fas fa-eye"></i> Ver Imagem
+                    <td class="px-6 py-4 text-right">
+                        <a href="{{ url_for('documentos.baixar_atestado', id=atestado.id) }}" target="_blank" class="text-slate-500 hover:text-blue-600 p-2 bg-slate-100 rounded transition text-xs font-bold uppercase">
+                            <i class="fas fa-eye mr-1"></i> Ver Anexo
                         </a>
-                        
-                        {% if atestado.status == 'Revisao' or atestado.status == 'Processando' %}
-                            <form action="{{ url_for('documentos.avaliar_atestado', id=atestado.id) }}" method="POST" class="inline">
-                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                                <input type="hidden" name="acao" value="aprovar"/>
-                                <button type="submit" class="text-white bg-emerald-500 hover:bg-emerald-600 p-2 rounded transition" title="Aprovar">
-                                    <i class="fas fa-check"></i>
-                                </button>
-                            </form>
-                            
-                            <form action="{{ url_for('documentos.avaliar_atestado', id=atestado.id) }}" method="POST" class="inline" onsubmit="return confirm('Tem a certeza que deseja recusar este atestado?');">
-                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                                <input type="hidden" name="acao" value="recusar"/>
-                                <button type="submit" class="text-white bg-red-500 hover:bg-red-600 p-2 rounded transition" title="Recusar">
-                                    <i class="fas fa-times"></i>
-                                </button>
-                            </form>
-                        {% endif %}
                     </td>
+                    {% endif %}
                 </tr>
                 {% else %}
                 <tr><td colspan="6" class="px-6 py-20 text-center text-slate-400 font-medium">Nenhum atestado recebido.</td></tr>
