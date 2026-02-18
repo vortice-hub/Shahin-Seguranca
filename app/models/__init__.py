@@ -18,6 +18,7 @@ class User(UserMixin, db.Model):
     role = db.Column(db.String(20), default='Funcionario')
     permissions = db.Column(db.String(500), nullable=True)
     is_first_access = db.Column(db.Boolean, default=True)
+    data_admissao = db.Column(db.Date, nullable=True) # NOVA COLUNA CLT
     carga_horaria = db.Column(db.Integer, default=528)
     tempo_intervalo = db.Column(db.Integer, default=60)
     inicio_jornada_ideal = db.Column(db.String(5), default="08:00")
@@ -41,6 +42,7 @@ class PreCadastro(db.Model):
     salario = db.Column(db.Float, default=0.0)
     razao_social = db.Column(db.String(200))
     cnpj = db.Column(db.String(20))
+    data_admissao = db.Column(db.Date, nullable=True) # NOVA COLUNA CLT
     carga_horaria = db.Column(db.Integer, default=528)
     tempo_intervalo = db.Column(db.Integer, default=60)
     inicio_jornada_ideal = db.Column(db.String(5), default="08:00")
@@ -166,17 +168,31 @@ class Atestado(db.Model):
     motivo_recusa = db.Column(db.String(500), nullable=True)
     user = db.relationship('User', backref=db.backref('atestados', lazy=True))
 
-# --- PROJETO ESCALA: Tabela de Férias e Ausências ---
+# --- MÓDULO FÉRIAS CLT ---
+class PeriodoAquisitivo(db.Model):
+    __tablename__ = 'periodos_aquisitivos'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    data_inicio = db.Column(db.Date, nullable=False)
+    data_fim = db.Column(db.Date, nullable=False)
+    faltas_injustificadas = db.Column(db.Integer, default=0)
+    dias_direito = db.Column(db.Integer, default=30)
+    dias_usados = db.Column(db.Integer, default=0)
+    ativo = db.Column(db.Boolean, default=True)
+    user = db.relationship('User', backref=db.backref('periodos', lazy=True))
+
 class SolicitacaoAusencia(db.Model):
     __tablename__ = 'solicitacoes_ausencia'
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
-    tipo_ausencia = db.Column(db.String(50), nullable=False) # Ferias, Folga Premio, Licenca
+    tipo_ausencia = db.Column(db.String(50), nullable=False) 
     data_inicio = db.Column(db.Date, nullable=False)
     data_fim = db.Column(db.Date, nullable=False)
     quantidade_dias = db.Column(db.Integer, nullable=False)
+    abono_pecuniario = db.Column(db.Boolean, default=False) # NOVA COLUNA CLT
+    dias_abono = db.Column(db.Integer, default=0) # NOVA COLUNA CLT
     observacao = db.Column(db.Text, nullable=True)
-    status = db.Column(db.String(20), default='Pendente') # Pendente, Aprovado, Recusado
+    status = db.Column(db.String(20), default='Pendente') 
     data_solicitacao = db.Column(db.DateTime, default=get_brasil_time)
     user = db.relationship('User', backref=db.backref('ausencias', lazy=True))
 

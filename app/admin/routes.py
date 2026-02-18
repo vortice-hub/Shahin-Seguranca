@@ -4,7 +4,7 @@ from sqlalchemy import func, text
 import csv
 import io
 import logging
-from datetime import time # Necessário para converter horários de texto para objeto time
+from datetime import time, datetime, date
 
 # Importações do Projeto
 from app.extensions import db
@@ -41,6 +41,10 @@ def novo_usuario():
                 flash('CPF já cadastrado!', 'error')
                 return redirect(url_for('admin.novo_usuario'))
 
+            # Tratamento da Data de Admissão CLT
+            dt_adm_str = request.form.get('data_admissao')
+            dt_admissao = datetime.strptime(dt_adm_str, '%Y-%m-%d').date() if dt_adm_str else None
+
             carga_hm = request.form.get('carga_horaria') or '08:48'
             carga_minutos = time_to_minutes(carga_hm)
             intervalo_min = int(request.form.get('tempo_intervalo') or 60)
@@ -52,6 +56,7 @@ def novo_usuario():
                 salario=float(request.form.get('salario') or 0),
                 razao_social=request.form.get('razao_social'),
                 cnpj=request.form.get('cnpj'),
+                data_admissao=dt_admissao,
                 carga_horaria=carga_minutos,
                 tempo_intervalo=intervalo_min,
                 inicio_jornada_ideal=request.form.get('h_ent') or '08:00',
@@ -77,7 +82,6 @@ def gerenciar_usuarios():
         flash('Sem acesso à gestão de utilizadores.', 'error')
         return redirect(url_for('main.dashboard'))
 
-    # Oculta o Terminal (CPF 12345678900) da lista administrativa
     users = User.query.filter(User.username != '12345678900', User.username != 'terminal').order_by(User.real_name).all()
     pendentes = PreCadastro.query.order_by(PreCadastro.nome_previsto).all()
     return render_template('admin/admin_usuarios.html', users=users, pendentes=pendentes)
@@ -97,7 +101,6 @@ def editar_usuario(id):
         acao = request.form.get('acao')
         try:
             if acao == 'excluir':
-                # Proteção para o Master atual (CPF) e legados
                 if user.username == '50097952800' or user.username == 'Thaynara':
                     flash('Impossível excluir Master.', 'error')
                 else: 
@@ -117,13 +120,16 @@ def editar_usuario(id):
                 user.razao_social_empregadora = request.form.get('razao_social')
                 user.cnpj_empregador = request.form.get('cnpj')
                 
+                # Tratamento da Data de Admissão CLT
+                dt_adm_str = request.form.get('data_admissao')
+                if dt_adm_str: user.data_admissao = datetime.strptime(dt_adm_str, '%Y-%m-%d').date()
+                
                 user.carga_horaria = time_to_minutes(request.form.get('carga_horaria'))
                 user.tempo_intervalo = int(request.form.get('tempo_intervalo') or 60)
                 user.inicio_jornada_ideal = request.form.get('h_ent')
                 user.escala = request.form.get('escala')
                 if request.form.get('dt_escala'): user.data_inicio_escala = request.form.get('dt_escala')
 
-                # Master absoluto não perde permissões
                 if user.username != '50097952800' and user.username != 'Thaynara':
                     lista_perms = request.form.getlist('perm_keys')
                     user.permissions = ",".join(lista_perms)
@@ -153,64 +159,40 @@ def admin_solicitacoes():
         if solic:
             if request.form.get('decisao') == 'aprovar':
                 solic.status = 'Aprovado'
-                
-                # --- LÓGICA DE APLICAÇÃO DO AJUSTE NO PONTO REAL ---
                 try:
-                    # 1. Caso seja EDIÇÃO de um ponto existente
                     if solic.tipo_solicitacao == 'Edicao' and solic.ponto_original_id:
                         reg = PontoRegistro.query.get(solic.ponto_original_id)
                         if reg:
                             h, m = map(int, solic.novo_horario.split(':'))
                             reg.hora_registro = time(h, m)
                             reg.tipo = solic.tipo_batida
-                    
-                    # 2. Caso seja INCLUSÃO de um novo ponto
                     elif solic.tipo_solicitacao == 'Inclusao':
                         h, m = map(int, solic.novo_horario.split(':'))
-                        novo_ponto = PontoRegistro(
-                            user_id=solic.user_id,
-                            data_registro=solic.data_referencia,
-                            hora_registro=time(h, m),
-                            tipo=solic.tipo_batida,
-                            latitude='Ajuste Manual',
-                            longitude='Aprovado pelo Master'
-                        )
+                        novo_ponto = PontoRegistro(user_id=solic.user_id, data_registro=solic.data_referencia, hora_registro=time(h, m), tipo=solic.tipo_batida, latitude='Ajuste Manual', longitude='Aprovado pelo Master')
                         db.session.add(novo_ponto)
-                    
-                    # 3. Caso seja EXCLUSÃO de um ponto
                     elif solic.tipo_solicitacao == 'Exclusao' and solic.ponto_original_id:
                         reg = PontoRegistro.query.get(solic.ponto_original_id)
-                        if reg:
-                            db.session.delete(reg)
+                        if reg: db.session.delete(reg)
 
-                    # Força a gravação das alterações para que o cálculo use os dados novos
                     db.session.flush()
-                    
-                    # Atualiza o resumo diário (Espelho de Ponto)
                     calcular_dia(solic.user_id, solic.data_referencia)
                     flash('Aprovado e refletido no espelho.', 'success')
-                    
                 except Exception as e:
                     db.session.rollback()
                     flash(f'Erro ao aplicar ajuste: {e}', 'error')
                     return redirect(url_for('admin.admin_solicitacoes'))
-
             else:
                 solic.status = 'Reprovado'
                 solic.motivo_reprovacao = request.form.get('motivo_repro')
                 flash('Reprovado.', 'warning')
-            
             db.session.commit()
             
-    # Busca os dados extras para mostrar o horário antigo no template
     extras = {}
     solicitacoes_pendentes = PontoAjuste.query.filter_by(status='Pendente').order_by(PontoAjuste.created_at.desc()).all()
     for s in solicitacoes_pendentes:
         if s.ponto_original_id:
             p_original = PontoRegistro.query.get(s.ponto_original_id)
-            if p_original:
-                extras[s.id] = p_original.hora_registro.strftime('%H:%M')
-
+            if p_original: extras[s.id] = p_original.hora_registro.strftime('%H:%M')
     return render_template('admin/solicitacoes.html', solicitacoes=solicitacoes_pendentes, extras=extras)
 
 @admin_bp.route('/ferramentas/limpeza', methods=['GET', 'POST'])
@@ -234,4 +216,3 @@ def admin_limpeza():
         except: db.session.rollback()
     return render_template('admin/admin_limpeza.html')
 
-# (Outras rotas como importar_csv permanecem iguais)
