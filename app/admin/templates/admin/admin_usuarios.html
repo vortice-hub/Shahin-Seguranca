@@ -8,8 +8,8 @@
     <a href="/admin/usuarios/novo" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl shadow-md text-center transition transform hover:-translate-y-1">
         <i class="fas fa-user-plus mr-2"></i> NOVO CADASTRO
     </a>
-    <button onclick="document.getElementById('modalCsv').classList.remove('hidden')" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-4 rounded-xl shadow-md text-center transition transform hover:-translate-y-1">
-        <i class="fas fa-file-csv mr-2"></i> IMPORTAR PLANILHA
+    <button onclick="document.getElementById('modalExcel').classList.remove('hidden')" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-4 rounded-xl shadow-md text-center transition transform hover:-translate-y-1">
+        <i class="fas fa-file-excel mr-2"></i> IMPORTAR EXCEL
     </button>
 </div>
 
@@ -69,39 +69,39 @@
     </div>
 </div>
 
-<div id="modalCsv" class="fixed inset-0 bg-black/60 z-50 hidden flex items-center justify-center p-4">
+<div id="modalExcel" class="fixed inset-0 bg-black/60 z-50 hidden flex items-center justify-center p-4">
     <div class="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden">
         <div class="bg-emerald-600 p-5 flex justify-between items-center text-white">
-            <h3 class="font-bold text-lg"><i class="fas fa-file-csv mr-2"></i> Importar Colaboradores</h3>
-            <button onclick="document.getElementById('modalCsv').classList.add('hidden')" class="hover:text-emerald-200"><i class="fas fa-times text-xl"></i></button>
+            <h3 class="font-bold text-lg"><i class="fas fa-file-excel mr-2"></i> Importar Planilha Excel</h3>
+            <button onclick="document.getElementById('modalExcel').classList.add('hidden')" class="hover:text-emerald-200"><i class="fas fa-times text-xl"></i></button>
         </div>
         
-        <form action="/admin/usuarios/importar-csv" method="POST" enctype="multipart/form-data" class="p-6">
+        <form action="/admin/usuarios/importar-excel" method="POST" enctype="multipart/form-data" class="p-6">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
             
             <div class="mb-6 bg-emerald-50 p-4 rounded-xl border border-emerald-100">
-                <p class="text-xs text-emerald-800 mb-2 font-bold uppercase">Formato Exigido (.csv com delimitador Ponto e Vírgula ';')</p>
+                <p class="text-xs text-emerald-800 mb-2 font-bold uppercase">Formato Exigido (.xlsx ou .xls)</p>
                 <p class="text-[10px] text-emerald-700 font-mono bg-white p-2 rounded border border-emerald-200 mb-3 overflow-x-auto whitespace-nowrap">
-                    nome;cpf;cargo;data_admissao;salario;escala;data_escala;carga_horaria;intervalo;entrada_ideal
+                    Colunas: nome | cpf | cargo | data_admissao | salario | escala | data_escala | carga_horaria
                 </p>
                 <ul class="text-[10px] text-emerald-600 space-y-1 list-disc list-inside">
+                    <li>Pode importar a planilha original diretamente do Excel.</li>
                     <li><strong>nome, cpf, cargo, data_admissao</strong> são colunas obrigatórias.</li>
-                    <li>As datas devem estar no formato DD/MM/AAAA ou AAAA-MM-DD.</li>
-                    <li>O resto é opcional (o sistema preenche o padrão se estiver vazio).</li>
+                    <li>Os campos em branco serão preenchidos com os padrões do sistema.</li>
                 </ul>
             </div>
 
             <div class="mb-6">
                 <label class="block w-full border-2 border-dashed border-slate-300 rounded-xl p-6 text-center cursor-pointer hover:border-emerald-500 hover:bg-emerald-50 transition group">
                     <i class="fas fa-cloud-upload-alt text-3xl text-slate-400 group-hover:text-emerald-500 mb-2"></i>
-                    <p class="text-sm font-bold text-slate-600 group-hover:text-emerald-700">Clique para selecionar o arquivo .CSV</p>
-                    <input type="file" name="arquivo_csv" accept=".csv" required class="hidden" id="fileInput" onchange="document.getElementById('fileName').innerText = this.files[0].name">
+                    <p class="text-sm font-bold text-slate-600 group-hover:text-emerald-700">Clique para selecionar o arquivo Excel</p>
+                    <input type="file" name="arquivo_excel" accept=".xlsx, .xls" required class="hidden" id="fileInput" onchange="document.getElementById('fileName').innerText = this.files[0].name">
                 </label>
                 <p id="fileName" class="text-center text-xs font-bold text-emerald-600 mt-2 h-4"></p>
             </div>
 
-            <button type="submit" class="w-full bg-slate-900 hover:bg-emerald-600 text-white font-bold py-3.5 rounded-xl shadow-lg transition">
-                INICIAR IMPORTAÇÃO
+            <button type="submit" class="w-full bg-slate-900 hover:bg-emerald-600 text-white font-bold py-3.5 rounded-xl shadow-lg transition flex items-center justify-center gap-2">
+                <i class="fas fa-magic"></i> INICIAR IMPORTAÇÃO MÁGICA
             </button>
         </form>
     </div>

@@ -1,10 +1,10 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from flask_login import login_required, current_user
 from sqlalchemy import func, text
-import csv
 import io
 import logging
 from datetime import time, datetime, date
+import pandas as pd # Importação da Biblioteca Mágica para Excel
 
 # Importações do Projeto
 from app.extensions import db
@@ -84,6 +84,22 @@ def gerenciar_usuarios():
     users = User.query.filter(User.username != '12345678900', User.username != 'terminal').order_by(User.real_name).all()
     pendentes = PreCadastro.query.order_by(PreCadastro.nome_previsto).all()
     return render_template('admin/admin_usuarios.html', users=users, pendentes=pendentes)
+
+@admin_bp.route('/liberar-acesso/excluir/<int:id>', methods=['GET'])
+@login_required
+@permission_required('USUARIOS')
+def excluir_pre_cadastro(id):
+    pre_cadastro = PreCadastro.query.get_or_404(id)
+    try:
+        nome = pre_cadastro.nome_previsto
+        db.session.delete(pre_cadastro)
+        db.session.commit()
+        flash(f'O pré-cadastro de {nome} foi removido com sucesso da fila.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Erro ao tentar remover: {str(e)}', 'error')
+    
+    return redirect(url_for('admin.gerenciar_usuarios'))
 
 @admin_bp.route('/usuarios/editar/<int:id>', methods=['GET', 'POST'])
 @login_required
@@ -214,113 +230,127 @@ def admin_limpeza():
         except: db.session.rollback()
     return render_template('admin/admin_limpeza.html')
 
-# --- IMPORTAÇÃO EM MASSA VIA CSV ---
-@admin_bp.route('/usuarios/importar-csv', methods=['GET', 'POST'])
+# --- LEITOR INTELIGENTE DE EXCEL NATIVO ---
+@admin_bp.route('/usuarios/importar-excel', methods=['POST'])
 @login_required
 @permission_required('USUARIOS')
-def importar_csv_usuarios():
-    if request.method == 'POST':
-        if 'arquivo_csv' not in request.files:
-            flash('Nenhum arquivo enviado.', 'error')
-            return redirect(request.url)
+def importar_excel_usuarios():
+    if 'arquivo_excel' not in request.files:
+        flash('Nenhum arquivo enviado.', 'error')
+        return redirect(url_for('admin.gerenciar_usuarios'))
+    
+    file = request.files['arquivo_excel']
+    if file.filename == '':
+        flash('Nenhum arquivo selecionado.', 'error')
+        return redirect(url_for('admin.gerenciar_usuarios'))
         
-        file = request.files['arquivo_csv']
-        if file.filename == '':
-            flash('Nenhum arquivo selecionado.', 'error')
-            return redirect(request.url)
-            
-        if not file.filename.endswith('.csv'):
-            flash('Por favor, envie um arquivo no formato .csv', 'error')
-            return redirect(request.url)
+    if not file.filename.endswith(('.xlsx', '.xls')):
+        flash('Formato inválido. Por favor, envie uma planilha real do Excel (.xlsx ou .xls)', 'error')
+        return redirect(url_for('admin.gerenciar_usuarios'))
 
-        try:
-            stream = io.StringIO(file.stream.read().decode("UTF8"), newline=None)
-            csv_input = csv.DictReader(stream, delimiter=';')
+    try:
+        # A mágica do Pandas: lê o Excel diretamente da memória
+        df = pd.read_excel(file)
+        df = df.fillna('') # Remove células em branco ("NaN") para evitar erros
+        df.columns = [str(c).strip().lower() for c in df.columns] # Padroniza os nomes das colunas
+        
+        records = df.to_dict('records') # Transforma a tabela num formato amigável para o Python
+        sucesso, falhas = 0, 0
+        
+        for row in records:
+            nome = str(row.get('nome', '')).strip()
             
-            # Remove espaços vazios nos nomes das colunas
-            csv_input.fieldnames = [field.strip() for field in csv_input.fieldnames]
+            # O Excel pode ler CPFs como números com casas decimais (ex: 123456.0). A função abaixo limpa isso.
+            cpf_raw = str(row.get('cpf', '')).replace('.', '').replace('-', '').strip()
+            if cpf_raw.endswith('.0'): cpf_raw = cpf_raw[:-2]
+            cpf = cpf_raw
             
-            sucesso, falhas = 0, 0
+            cargo = str(row.get('cargo', '')).strip()
             
-            for row in csv_input:
-                nome = row.get('nome', '').strip()
-                cpf = row.get('cpf', '').replace('.', '').replace('-', '').strip()
-                cargo = row.get('cargo', '').strip()
+            if not nome or not cpf:
+                falhas += 1
+                continue
                 
-                if not nome or not cpf:
-                    falhas += 1
-                    continue
-                    
-                # Ignorar se o CPF já existir no sistema ativo ou na fila
-                if User.query.filter_by(cpf=cpf).first() or PreCadastro.query.filter_by(cpf=cpf).first():
-                    falhas += 1
-                    continue
+            # Trava anti-duplicidade
+            if User.query.filter_by(cpf=cpf).first() or PreCadastro.query.filter_by(cpf=cpf).first():
+                falhas += 1
+                continue
 
-                # Processar Data de Admissão
-                dt_admissao = None
-                dt_adm_str = row.get('data_admissao', '').strip()
-                if dt_adm_str:
+            # Processamento de Datas nativas do Excel
+            dt_admissao = None
+            dt_adm_raw = row.get('data_admissao', '')
+            if dt_adm_raw:
+                if isinstance(dt_adm_raw, (datetime, date)):
+                    dt_admissao = dt_adm_raw if isinstance(dt_adm_raw, date) else dt_adm_raw.date()
+                elif isinstance(dt_adm_raw, pd.Timestamp):
+                    dt_admissao = dt_adm_raw.date()
+                else:
+                    dt_adm_str = str(dt_adm_raw).strip()
+                    if ' ' in dt_adm_str: dt_adm_str = dt_adm_str.split(' ')[0]
                     try:
-                        # Tenta DD/MM/AAAA e depois AAAA-MM-DD
-                        if '/' in dt_adm_str:
-                            dt_admissao = datetime.strptime(dt_adm_str, '%d/%m/%Y').date()
-                        else:
-                            dt_admissao = datetime.strptime(dt_adm_str, '%Y-%m-%d').date()
-                    except ValueError:
-                        pass # Data inválida, ignora
+                        if '/' in dt_adm_str: dt_admissao = datetime.strptime(dt_adm_str, '%d/%m/%Y').date()
+                        else: dt_admissao = datetime.strptime(dt_adm_str, '%Y-%m-%d').date()
+                    except ValueError: pass
 
-                # Processar Salário
-                try: salario = float(row.get('salario', 0))
-                except: salario = 0.0
+            try: salario = float(row.get('salario', 0))
+            except: salario = 0.0
 
-                # Processar Escala e Data de Referência
-                escala = row.get('escala', 'Livre').strip()
-                dt_escala = None
-                if escala == '12x36':
-                    dt_esc_str = row.get('data_escala', '').strip()
-                    if dt_esc_str:
+            escala = str(row.get('escala', 'Livre')).strip()
+            dt_escala = None
+            if escala == '12x36':
+                dt_esc_raw = row.get('data_escala', '')
+                if dt_esc_raw:
+                    if isinstance(dt_esc_raw, (datetime, date)):
+                        dt_escala = dt_esc_raw if isinstance(dt_esc_raw, date) else dt_esc_raw.date()
+                    elif isinstance(dt_esc_raw, pd.Timestamp):
+                        dt_escala = dt_esc_raw.date()
+                    else:
+                        dt_esc_str = str(dt_esc_raw).strip()
+                        if ' ' in dt_esc_str: dt_esc_str = dt_esc_str.split(' ')[0]
                         try:
                             if '/' in dt_esc_str: dt_escala = datetime.strptime(dt_esc_str, '%d/%m/%Y').date()
                             else: dt_escala = datetime.strptime(dt_esc_str, '%Y-%m-%d').date()
                         except ValueError: pass
 
-                # Processar Cargas e Horários
-                carga_hm = row.get('carga_horaria', '08:48').strip() or '08:48'
-                carga_min = time_to_minutes(carga_hm)
-                
-                try: intervalo = int(row.get('intervalo', 60))
-                except: intervalo = 60
-                
-                entrada = row.get('entrada_ideal', '08:00').strip() or '08:00'
+            # Processamento de Carga Horária e Horários Nativos
+            carga_raw = row.get('carga_horaria', '08:48')
+            if isinstance(carga_raw, time): carga_hm = carga_raw.strftime('%H:%M')
+            else: carga_hm = str(carga_raw).strip() or '08:48'
+            carga_min = time_to_minutes(carga_hm)
+            
+            try: intervalo = int(float(row.get('intervalo', 60)))
+            except: intervalo = 60
+            
+            entrada_raw = row.get('entrada_ideal', '08:00')
+            if isinstance(entrada_raw, time): entrada = entrada_raw.strftime('%H:%M')
+            else: entrada = str(entrada_raw).strip() or '08:00'
 
-                novo_pre = PreCadastro(
-                    cpf=cpf,
-                    nome_previsto=nome,
-                    cargo=cargo,
-                    salario=salario,
-                    data_admissao=dt_admissao,
-                    escala=escala,
-                    data_inicio_escala=dt_escala,
-                    carga_horaria=carga_min,
-                    tempo_intervalo=intervalo,
-                    inicio_jornada_ideal=entrada,
-                    razao_social="LA SHAHIN SERVIÇOS DE SEGURANÇA LTDA",
-                    cnpj="50.537.235/0001-95"
-                )
-                db.session.add(novo_pre)
-                sucesso += 1
+            novo_pre = PreCadastro(
+                cpf=cpf,
+                nome_previsto=nome,
+                cargo=cargo,
+                salario=salario,
+                data_admissao=dt_admissao,
+                escala=escala,
+                data_inicio_escala=dt_escala,
+                carga_horaria=carga_min,
+                tempo_intervalo=intervalo,
+                inicio_jornada_ideal=entrada,
+                razao_social="LA SHAHIN SERVIÇOS DE SEGURANÇA LTDA",
+                cnpj="50.537.235/0001-95"
+            )
+            db.session.add(novo_pre)
+            sucesso += 1
 
-            db.session.commit()
-            if sucesso > 0:
-                flash(f'Importação concluída: {sucesso} registros adicionados à fila. {falhas} ignorados (CPF existente ou sem nome).', 'success')
-            else:
-                flash('Nenhum registro válido encontrado. Verifique o formato do arquivo.', 'error')
-                
-        except Exception as e:
-            db.session.rollback()
-            flash(f'Erro ao ler o arquivo: {str(e)}', 'error')
+        db.session.commit()
+        if sucesso > 0:
+            flash(f'Importação Mágica concluída: {sucesso} lidos do Excel. {falhas} ignorados (Duplicados ou em branco).', 'success')
+        else:
+            flash('Nenhum registro válido encontrado. Verifique se a planilha tem os títulos das colunas corretos.', 'error')
+            
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Erro ao ler arquivo do Excel: {str(e)}', 'error')
 
-        return redirect(url_for('admin.gerenciar_usuarios'))
-
-    return render_template('admin/importar_csv.html')
+    return redirect(url_for('admin.gerenciar_usuarios'))
 
