@@ -186,7 +186,6 @@ def solicitar_ferias():
     if not current_user.data_admissao:
         flash("Sua data de admissão não está cadastrada. Solicite ao RH para regularizar.", "warning")
 
-    # Módulo Analítico de Férias CLT (Cálculo de Faltas e Direitos)
     dias_direito = 30
     faltas = 0
     saldo = 0
@@ -195,27 +194,16 @@ def solicitar_ferias():
     if current_user.data_admissao:
         hoje = get_brasil_time().date()
         um_ano_atras = hoje - timedelta(days=365)
-        # Conta faltas injustificadas no último ano de trabalho
-        faltas = PontoResumo.query.filter(
-            PontoResumo.user_id == current_user.id,
-            PontoResumo.data_referencia >= um_ano_atras,
-            PontoResumo.status_dia == 'Falta'
-        ).count()
+        faltas = PontoResumo.query.filter(PontoResumo.user_id == current_user.id, PontoResumo.data_referencia >= um_ano_atras, PontoResumo.status_dia == 'Falta').count()
 
-        # Regra CLT: Redução de dias por faltas injustificadas
         if faltas <= 5: dias_direito = 30
         elif faltas <= 14: dias_direito = 24
         elif faltas <= 23: dias_direito = 18
         elif faltas <= 32: dias_direito = 12
         else: dias_direito = 0
 
-        # Conta dias já aprovados/pendentes no sistema
-        ausencias_ano = SolicitacaoAusencia.query.filter(
-            SolicitacaoAusencia.user_id == current_user.id,
-            SolicitacaoAusencia.tipo_ausencia == 'Férias',
-            SolicitacaoAusencia.status.in_(['Aprovado', 'Pendente'])
-        ).all()
-        dias_usados = sum(a.quantidade_dias for a in ausencias_ano)
+        ausencias_ano = SolicitacaoAusencia.query.filter(SolicitacaoAusencia.user_id == current_user.id, SolicitacaoAusencia.tipo_ausencia == 'Férias', SolicitacaoAusencia.status.in_(['Aprovado', 'Pendente'])).all()
+        dias_usados = sum(a.quantidade_dias + a.dias_abono for a in ausencias_ano)
         saldo = dias_direito - dias_usados
 
     if request.method == 'POST':
@@ -223,8 +211,6 @@ def solicitar_ferias():
         dt_inicio = datetime.strptime(request.form.get('data_inicio'), '%Y-%m-%d').date()
         dt_fim = datetime.strptime(request.form.get('data_fim'), '%Y-%m-%d').date()
         obs = request.form.get('observacao', '')
-        
-        # Abono Pecuniário (Vender Férias)
         vender_ferias = request.form.get('vender_ferias') == 'sim'
         
         if dt_inicio > dt_fim:
@@ -234,60 +220,40 @@ def solicitar_ferias():
         qtd_dias = (dt_fim - dt_inicio).days + 1
         dias_abono = 0
 
-        # --- VALIDAÇÕES ESTRITAS DA CLT PARA FÉRIAS ---
         if tipo == 'Férias':
             if not current_user.data_admissao:
                 flash("Data de admissão ausente. O RH deve configurar seu perfil antes de solicitar férias.", "error")
                 return redirect(url_for('ponto.solicitar_ferias'))
 
-            # Validação de Saldo e Venda (Abono)
             if vender_ferias:
-                dias_abono = qtd_dias // 2 # A lógica de venda costuma ser vender o terço. Ex: tira 20, vende 10.
+                dias_abono = qtd_dias // 2 
                 if dias_abono > (dias_direito / 3):
                     flash(f"A CLT permite vender no máximo 1/3 das férias (Max: {int(dias_direito/3)} dias).", "error")
                     return redirect(url_for('ponto.solicitar_ferias'))
-                
                 total_descontado = qtd_dias + dias_abono
                 if total_descontado > saldo:
-                    flash(f"Saldo insuficiente. Você tem {saldo} dias disponíveis, mas o pedido (Descanso + Venda) totaliza {total_descontado} dias.", "error")
+                    flash(f"Saldo insuficiente. Você tem {saldo} dias disponíveis, mas o pedido totaliza {total_descontado} dias.", "error")
                     return redirect(url_for('ponto.solicitar_ferias'))
             else:
                 if qtd_dias > saldo:
                     flash(f"Saldo insuficiente. Você possui apenas {saldo} dias.", "error")
                     return redirect(url_for('ponto.solicitar_ferias'))
 
-            # Validação: Fracionamento (mínimo de 5 dias)
             if qtd_dias < 5:
                 flash("Pela CLT (Reforma 2017), o período fracionado de férias não pode ser inferior a 5 dias.", "error")
                 return redirect(url_for('ponto.solicitar_ferias'))
 
-            # Validação: Início antes do DSR (Art. 134, §3º CLT)
-            # Ex: Se escala é 5x2 (folga Sáb/Dom), não pode começar Quinta(3) ou Sexta(4)
             if current_user.escala == '5x2' and dt_inicio.weekday() in [3, 4]:
                 flash("Ilegal: O início das férias não pode ocorrer nos 2 dias que antecedem o repouso semanal (Sáb/Dom).", "error")
                 return redirect(url_for('ponto.solicitar_ferias'))
 
-        nova_solicitacao = SolicitacaoAusencia(
-            user_id=current_user.id, tipo_ausencia=tipo,
-            data_inicio=dt_inicio, data_fim=dt_fim,
-            quantidade_dias=qtd_dias, abono_pecuniario=vender_ferias,
-            dias_abono=dias_abono, observacao=obs
-        )
-        db.session.add(nova_solicitacao)
-        db.session.commit()
+        nova_solicitacao = SolicitacaoAusencia(user_id=current_user.id, tipo_ausencia=tipo, data_inicio=dt_inicio, data_fim=dt_fim, quantidade_dias=qtd_dias, abono_pecuniario=vender_ferias, dias_abono=dias_abono, observacao=obs)
+        db.session.add(nova_solicitacao); db.session.commit()
         flash("Solicitação validada e enviada com sucesso ao RH!", "success")
         return redirect(url_for('ponto.solicitar_ferias'))
 
     minhas_solicitacoes = SolicitacaoAusencia.query.filter_by(user_id=current_user.id).order_by(SolicitacaoAusencia.data_solicitacao.desc()).all()
-    
-    return render_template(
-        'ponto/solicitar_ferias.html', 
-        minhas_solicitacoes=minhas_solicitacoes,
-        dias_direito=dias_direito,
-        faltas=faltas,
-        saldo=saldo,
-        dias_usados=dias_usados
-    )
+    return render_template('ponto/solicitar_ferias.html', minhas_solicitacoes=minhas_solicitacoes, dias_direito=dias_direito, faltas=faltas, saldo=saldo, dias_usados=dias_usados)
 
 @ponto_bp.route('/admin/ausencias', methods=['GET', 'POST'])
 @login_required
@@ -338,8 +304,43 @@ def gestao_ausencias():
         db.session.commit()
         return redirect(url_for('ponto.gestao_ausencias'))
 
+    # --- NOVO: LÓGICA DE ALERTAS DE VENCIMENTO DE FÉRIAS (CLT) ---
+    alertas_vencimento = []
+    hoje = get_brasil_time().date()
+    usuarios_clt = User.query.filter(User.username != '12345678900', User.data_admissao.isnot(None)).all()
+    
+    for u in usuarios_clt:
+        dias_trabalhados = (hoje - u.data_admissao).days
+        anos_completos = dias_trabalhados // 365
+        
+        if anos_completos >= 1:
+            # Conta dias de férias já tirados por este usuário
+            ausencias = SolicitacaoAusencia.query.filter_by(user_id=u.id, tipo_ausencia='Férias', status='Aprovado').all()
+            dias_usados = sum(a.quantidade_dias + a.dias_abono for a in ausencias)
+            
+            saldo_teorico = (anos_completos * 30) - dias_usados
+            
+            if saldo_teorico > 0:
+                # Descobre de qual "ciclo" é esse saldo pendente
+                ciclos_pendentes = saldo_teorico / 30.0
+                ciclo_critico = anos_completos - int(ciclos_pendentes) + 1
+                anos_para_somar = ciclo_critico + 1
+                
+                # A data limite concessiva é Admissão + 2 anos (para o 1º ciclo pendente)
+                try:
+                    data_limite = u.data_admissao.replace(year=u.data_admissao.year + anos_para_somar)
+                except ValueError: # Caso de bissexto
+                    data_limite = u.data_admissao + timedelta(days=365 * anos_para_somar)
+                    
+                dias_vencimento = (data_limite - hoje).days
+                
+                if dias_vencimento < 0:
+                    alertas_vencimento.append({'user': u, 'status': 'Vencidas', 'dias': abs(dias_vencimento), 'msg': 'Prazo concessivo estourado. Risco alto de multa/dobro!'})
+                elif dias_vencimento <= 90:
+                    alertas_vencimento.append({'user': u, 'status': 'A Vencer', 'dias': dias_vencimento, 'msg': f'Vence em {dias_vencimento} dias (Data limite: {data_limite.strftime("%d/%m/%Y")}).'})
+
     todas_solicitacoes = SolicitacaoAusencia.query.order_by(SolicitacaoAusencia.data_solicitacao.desc()).all()
-    return render_template('ponto/gestao_ausencias.html', solicitacoes=todas_solicitacoes)
+    return render_template('ponto/gestao_ausencias.html', solicitacoes=todas_solicitacoes, alertas=alertas_vencimento)
 
 @ponto_bp.route('/admin/controle-escala', methods=['GET'])
 @login_required

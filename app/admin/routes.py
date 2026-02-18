@@ -41,7 +41,6 @@ def novo_usuario():
                 flash('CPF já cadastrado!', 'error')
                 return redirect(url_for('admin.novo_usuario'))
 
-            # Tratamento da Data de Admissão CLT
             dt_adm_str = request.form.get('data_admissao')
             dt_admissao = datetime.strptime(dt_adm_str, '%Y-%m-%d').date() if dt_adm_str else None
 
@@ -120,7 +119,6 @@ def editar_usuario(id):
                 user.razao_social_empregadora = request.form.get('razao_social')
                 user.cnpj_empregador = request.form.get('cnpj')
                 
-                # Tratamento da Data de Admissão CLT
                 dt_adm_str = request.form.get('data_admissao')
                 if dt_adm_str: user.data_admissao = datetime.strptime(dt_adm_str, '%Y-%m-%d').date()
                 
@@ -215,4 +213,114 @@ def admin_limpeza():
             return redirect(url_for('admin.admin_limpeza'))
         except: db.session.rollback()
     return render_template('admin/admin_limpeza.html')
+
+# --- IMPORTAÇÃO EM MASSA VIA CSV ---
+@admin_bp.route('/usuarios/importar-csv', methods=['GET', 'POST'])
+@login_required
+@permission_required('USUARIOS')
+def importar_csv_usuarios():
+    if request.method == 'POST':
+        if 'arquivo_csv' not in request.files:
+            flash('Nenhum arquivo enviado.', 'error')
+            return redirect(request.url)
+        
+        file = request.files['arquivo_csv']
+        if file.filename == '':
+            flash('Nenhum arquivo selecionado.', 'error')
+            return redirect(request.url)
+            
+        if not file.filename.endswith('.csv'):
+            flash('Por favor, envie um arquivo no formato .csv', 'error')
+            return redirect(request.url)
+
+        try:
+            stream = io.StringIO(file.stream.read().decode("UTF8"), newline=None)
+            csv_input = csv.DictReader(stream, delimiter=';')
+            
+            # Remove espaços vazios nos nomes das colunas
+            csv_input.fieldnames = [field.strip() for field in csv_input.fieldnames]
+            
+            sucesso, falhas = 0, 0
+            
+            for row in csv_input:
+                nome = row.get('nome', '').strip()
+                cpf = row.get('cpf', '').replace('.', '').replace('-', '').strip()
+                cargo = row.get('cargo', '').strip()
+                
+                if not nome or not cpf:
+                    falhas += 1
+                    continue
+                    
+                # Ignorar se o CPF já existir no sistema ativo ou na fila
+                if User.query.filter_by(cpf=cpf).first() or PreCadastro.query.filter_by(cpf=cpf).first():
+                    falhas += 1
+                    continue
+
+                # Processar Data de Admissão
+                dt_admissao = None
+                dt_adm_str = row.get('data_admissao', '').strip()
+                if dt_adm_str:
+                    try:
+                        # Tenta DD/MM/AAAA e depois AAAA-MM-DD
+                        if '/' in dt_adm_str:
+                            dt_admissao = datetime.strptime(dt_adm_str, '%d/%m/%Y').date()
+                        else:
+                            dt_admissao = datetime.strptime(dt_adm_str, '%Y-%m-%d').date()
+                    except ValueError:
+                        pass # Data inválida, ignora
+
+                # Processar Salário
+                try: salario = float(row.get('salario', 0))
+                except: salario = 0.0
+
+                # Processar Escala e Data de Referência
+                escala = row.get('escala', 'Livre').strip()
+                dt_escala = None
+                if escala == '12x36':
+                    dt_esc_str = row.get('data_escala', '').strip()
+                    if dt_esc_str:
+                        try:
+                            if '/' in dt_esc_str: dt_escala = datetime.strptime(dt_esc_str, '%d/%m/%Y').date()
+                            else: dt_escala = datetime.strptime(dt_esc_str, '%Y-%m-%d').date()
+                        except ValueError: pass
+
+                # Processar Cargas e Horários
+                carga_hm = row.get('carga_horaria', '08:48').strip() or '08:48'
+                carga_min = time_to_minutes(carga_hm)
+                
+                try: intervalo = int(row.get('intervalo', 60))
+                except: intervalo = 60
+                
+                entrada = row.get('entrada_ideal', '08:00').strip() or '08:00'
+
+                novo_pre = PreCadastro(
+                    cpf=cpf,
+                    nome_previsto=nome,
+                    cargo=cargo,
+                    salario=salario,
+                    data_admissao=dt_admissao,
+                    escala=escala,
+                    data_inicio_escala=dt_escala,
+                    carga_horaria=carga_min,
+                    tempo_intervalo=intervalo,
+                    inicio_jornada_ideal=entrada,
+                    razao_social="LA SHAHIN SERVIÇOS DE SEGURANÇA LTDA",
+                    cnpj="50.537.235/0001-95"
+                )
+                db.session.add(novo_pre)
+                sucesso += 1
+
+            db.session.commit()
+            if sucesso > 0:
+                flash(f'Importação concluída: {sucesso} registros adicionados à fila. {falhas} ignorados (CPF existente ou sem nome).', 'success')
+            else:
+                flash('Nenhum registro válido encontrado. Verifique o formato do arquivo.', 'error')
+                
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Erro ao ler o arquivo: {str(e)}', 'error')
+
+        return redirect(url_for('admin.gerenciar_usuarios'))
+
+    return render_template('admin/importar_csv.html')
 
