@@ -1,11 +1,13 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, send_file, jsonify
 from flask_login import login_required, current_user
 from app.extensions import db
-from app.models import User, Holerite, Recibo, AssinaturaDigital
+from app.models import User, Holerite, Recibo, AssinaturaDigital, Atestado
 from app.utils import get_brasil_time, permission_required, has_permission, limpar_nome, get_client_ip, calcular_hash_arquivo
 from app.documentos.storage import salvar_no_storage, baixar_bytes_storage
 from app.documentos.ai_parser import extrair_dados_holerite
-from app.documentos.utils import gerar_pdf_recibo, gerar_pdf_espelho_mensal
+from app.documentos.utils import gerar_pdf_recibo, gerar_pdf_espelho_mensal, gerar_certificado_entrega
+from app.documentos.atestado_parser import analisar_atestado_vision
+from datetime import datetime
 from pypdf import PdfReader, PdfWriter
 from thefuzz import process, fuzz
 import io
@@ -318,4 +320,55 @@ def baixar_certificado_auditoria(id):
         print(f"Erro ao gerar certificado de auditoria: {e}")
         flash("Erro interno ao gerar o documento de auditoria. Verifique os logs.", "error")
         return redirect(url_for('documentos.revisao_auditoria'))
+
+@documentos_bp.route('/atestado/novo', methods=['GET', 'POST'])
+@login_required
+def enviar_atestado():
+    if request.method == 'POST':
+        file = request.files.get('arquivo_atestado')
+        if not file or file.filename == '':
+            flash('Nenhum arquivo selecionado.', 'error')
+            return redirect(request.url)
+        
+        try:
+            file_bytes = file.read()
+            mes_ref = get_brasil_time().strftime('%Y-%m')
+            
+            # Reutiliza a função de salvar no bucket do Google
+            caminho_blob = salvar_no_storage(file_bytes, f"atestado_{mes_ref}")
+            if not caminho_blob:
+                flash('Erro ao salvar o arquivo no servidor.', 'error')
+                return redirect(request.url)
+
+            # Chama a Inteligência Artificial (Vision)
+            dados_ia = analisar_atestado_vision(file_bytes, current_user.real_name)
+            
+            # Converte a data encontrada pela IA (se houver)
+            data_inicio_db = None
+            if dados_ia['data_inicio']:
+                data_inicio_db = datetime.strptime(dados_ia['data_inicio'], '%Y-%m-%d').date()
+
+            # Salva no banco de dados com status "Revisao" por segurança inicial
+            novo_atestado = Atestado(
+                user_id=current_user.id,
+                data_envio=get_brasil_time(),
+                url_arquivo=caminho_blob,
+                data_inicio_afastamento=data_inicio_db,
+                quantidade_dias=dados_ia['dias_afastamento'],
+                texto_extraido=dados_ia['texto_bruto'],
+                status='Revisao' 
+            )
+            db.session.add(novo_atestado)
+            db.session.commit()
+            
+            flash('Atestado enviado com sucesso! O RH fará a análise em breve.', 'success')
+            return redirect(url_for('documentos.meus_documentos'))
+            
+        except Exception as e:
+            db.session.rollback()
+            print(f"Erro no envio de atestado: {e}")
+            flash('Ocorreu um erro ao processar seu atestado.', 'error')
+            return redirect(request.url)
+
+    return render_template('documentos/enviar_atestado.html')
 
