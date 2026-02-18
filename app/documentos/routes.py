@@ -2,7 +2,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from flask_login import login_required, current_user
 from app.extensions import db
 from app.models import User, Holerite, Recibo, AssinaturaDigital
-from app.utils import get_brasil_time, permission_required, has_permission, limpar_nome, get_client_ip
+from app.utils import get_brasil_time, permission_required, has_permission, limpar_nome, get_client_ip, calcular_hash_arquivo
 from app.documentos.storage import salvar_no_storage, baixar_bytes_storage
 from app.documentos.ai_parser import extrair_dados_holerite
 from app.documentos.utils import gerar_pdf_recibo, gerar_pdf_espelho_mensal
@@ -132,29 +132,47 @@ def baixar_holerite(id):
     if not has_permission('DOCUMENTOS') and doc.user_id != current_user.id:
         return redirect(url_for('main.dashboard'))
     
-    # --- CORREÇÃO AQUI: Adicionado documento_id ---
+    # 1. Pegar os bytes do arquivo primeiro
+    arquivo_bytes = None
+    nome_download = "documento.pdf"
+    
+    if doc.conteudo_pdf:
+        arquivo_bytes = doc.conteudo_pdf
+        nome_download = f"ponto_{doc.mes_referencia}.pdf"
+    elif doc.url_arquivo:
+        arquivo_bytes = baixar_bytes_storage(doc.url_arquivo)
+        nome_download = f"holerite_{doc.mes_referencia}.pdf"
+        
+    if not arquivo_bytes:
+        flash("Erro ao baixar o arquivo. Arquivo não encontrado no servidor.", "error")
+        return redirect(url_for('documentos.dashboard_documentos'))
+
+    # 2. Registrar Assinatura com HASH do arquivo
     if doc.user_id == current_user.id and not doc.visualizado:
         doc.visualizado = True
         tipo_doc = "Espelho de Ponto" if doc.conteudo_pdf else "Holerite"
+        
+        # Pega o User-Agent do navegador de forma segura
+        user_agent_info = request.headers.get('User-Agent')
+        if user_agent_info:
+            user_agent_info = user_agent_info[:250] # Limite para o banco
+        else:
+            user_agent_info = 'Desconhecido'
+
         assinatura = AssinaturaDigital(
             user_id=current_user.id,
-            documento_id=doc.id,  # <-- LINHA ADICIONADA
+            documento_id=doc.id,
             tipo_documento=f"{tipo_doc} - {doc.mes_referencia}",
+            hash_arquivo=calcular_hash_arquivo(arquivo_bytes), # Hash gerado aqui
             data_assinatura=get_brasil_time(),
-            ip_address=get_client_ip()
+            ip_address=get_client_ip(),
+            user_agent=user_agent_info
         )
         db.session.add(assinatura)
         db.session.commit()
-    # --------------------------------------
 
-    if doc.conteudo_pdf:
-        return send_file(io.BytesIO(doc.conteudo_pdf), mimetype='application/pdf', as_attachment=True, download_name=f"ponto_{doc.mes_referencia}.pdf")
-    if doc.url_arquivo:
-        b = baixar_bytes_storage(doc.url_arquivo)
-        if b: return send_file(io.BytesIO(b), mimetype='application/pdf', as_attachment=True, download_name=f"holerite_{doc.mes_referencia}.pdf")
-    
-    flash("Erro ao baixar o arquivo.", "error")
-    return redirect(url_for('documentos.dashboard_documentos'))
+    # 3. Enviar o arquivo para o usuário
+    return send_file(io.BytesIO(arquivo_bytes), mimetype='application/pdf', as_attachment=True, download_name=nome_download)
 
 @documentos_bp.route('/baixar/recibo/<int:id>', methods=['POST'])
 @login_required
@@ -163,21 +181,34 @@ def baixar_recibo(id):
     if not has_permission('DOCUMENTOS') and doc.user_id != current_user.id:
         return redirect(url_for('main.dashboard'))
         
-    # --- CORREÇÃO AQUI: Adicionado documento_id ---
+    arquivo_bytes = doc.conteudo_pdf
+    if not arquivo_bytes:
+        flash("Erro: Recibo vazio.", "error")
+        return redirect(url_for('documentos.dashboard_documentos'))
+        
+    # Registrar Assinatura com HASH
     if doc.user_id == current_user.id and not doc.visualizado:
         doc.visualizado = True
+        
+        user_agent_info = request.headers.get('User-Agent')
+        if user_agent_info:
+            user_agent_info = user_agent_info[:250]
+        else:
+            user_agent_info = 'Desconhecido'
+
         assinatura = AssinaturaDigital(
             user_id=current_user.id,
-            documento_id=doc.id,  # <-- LINHA ADICIONADA
+            documento_id=doc.id,
             tipo_documento=f"Recibo - R$ {doc.valor}",
+            hash_arquivo=calcular_hash_arquivo(arquivo_bytes), # Hash gerado aqui
             data_assinatura=get_brasil_time(),
-            ip_address=get_client_ip()
+            ip_address=get_client_ip(),
+            user_agent=user_agent_info
         )
         db.session.add(assinatura)
         db.session.commit()
-    # --------------------------------------
 
-    return send_file(io.BytesIO(doc.conteudo_pdf), mimetype='application/pdf', as_attachment=True, download_name=f"recibo_{id}.pdf")
+    return send_file(io.BytesIO(arquivo_bytes), mimetype='application/pdf', as_attachment=True, download_name=f"recibo_{id}.pdf")
 
 @documentos_bp.route('/meus-documentos')
 @login_required
