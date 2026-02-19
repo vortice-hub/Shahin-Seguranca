@@ -38,21 +38,23 @@
     </div>
 </div>
 
+<div class="flex gap-2 mb-4 overflow-x-auto pb-2">
+    <button onclick="aplicarFiltroSaude('ALL', this)" class="filtro-btn px-4 py-2 rounded-lg text-xs font-bold bg-slate-800 text-white transition whitespace-nowrap shadow-sm">Todos os Itens</button>
+    <button onclick="aplicarFiltroSaude('IDEAL', this)" class="filtro-btn px-4 py-2 rounded-lg text-xs font-bold bg-white border border-slate-200 text-slate-600 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-300 transition whitespace-nowrap shadow-sm"><i class="fas fa-check-circle text-emerald-500 mr-1"></i> Estoque Ideal</button>
+    <button onclick="aplicarFiltroSaude('ALERTA', this)" class="filtro-btn px-4 py-2 rounded-lg text-xs font-bold bg-white border border-slate-200 text-slate-600 hover:bg-yellow-50 hover:text-yellow-700 hover:border-yellow-300 transition whitespace-nowrap shadow-sm"><i class="fas fa-exclamation-triangle text-yellow-500 mr-1"></i> Em Alerta</button>
+    <button onclick="aplicarFiltroSaude('CRITICO', this)" class="filtro-btn px-4 py-2 rounded-lg text-xs font-bold bg-white border border-slate-200 text-slate-600 hover:bg-red-50 hover:text-red-700 hover:border-red-300 transition whitespace-nowrap shadow-sm"><i class="fas fa-times-circle text-red-500 mr-1"></i> Crítico / Zerado</button>
+</div>
+
 <div class="mb-6">
     <div class="relative">
         <i class="fas fa-search absolute left-4 top-4 text-slate-400"></i>
-        <input type="text" id="buscaEstoque" onkeyup="filtrarTabela()" placeholder="Pesquisar por peça, tamanho ou gênero..." class="w-full pl-12 pr-4 py-3 rounded-xl border border-slate-200 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium text-slate-700">
+        <input type="text" id="buscaEstoque" placeholder="Pesquisar por peça, tamanho ou gênero..." class="w-full pl-12 pr-4 py-3 rounded-xl border border-slate-200 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium text-slate-700">
     </div>
 </div>
 
 <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
     <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
         <h2 class="font-semibold text-slate-800 text-sm">Inventário Físico</h2>
-        <div class="flex gap-4 text-[10px] font-bold uppercase tracking-wider">
-            <span class="text-emerald-600 flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-emerald-500 block"></span> Ideal</span>
-            <span class="text-yellow-600 flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-yellow-500 block"></span> Alerta</span>
-            <span class="text-red-600 flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-red-500 block"></span> Crítico</span>
-        </div>
     </div>
     
     <div class="overflow-x-auto">
@@ -68,7 +70,25 @@
             </thead>
             <tbody class="divide-y divide-slate-100">
                 {% for item in itens %}
-                <tr class="hover:bg-slate-50 transition item-linha">
+                
+                {% set pct = (item.quantidade / item.estoque_ideal * 100) if item.estoque_ideal > 0 else 0 %}
+                {% set pct_vis = pct if pct <= 100 else 100 %}
+                
+                {% if item.quantidade <= item.estoque_minimo %}
+                    {% set status = "CRITICO" %}
+                    {% set cor_barra = "bg-red-500" %}
+                    {% set cor_bg = "bg-red-100" %}
+                {% elif pct < 70 %}
+                    {% set status = "ALERTA" %}
+                    {% set cor_barra = "bg-yellow-400" %}
+                    {% set cor_bg = "bg-yellow-100" %}
+                {% else %}
+                    {% set status = "IDEAL" %}
+                    {% set cor_barra = "bg-emerald-500" %}
+                    {% set cor_bg = "bg-emerald-100" %}
+                {% endif %}
+
+                <tr class="hover:bg-slate-50 transition item-linha" data-status="{{ status }}">
                     
                     <td class="px-6 py-4 font-bold text-slate-800 item-nome">
                         {{ item.nome }}
@@ -86,20 +106,6 @@
                     </td>
                     
                     <td class="px-6 py-4">
-                        {% set pct = (item.quantidade / item.estoque_ideal * 100) if item.estoque_ideal > 0 else 0 %}
-                        {% set pct_vis = pct if pct <= 100 else 100 %}
-                        
-                        {% if item.quantidade <= item.estoque_minimo %}
-                            {% set cor_barra = "bg-red-500" %}
-                            {% set cor_bg = "bg-red-100" %}
-                        {% elif pct < 70 %}
-                            {% set cor_barra = "bg-yellow-400" %}
-                            {% set cor_bg = "bg-yellow-100" %}
-                        {% else %}
-                            {% set cor_barra = "bg-emerald-500" %}
-                            {% set cor_bg = "bg-emerald-100" %}
-                        {% endif %}
-
                         <div class="w-full {{ cor_bg }} rounded-full h-2.5 mb-1 overflow-hidden border border-black/5">
                             <div class="{{ cor_barra }} h-2.5 rounded-full transition-all duration-500" style="width: {{ pct_vis }}%"></div>
                         </div>
@@ -133,6 +139,7 @@
             </tbody>
         </table>
     </div>
+    <div id="paginacao-container"></div>
 </div>
 
 <div id="modalExcelEstoque" class="fixed inset-0 bg-black/60 z-50 hidden flex items-center justify-center p-4">
@@ -173,23 +180,105 @@
 </div>
 
 <script>
-function filtrarTabela() {
-    let input = document.getElementById('buscaEstoque');
-    let filter = input.value.toUpperCase();
-    let tabela = document.getElementById('tabelaInventario');
-    let linhas = tabela.getElementsByClassName('item-linha');
+// NOVO: SISTEMA DE PAGINAÇÃO E FILTROS MÁGICOS
+let currentSaude = 'ALL';
+let currentPage = 1;
+const rowsPerPage = 10; // 10 itens por página fica perfeito para a tela
 
-    for (let i = 0; i < linhas.length; i++) {
-        let nome = linhas[i].getElementsByClassName('item-nome')[0].innerText.toUpperCase();
-        let especificacao = linhas[i].getElementsByClassName('item-especificacao')[0].innerText.toUpperCase();
-        
-        if (nome.indexOf(filter) > -1 || especificacao.indexOf(filter) > -1) {
-            linhas[i].style.display = "";
-        } else {
-            linhas[i].style.display = "none";
-        }
-    }
+function aplicarFiltroSaude(status, btnElement) {
+    currentSaude = status;
+    currentPage = 1; // Reseta para a página 1 ao filtrar
+    
+    // Troca as cores dos botões
+    document.querySelectorAll('.filtro-btn').forEach(btn => {
+        btn.classList.remove('bg-slate-800', 'text-white');
+        btn.classList.add('bg-white', 'text-slate-600');
+    });
+    btnElement.classList.remove('bg-white', 'text-slate-600');
+    btnElement.classList.add('bg-slate-800', 'text-white');
+
+    atualizarTabela();
 }
+
+function atualizarTabela() {
+    let input = document.getElementById('buscaEstoque').value.toUpperCase();
+    let tabela = document.getElementById('tabelaInventario');
+    let linhas = Array.from(tabela.getElementsByClassName('item-linha'));
+    
+    let linhasFiltradas = [];
+
+    // Passo 1: Descobre quem passa pelos Filtros de Texto e Botões
+    linhas.forEach(linha => {
+        let nome = linha.getElementsByClassName('item-nome')[0].innerText.toUpperCase();
+        let especificacao = linha.getElementsByClassName('item-especificacao')[0].innerText.toUpperCase();
+        let status = linha.getAttribute('data-status');
+        
+        let passaTexto = (nome.indexOf(input) > -1 || especificacao.indexOf(input) > -1);
+        let passaSaude = (currentSaude === 'ALL' || status === currentSaude);
+
+        if (passaTexto && passaSaude) {
+            linhasFiltradas.push(linha);
+            linha.style.display = ""; 
+        } else {
+            linha.style.display = "none";
+        }
+    });
+
+    // Passo 2: Aplica a Paginação apenas nas linhas filtradas
+    let totalLinhas = linhasFiltradas.length;
+    let totalPages = Math.ceil(totalLinhas / rowsPerPage) || 1;
+    
+    if(currentPage > totalPages) currentPage = totalPages;
+
+    let start = (currentPage - 1) * rowsPerPage;
+    let end = start + rowsPerPage;
+
+    linhasFiltradas.forEach((linha, index) => {
+        if (index >= start && index < end) {
+            linha.style.display = ""; // Mostra
+        } else {
+            linha.style.display = "none"; // Esconde da página atual
+        }
+    });
+
+    renderizarPaginacao(totalPages, totalLinhas);
+}
+
+// O gatilho de busca reage instantaneamente a cada tecla digitada
+document.getElementById('buscaEstoque').addEventListener('keyup', function() {
+    currentPage = 1;
+    atualizarTabela();
+});
+
+function renderizarPaginacao(totalPages, totalLinhas) {
+    let container = document.getElementById('paginacao-container');
+    
+    if (totalLinhas <= rowsPerPage) {
+        container.innerHTML = '';
+        return;
+    }
+
+    let html = `
+        <div class="flex justify-between items-center px-6 py-4 bg-slate-50/80 border-t border-slate-100">
+            <span class="text-[11px] text-slate-500 font-bold uppercase tracking-wide">Página ${currentPage} de ${totalPages} <span class="mx-1 opacity-50">•</span> ${totalLinhas} itens listados</span>
+            <div class="flex gap-2">
+                <button onclick="mudarPagina(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''} class="px-4 py-2 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 disabled:opacity-40 disabled:hover:bg-white disabled:hover:border-slate-200 disabled:hover:text-slate-600 text-xs font-black transition shadow-sm"><i class="fas fa-chevron-left mr-1"></i> Anterior</button>
+                <button onclick="mudarPagina(${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''} class="px-4 py-2 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 disabled:opacity-40 disabled:hover:bg-white disabled:hover:border-slate-200 disabled:hover:text-slate-600 text-xs font-black transition shadow-sm">Próximo <i class="fas fa-chevron-right ml-1"></i></button>
+            </div>
+        </div>
+    `;
+    container.innerHTML = html;
+}
+
+function mudarPagina(novaPagina) {
+    currentPage = novaPagina;
+    atualizarTabela();
+    // Faz scroll suave de volta para o topo da tabela
+    document.querySelector('.overflow-x-auto').scrollIntoView({ behavior: 'smooth', block: 'end' });
+}
+
+// Quando a página termina de carregar, ele ativa a paginação e exibe os primeiros 10!
+document.addEventListener('DOMContentLoaded', atualizarTabela);
 </script>
 {% endblock %}
 

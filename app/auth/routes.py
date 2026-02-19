@@ -13,14 +13,11 @@ def login():
         return redirect(url_for('main.dashboard'))
     
     if request.method == 'POST':
-        # O campo 'username' agora receberá o CPF digitado pelo utilizador
         login_input = request.form.get('username', '').replace('.', '').replace('-', '').strip()
         password = request.form.get('password')
         
-        # Procura pelo username (que para funcionários será o CPF e para Thaynara será o nome)
         user = User.query.filter_by(username=login_input).first()
         
-        # Caso não encontre pelo CPF limpo, tenta procurar pelo input original (para casos como 'Thaynara')
         if not user:
             user = User.query.filter_by(username=request.form.get('username')).first()
 
@@ -67,7 +64,7 @@ def auto_cadastro():
     
     if request.method == 'POST':
         cpf_input = request.form.get('cpf', '')
-        cpf = re.sub(r'\D', '', cpf_input) # Mantém apenas números
+        cpf = re.sub(r'\D', '', cpf_input)
         
         pre = PreCadastro.query.filter_by(cpf=cpf).first()
         
@@ -80,8 +77,14 @@ def auto_cadastro():
             
         password = request.form.get('password')
         if password:
-            # O LOGIN AGORA É O PRÓPRIO CPF
             username_login = cpf 
+            
+            # MAGICA DO VÍNCULO: Procura o gestor pelo CPF informado na planilha
+            gestor_id_final = None
+            if pre.cpf_gestor:
+                gestor_encontrado = User.query.filter_by(cpf=pre.cpf_gestor).first()
+                if gestor_encontrado:
+                    gestor_id_final = gestor_encontrado.id
             
             novo_user = User(
                 username=username_login, 
@@ -92,21 +95,23 @@ def auto_cadastro():
                 salario=pre.salario, 
                 razao_social_empregadora=pre.razao_social,
                 cnpj_empregador=pre.cnpj,
+                data_admissao=pre.data_admissao, # Correção: Migrando a data de admissão
                 carga_horaria=pre.carga_horaria,
                 tempo_intervalo=pre.tempo_intervalo,
                 inicio_jornada_ideal=pre.inicio_jornada_ideal,
                 escala=pre.escala, 
-                data_inicio_escala=pre.data_inicio_escala, 
+                data_inicio_escala=pre.data_inicio_escala,
+                departamento=pre.departamento, # Correção: Migrando a equipe
+                gestor_id=gestor_id_final, # Correção: Transformando CPF do chefe em ID
                 is_first_access=False,
-                permissions="" # Cadastro inicial sempre sem permissões administrativas
+                permissions="" 
             )
             
             db.session.add(novo_user)
-            db.session.delete(pre) # Remove da lista de pré-cadastro
+            db.session.delete(pre) 
             db.session.commit()
             
             return render_template('auth/auto_cadastro_sucesso.html', username=cpf, nome=pre.nome_previsto)
         else:
             return render_template('auth/auto_cadastro.html', step=2, cpf=cpf, nome=pre.nome_previsto)
-
 

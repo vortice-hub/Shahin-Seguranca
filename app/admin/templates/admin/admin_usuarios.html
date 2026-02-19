@@ -14,7 +14,7 @@
 </div>
 
 <div class="mb-6">
-    <input type="text" id="buscaFunc" onkeyup="filtrarTabela('buscaFunc', 'listaFunc')" placeholder="Pesquisar funcionário..." class="w-full p-4 rounded-xl border border-slate-200 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+    <input type="text" id="buscaFunc" onkeyup="filtrarTabela('buscaFunc', 'listaFunc')" placeholder="Pesquisar funcionário nesta página..." class="w-full p-4 rounded-xl border border-slate-200 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
 </div>
 
 {% if pendentes %}
@@ -42,10 +42,11 @@
 <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
     <div class="px-6 py-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
         <h3 class="font-bold text-slate-700">Equipe Ativa</h3>
-        <span class="text-xs bg-slate-200 text-slate-600 px-2 py-1 rounded-full font-bold">{{ users|length }}</span>
+        <span class="text-xs bg-slate-200 text-slate-600 px-2 py-1 rounded-full font-bold">{{ users_pagination.total }}</span>
     </div>
+    
     <div class="divide-y divide-slate-100" id="listaFunc">
-        {% for u in users %}
+        {% for u in users_pagination.items %}
         <div class="px-6 py-4 flex items-center justify-between hover:bg-slate-50 transition group item-lista">
             <div class="flex items-center gap-4">
                 <div class="w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm bg-slate-100 text-slate-600">
@@ -65,8 +66,41 @@
                 </a>
             </div>
         </div>
+        {% else %}
+        <div class="px-6 py-10 text-center text-slate-400 text-sm font-medium">
+            Nenhum funcionário encontrado nesta página.
+        </div>
         {% endfor %}
     </div>
+    
+    {% if users_pagination.pages > 1 %}
+    <div class="px-6 py-4 border-t border-slate-100 bg-slate-50 flex justify-between items-center">
+        <span class="text-[11px] font-bold text-slate-500 uppercase tracking-wide">
+            Página {{ users_pagination.page }} de {{ users_pagination.pages }}
+        </span>
+        <div class="flex gap-2">
+            {% if users_pagination.has_prev %}
+            <a href="{{ url_for('admin.gerenciar_usuarios', page=users_pagination.prev_num) }}" class="px-4 py-2 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-blue-50 hover:text-blue-600 font-bold text-xs transition shadow-sm">
+                <i class="fas fa-chevron-left mr-1"></i> Anterior
+            </a>
+            {% else %}
+            <button disabled class="px-4 py-2 rounded-lg border border-slate-200 bg-slate-50 text-slate-400 font-bold text-xs shadow-sm opacity-50 cursor-not-allowed">
+                <i class="fas fa-chevron-left mr-1"></i> Anterior
+            </button>
+            {% endif %}
+
+            {% if users_pagination.has_next %}
+            <a href="{{ url_for('admin.gerenciar_usuarios', page=users_pagination.next_num) }}" class="px-4 py-2 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-blue-50 hover:text-blue-600 font-bold text-xs transition shadow-sm">
+                Próximo <i class="fas fa-chevron-right ml-1"></i>
+            </a>
+            {% else %}
+            <button disabled class="px-4 py-2 rounded-lg border border-slate-200 bg-slate-50 text-slate-400 font-bold text-xs shadow-sm opacity-50 cursor-not-allowed">
+                Próximo <i class="fas fa-chevron-right ml-1"></i>
+            </button>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
 </div>
 
 <div id="modalExcel" class="fixed inset-0 bg-black/60 z-50 hidden flex items-center justify-center p-4">
@@ -82,11 +116,11 @@
             <div class="mb-6 bg-emerald-50 p-4 rounded-xl border border-emerald-100">
                 <p class="text-xs text-emerald-800 mb-2 font-bold uppercase">Formato Exigido (.xlsx ou .xls)</p>
                 <p class="text-[10px] text-emerald-700 font-mono bg-white p-2 rounded border border-emerald-200 mb-3 overflow-x-auto whitespace-nowrap">
-                    Colunas: nome | cpf | cargo | data_admissao | salario | escala | data_escala | carga_horaria
+                    Colunas: nome | cpf | cargo | departamento | cpf_gestor | data_admissao | salario | escala | data_escala | carga_horaria | intervalo | entrada_ideal
                 </p>
                 <ul class="text-[10px] text-emerald-600 space-y-1 list-disc list-inside">
                     <li>Pode importar a planilha original diretamente do Excel.</li>
-                    <li><strong>nome, cpf, cargo, data_admissao</strong> são colunas obrigatórias.</li>
+                    <li><strong>nome e cpf</strong> são as únicas colunas estritamente obrigatórias.</li>
                     <li>Os campos em branco serão preenchidos com os padrões do sistema.</li>
                 </ul>
             </div>

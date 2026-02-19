@@ -89,9 +89,18 @@ def gerenciar_usuarios():
         flash('Sem acesso à gestão de utilizadores.', 'error')
         return redirect(url_for('main.dashboard'))
 
-    users = User.query.filter(User.username != '12345678900', User.username != 'terminal').order_by(User.real_name).all()
+    # NOVO: Puxa o número da página da URL (ex: ?page=2), por padrão é a 1
+    page = request.args.get('page', 1, type=int)
+    
+    # NOVO: O '.paginate()' quebra o banco de dados em lotes de 15 funcionários
+    users_pagination = User.query.filter(
+        User.username != '12345678900', 
+        User.username != 'terminal'
+    ).order_by(User.real_name).paginate(page=page, per_page=15, error_out=False)
+    
     pendentes = PreCadastro.query.order_by(PreCadastro.nome_previsto).all()
-    return render_template('admin/admin_usuarios.html', users=users, pendentes=pendentes)
+    
+    return render_template('admin/admin_usuarios.html', users_pagination=users_pagination, pendentes=pendentes)
 
 @admin_bp.route('/liberar-acesso/excluir/<int:id>', methods=['GET'])
 @login_required
