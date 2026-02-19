@@ -12,7 +12,7 @@
         body { font-family: 'Inter', sans-serif; } 
         .sidebar { transition: transform 0.3s ease-in-out; }
         .submenu { transition: max-height 0.3s ease-in-out; overflow: hidden; max-height: 0; }
-        .submenu.open { max-height: 250px; }
+        .submenu.open { max-height: 500px; } /* Aumentei para comportar menus maiores */
     </style>
     <script>
         function toggleSidebar() {
@@ -86,6 +86,7 @@
                             <ul id="submenu-solic" class="submenu hidden bg-slate-950">
                                 <li><a href="/ponto/solicitar-ajuste" class="block pl-16 pr-6 py-2 text-sm text-slate-400 hover:text-white hover:bg-slate-800 transition border-l-2 border-transparent hover:border-yellow-500">Ajuste de Ponto</a></li>
                                 <li><a href="/ponto/solicitar-ferias" class="block pl-16 pr-6 py-2 text-sm text-slate-400 hover:text-white hover:bg-slate-800 transition border-l-2 border-transparent hover:border-emerald-500">Férias e Licenças</a></li>
+                                <li><a href="/estoque/solicitar" class="block pl-16 pr-6 py-2 text-sm text-slate-400 hover:text-white hover:bg-slate-800 transition border-l-2 border-transparent hover:border-blue-400">Uniforme e EPI</a></li>
                             </ul>
                         </li>
 
@@ -135,7 +136,19 @@
                         {% endif %}
 
                         {% if is_master or 'ESTOQUE' in perms %}
-                        <li><a href="/controle-uniforme" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-tshirt w-6 text-center mr-2 text-slate-500"></i><span class="font-medium">Uniformes/Estoque</span></a></li>
+                        <li>
+                            <button onclick="toggleSubmenu('submenu-estoque', 'icon-estoque')" class="w-full flex items-center justify-between px-6 py-3 hover:bg-slate-800 hover:text-white transition group focus:outline-none">
+                                <div class="flex items-center">
+                                    <i class="fas fa-box w-6 text-center mr-2 text-slate-500 group-hover:text-white"></i>
+                                    <span class="font-medium">Controle de Estoque</span>
+                                </div>
+                                <i id="icon-estoque" class="fas fa-chevron-down text-xs transition-transform duration-300"></i>
+                            </button>
+                            <ul id="submenu-estoque" class="submenu hidden bg-slate-950">
+                                <li><a href="/controle-uniforme" class="block pl-16 pr-6 py-2 text-sm text-slate-400 hover:text-white hover:bg-slate-800 transition border-l-2 border-transparent hover:border-emerald-500">Inventário Geral</a></li>
+                                <li><a href="/estoque/solicitacoes" class="block pl-16 pr-6 py-2 text-sm text-slate-400 hover:text-white hover:bg-slate-800 transition border-l-2 border-transparent hover:border-blue-500">Pedidos de EPI/Uniforme</a></li>
+                            </ul>
+                        </li>
                         {% endif %}
 
                         {% if is_master or 'USUARIOS' in perms %}

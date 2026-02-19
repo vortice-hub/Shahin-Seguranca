@@ -1,11 +1,12 @@
 {% extends 'base.html' %}
 {% block content %}
 <div class="flex flex-col gap-4 mb-8">
-    <h2 class="text-2xl font-bold text-slate-800">Controle de Uniforme</h2>
+    <h2 class="text-2xl font-bold text-slate-800 flex items-center gap-2">
+        <i class="fas fa-box text-blue-600"></i> Gestão de Inventário
+    </h2>
     
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-        
-        <a href="/entrada" class="bg-white border border-slate-200 hover:border-emerald-500 rounded-2xl p-4 flex items-center gap-4 transition group shadow-sm">
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-2">
+        <a href="/estoque/entrada" class="bg-white border border-slate-200 hover:border-emerald-500 rounded-2xl p-4 flex items-center gap-4 transition group shadow-sm">
             <div class="w-12 h-12 bg-emerald-50 text-emerald-600 border border-emerald-100 rounded-full flex items-center justify-center text-xl group-hover:bg-emerald-500 group-hover:text-white transition shadow-inner">
                 <i class="fas fa-box-open"></i>
             </div>
@@ -15,13 +16,13 @@
             </div>
         </a>
 
-        <a href="/saida" class="bg-white border border-slate-200 hover:border-red-500 rounded-2xl p-4 flex items-center gap-4 transition group shadow-sm">
+        <a href="/estoque/saida" class="bg-white border border-slate-200 hover:border-red-500 rounded-2xl p-4 flex items-center gap-4 transition group shadow-sm">
             <div class="w-12 h-12 bg-red-50 text-red-600 border border-red-100 rounded-full flex items-center justify-center text-xl group-hover:bg-red-500 group-hover:text-white transition shadow-inner">
                 <i class="fas fa-hand-holding"></i>
             </div>
             <div>
-                <h3 class="font-bold text-slate-800 text-sm">Registrar Saída</h3>
-                <p class="text-[10px] text-slate-500 font-medium">Entrega para colaborador</p>
+                <h3 class="font-bold text-slate-800 text-sm">Saída Manual</h3>
+                <p class="text-[10px] text-slate-500 font-medium">Entrega direta na base</p>
             </div>
         </a>
 
@@ -34,45 +35,103 @@
                 <p class="text-[10px] text-slate-500 font-medium">Importação via Excel (.xlsx)</p>
             </div>
         </button>
+    </div>
+</div>
 
+<div class="mb-6">
+    <div class="relative">
+        <i class="fas fa-search absolute left-4 top-4 text-slate-400"></i>
+        <input type="text" id="buscaEstoque" onkeyup="filtrarTabela()" placeholder="Pesquisar por peça, tamanho ou gênero..." class="w-full pl-12 pr-4 py-3 rounded-xl border border-slate-200 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium text-slate-700">
     </div>
 </div>
 
 <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
     <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-        <h2 class="font-semibold text-slate-800">Inventário</h2>
-        <div class="flex gap-3 text-[10px] font-bold uppercase">
-            <span class="text-emerald-600 bg-emerald-50 px-2 py-1 rounded"><i class="fas fa-circle text-[6px]"></i> Bom</span>
-            <span class="text-yellow-600 bg-yellow-50 px-2 py-1 rounded"><i class="fas fa-circle text-[6px]"></i> Médio</span>
-            <span class="text-red-600 bg-red-50 px-2 py-1 rounded"><i class="fas fa-circle text-[6px]"></i> Ruim</span>
+        <h2 class="font-semibold text-slate-800 text-sm">Inventário Físico</h2>
+        <div class="flex gap-4 text-[10px] font-bold uppercase tracking-wider">
+            <span class="text-emerald-600 flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-emerald-500 block"></span> Ideal</span>
+            <span class="text-yellow-600 flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-yellow-500 block"></span> Alerta</span>
+            <span class="text-red-600 flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-red-500 block"></span> Crítico</span>
         </div>
     </div>
-    <div class="divide-y divide-slate-100">
-        {% for item in itens %}
-        <div class="px-6 py-4 flex items-center justify-between hover:bg-slate-50 transition">
-            <div class="flex items-center gap-4">
-                <div class="w-10 h-10 rounded-full flex items-center justify-center text-slate-500 bg-slate-100 font-bold text-xs border border-slate-200 shadow-inner">{{ item.tamanho }}</div>
-                <div>
-                    <div class="font-semibold text-slate-800 text-sm">{{ item.nome }}</div>
-                    <div class="text-xs text-slate-500 font-medium bg-slate-100 px-2 py-0.5 rounded inline-block mt-1 border border-slate-200">{{ item.genero }}</div>
-                </div>
-            </div>
-            <div class="flex items-center gap-4">
-                <div class="text-right">
-                    <div class="text-lg font-black {% if item.quantidade <= item.estoque_minimo %} text-red-600 {% elif item.quantidade >= item.estoque_ideal %} text-emerald-600 {% else %} text-yellow-600 {% endif %}">{{ item.quantidade }}</div>
-                    <div class="text-[9px] text-slate-400 uppercase font-bold tracking-wider">Unidades</div>
-                </div>
-                <a href="/gerenciar/item/{{ item.id }}" class="w-8 h-8 flex items-center justify-center rounded-full text-slate-300 hover:bg-white hover:text-blue-600 hover:shadow border border-transparent hover:border-slate-200 transition">
-                    <i class="fas fa-pencil-alt text-xs"></i>
-                </a>
-            </div>
-        </div>
-        {% else %}
-        <div class="p-12 text-center text-slate-400 flex flex-col items-center justify-center gap-3">
-            <i class="fas fa-box-open text-4xl opacity-20"></i>
-            <span class="text-sm font-medium">Nenhum item registrado no inventário.</span>
-        </div>
-        {% endfor %}
+    
+    <div class="overflow-x-auto">
+        <table class="w-full text-left text-sm text-slate-600" id="tabelaInventario">
+            <thead class="bg-slate-50 text-[10px] uppercase text-slate-400 font-bold border-b border-slate-100">
+                <tr>
+                    <th class="px-6 py-4">Item / Descrição</th>
+                    <th class="px-6 py-4">Especificação</th>
+                    <th class="px-6 py-4 w-48">Saúde do Estoque</th>
+                    <th class="px-6 py-4 text-center">Quantidade</th>
+                    <th class="px-6 py-4 text-right">Ações</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+                {% for item in itens %}
+                <tr class="hover:bg-slate-50 transition item-linha">
+                    
+                    <td class="px-6 py-4 font-bold text-slate-800 item-nome">
+                        {{ item.nome }}
+                    </td>
+                    
+                    <td class="px-6 py-4">
+                        <div class="flex items-center gap-2 item-especificacao">
+                            <span class="px-2 py-1 bg-slate-200 text-slate-700 font-bold text-xs rounded shadow-sm border border-slate-300">
+                                Tam: {{ item.tamanho }}
+                            </span>
+                            <span class="text-xs text-slate-500 font-medium bg-slate-100 px-2 py-1 rounded border border-slate-200">
+                                {{ item.genero }}
+                            </span>
+                        </div>
+                    </td>
+                    
+                    <td class="px-6 py-4">
+                        {% set pct = (item.quantidade / item.estoque_ideal * 100) if item.estoque_ideal > 0 else 0 %}
+                        {% set pct_vis = pct if pct <= 100 else 100 %}
+                        
+                        {% if item.quantidade <= item.estoque_minimo %}
+                            {% set cor_barra = "bg-red-500" %}
+                            {% set cor_bg = "bg-red-100" %}
+                        {% elif pct < 70 %}
+                            {% set cor_barra = "bg-yellow-400" %}
+                            {% set cor_bg = "bg-yellow-100" %}
+                        {% else %}
+                            {% set cor_barra = "bg-emerald-500" %}
+                            {% set cor_bg = "bg-emerald-100" %}
+                        {% endif %}
+
+                        <div class="w-full {{ cor_bg }} rounded-full h-2.5 mb-1 overflow-hidden border border-black/5">
+                            <div class="{{ cor_barra }} h-2.5 rounded-full transition-all duration-500" style="width: {{ pct_vis }}%"></div>
+                        </div>
+                        <div class="text-[9px] text-slate-400 font-bold uppercase mt-1 flex justify-between">
+                            <span>Min: {{ item.estoque_minimo }}</span>
+                            <span>Ideal: {{ item.estoque_ideal }}</span>
+                        </div>
+                    </td>
+                    
+                    <td class="px-6 py-4 text-center">
+                        <div class="text-xl font-black {% if item.quantidade <= item.estoque_minimo %} text-red-600 {% elif pct >= 70 %} text-emerald-600 {% else %} text-yellow-600 {% endif %}">
+                            {{ item.quantidade }}
+                        </div>
+                        <div class="text-[9px] text-slate-400 uppercase font-bold tracking-wider">Unidades</div>
+                    </td>
+                    
+                    <td class="px-6 py-4 text-right">
+                        <a href="/estoque/gerenciar/item/{{ item.id }}" class="inline-flex w-8 h-8 items-center justify-center rounded-full text-slate-400 hover:bg-blue-50 hover:text-blue-600 transition border border-transparent hover:border-blue-200" title="Editar / Ajustar">
+                            <i class="fas fa-pencil-alt text-xs"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="5" class="px-6 py-20 text-center text-slate-400">
+                        <i class="fas fa-box-open text-4xl opacity-20 mb-3 block"></i>
+                        <span class="text-sm font-medium">Nenhum item registrado no inventário.</span>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
     </div>
 </div>
 
@@ -83,7 +142,7 @@
             <button onclick="document.getElementById('modalExcelEstoque').classList.add('hidden')" class="hover:text-blue-200 transition"><i class="fas fa-times text-xl"></i></button>
         </div>
         
-        <form action="/controle-uniforme/importar-excel" method="POST" enctype="multipart/form-data" class="p-6">
+        <form action="/estoque/controle-uniforme/importar-excel" method="POST" enctype="multipart/form-data" class="p-6">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
             
             <div class="mb-6 bg-blue-50 p-4 rounded-xl border border-blue-100">
@@ -112,5 +171,26 @@
         </form>
     </div>
 </div>
+
+<script>
+// Script atualizado para filtrar a tabela completa
+function filtrarTabela() {
+    let input = document.getElementById('buscaEstoque');
+    let filter = input.value.toUpperCase();
+    let tabela = document.getElementById('tabelaInventario');
+    let linhas = tabela.getElementsByClassName('item-linha');
+
+    for (let i = 0; i < linhas.length; i++) {
+        let nome = linhas[i].getElementsByClassName('item-nome')[0].innerText.toUpperCase();
+        let especificacao = linhas[i].getElementsByClassName('item-especificacao')[0].innerText.toUpperCase();
+        
+        if (nome.indexOf(filter) > -1 || especificacao.indexOf(filter) > -1) {
+            linhas[i].style.display = "";
+        } else {
+            linhas[i].style.display = "none";
+        }
+    }
+}
+</script>
 {% endblock %}
 

@@ -18,7 +18,7 @@ class User(UserMixin, db.Model):
     role = db.Column(db.String(20), default='Funcionario')
     permissions = db.Column(db.String(500), nullable=True)
     is_first_access = db.Column(db.Boolean, default=True)
-    data_admissao = db.Column(db.Date, nullable=True) # NOVA COLUNA CLT
+    data_admissao = db.Column(db.Date, nullable=True)
     carga_horaria = db.Column(db.Integer, default=528)
     tempo_intervalo = db.Column(db.Integer, default=60)
     inicio_jornada_ideal = db.Column(db.String(5), default="08:00")
@@ -42,7 +42,7 @@ class PreCadastro(db.Model):
     salario = db.Column(db.Float, default=0.0)
     razao_social = db.Column(db.String(200))
     cnpj = db.Column(db.String(20))
-    data_admissao = db.Column(db.Date, nullable=True) # NOVA COLUNA CLT
+    data_admissao = db.Column(db.Date, nullable=True)
     carga_horaria = db.Column(db.Integer, default=528)
     tempo_intervalo = db.Column(db.Integer, default=60)
     inicio_jornada_ideal = db.Column(db.String(5), default="08:00")
@@ -168,7 +168,6 @@ class Atestado(db.Model):
     motivo_recusa = db.Column(db.String(500), nullable=True)
     user = db.relationship('User', backref=db.backref('atestados', lazy=True))
 
-# --- MÓDULO FÉRIAS CLT ---
 class PeriodoAquisitivo(db.Model):
     __tablename__ = 'periodos_aquisitivos'
     id = db.Column(db.Integer, primary_key=True)
@@ -189,10 +188,26 @@ class SolicitacaoAusencia(db.Model):
     data_inicio = db.Column(db.Date, nullable=False)
     data_fim = db.Column(db.Date, nullable=False)
     quantidade_dias = db.Column(db.Integer, nullable=False)
-    abono_pecuniario = db.Column(db.Boolean, default=False) # NOVA COLUNA CLT
-    dias_abono = db.Column(db.Integer, default=0) # NOVA COLUNA CLT
+    abono_pecuniario = db.Column(db.Boolean, default=False)
+    dias_abono = db.Column(db.Integer, default=0)
     observacao = db.Column(db.Text, nullable=True)
     status = db.Column(db.String(20), default='Pendente') 
     data_solicitacao = db.Column(db.DateTime, default=get_brasil_time)
     user = db.relationship('User', backref=db.backref('ausencias', lazy=True))
+
+# --- NOVO MÓDULO: PEDIDOS DE EPI / UNIFORME ---
+class SolicitacaoUniforme(db.Model):
+    __tablename__ = 'solicitacoes_uniforme'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    item_id = db.Column(db.Integer, db.ForeignKey('itens_estoque.id', ondelete='SET NULL'), nullable=True)
+    item_nome = db.Column(db.String(100))
+    tamanho = db.Column(db.String(10))
+    genero = db.Column(db.String(20))
+    quantidade = db.Column(db.Integer, nullable=False)
+    status = db.Column(db.String(20), default='Pendente') # Pendente, Aprovado, Recusado
+    data_solicitacao = db.Column(db.DateTime, default=get_brasil_time)
+    data_resposta = db.Column(db.DateTime, nullable=True)
+    user = db.relationship('User', backref=db.backref('pedidos_uniforme', lazy=True))
+    item = db.relationship('ItemEstoque')
 

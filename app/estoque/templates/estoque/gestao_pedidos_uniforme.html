@@ -1,0 +1,93 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="mb-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+    <div>
+        <h2 class="text-2xl font-bold text-slate-800 flex items-center gap-2">
+            <i class="fas fa-clipboard-list text-blue-600"></i> Pedidos de EPI e Uniforme
+        </h2>
+        <p class="text-sm text-slate-500 mt-1">Aprove solicitações da equipa. A aprovação desconta do inventário automaticamente.</p>
+    </div>
+</div>
+
+<div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-10">
+    <div class="overflow-x-auto">
+        <table class="w-full text-left text-sm text-slate-600">
+            <thead class="bg-slate-50 text-[10px] uppercase text-slate-400 font-bold border-b border-slate-100">
+                <tr>
+                    <th class="px-6 py-4">Data/Hora</th>
+                    <th class="px-6 py-4">Funcionário</th>
+                    <th class="px-6 py-4">Peça Solicitada</th>
+                    <th class="px-6 py-4">Qtd</th>
+                    <th class="px-6 py-4 text-center">Status</th>
+                    <th class="px-6 py-4 text-right">Ação</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+                {% for solic in solicitacoes %}
+                <tr class="hover:bg-slate-50 transition {{ 'bg-blue-50/30' if solic.status == 'Pendente' else '' }}">
+                    <td class="px-6 py-4 text-xs font-medium">{{ solic.data_solicitacao.strftime('%d/%m/%Y %H:%M') }}</td>
+                    <td class="px-6 py-4 font-bold text-slate-800 flex items-center gap-2">
+                        <div class="w-8 h-8 bg-slate-200 text-slate-600 rounded-full flex items-center justify-center text-xs">{{ solic.user.real_name[:2].upper() }}</div>
+                        {{ solic.user.real_name }}
+                    </td>
+                    <td class="px-6 py-4">
+                        <div class="font-bold text-slate-700">{{ solic.item_nome }}</div>
+                        <div class="text-[10px] text-slate-500 uppercase mt-0.5 bg-slate-200 px-2 py-0.5 rounded inline-block border border-slate-300">
+                            {{ solic.tamanho }} | {{ solic.genero }}
+                        </div>
+                        {% if solic.item and solic.item.quantidade < solic.quantidade and solic.status == 'Pendente' %}
+                            <div class="text-[9px] text-red-600 font-bold mt-1 uppercase"><i class="fas fa-exclamation-triangle"></i> Sem Stock na prateleira (Atual: {{ solic.item.quantidade }})</div>
+                        {% endif %}
+                    </td>
+                    <td class="px-6 py-4 font-black text-blue-600 text-lg">{{ solic.quantidade }}</td>
+                    
+                    <td class="px-6 py-4 text-center">
+                        {% if solic.status == 'Pendente' %}
+                            <span class="bg-amber-100 text-amber-700 px-2.5 py-1 rounded text-[10px] font-black uppercase tracking-wide border border-amber-200"><i class="fas fa-clock"></i> Pendente</span>
+                        {% elif solic.status == 'Aprovado' %}
+                            <span class="bg-emerald-100 text-emerald-700 px-2.5 py-1 rounded text-[10px] font-black uppercase tracking-wide border border-emerald-200"><i class="fas fa-check"></i> Entregue</span>
+                        {% else %}
+                            <span class="bg-red-100 text-red-700 px-2.5 py-1 rounded text-[10px] font-black uppercase tracking-wide border border-red-200"><i class="fas fa-times"></i> Recusado</span>
+                        {% endif %}
+                    </td>
+                    
+                    <td class="px-6 py-4 text-right">
+                        {% if solic.status == 'Pendente' %}
+                            <div class="flex items-center justify-end gap-2">
+                                <form action="{{ url_for('estoque.gestao_solicitacoes') }}" method="POST" class="inline" onsubmit="return confirm('Confirmar entrega? O stock será deduzido e o recibo de saída será gerado automaticamente.');">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                    <input type="hidden" name="solicitacao_id" value="{{ solic.id }}"/>
+                                    <input type="hidden" name="acao" value="aprovar"/>
+                                    <button type="submit" class="text-white bg-emerald-500 hover:bg-emerald-600 px-3 py-1.5 rounded transition text-xs font-bold shadow-sm" title="Aprovar e Deduzir Stock" {% if solic.item and solic.item.quantidade < solic.quantidade %}disabled class="opacity-50 cursor-not-allowed"{% endif %}>
+                                        <i class="fas fa-check mr-1"></i> Aprovar
+                                    </button>
+                                </form>
+                                
+                                <form action="{{ url_for('estoque.gestao_solicitacoes') }}" method="POST" class="inline" onsubmit="return confirm('Deseja recusar o pedido deste colaborador?');">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                    <input type="hidden" name="solicitacao_id" value="{{ solic.id }}"/>
+                                    <input type="hidden" name="acao" value="recusar"/>
+                                    <button type="submit" class="text-slate-500 hover:text-red-600 bg-slate-100 hover:bg-red-50 border border-slate-200 hover:border-red-200 px-3 py-1.5 rounded transition text-xs font-bold" title="Recusar">
+                                        Recusar
+                                    </button>
+                                </form>
+                            </div>
+                        {% else %}
+                            <span class="text-[10px] text-slate-400 font-bold uppercase">{{ solic.data_resposta.strftime('%d/%m/%Y') }}</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="6" class="px-6 py-20 text-center text-slate-400 font-medium">
+                        <i class="fas fa-inbox text-4xl opacity-20 block mb-3"></i>
+                        Não há solicitações pendentes na caixa de entrada.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+

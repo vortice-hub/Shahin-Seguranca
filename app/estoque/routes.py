@@ -1,7 +1,7 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
 from flask_login import login_required, current_user
 from app.extensions import db
-from app.models import ItemEstoque, HistoricoEntrada, HistoricoSaida
+from app.models import ItemEstoque, HistoricoEntrada, HistoricoSaida, SolicitacaoUniforme, User
 from app.utils import get_brasil_time, permission_required
 import pandas as pd
 import logging
@@ -121,7 +121,6 @@ def editar_item(id):
         
     return render_template('estoque/editar_item.html', item=item)
 
-# --- IMPORTAÇÃO DE INVENTÁRIO VIA EXCEL ---
 @estoque_bp.route('/controle-uniforme/importar-excel', methods=['POST'])
 @login_required
 @permission_required('ESTOQUE')
@@ -156,7 +155,6 @@ def importar_excel_estoque():
                 falhas += 1
                 continue
             
-            # Converte valores numéricos (com fallback seguro)
             try: quantidade = int(float(row.get('quantidade', 0)))
             except: quantidade = 0
             try: minimo = int(float(row.get('minimo', 5)))
@@ -164,17 +162,14 @@ def importar_excel_estoque():
             try: ideal = int(float(row.get('ideal', 20)))
             except: ideal = 20
 
-            # Verifica se o item já existe na base (combinação exata de Nome + Tamanho + Genero)
             item_existente = ItemEstoque.query.filter_by(nome=descricao, tamanho=tamanho, genero=genero).first()
             
             if item_existente:
-                # Sincroniza (substitui) o estoque atual pelos dados da planilha
                 item_existente.quantidade = quantidade
                 item_existente.estoque_minimo = minimo
                 item_existente.estoque_ideal = ideal
                 sucesso_atualizados += 1
             else:
-                # Cria um novo item no inventário
                 novo_item = ItemEstoque(
                     nome=descricao, tamanho=tamanho, genero=genero,
                     quantidade=quantidade, estoque_minimo=minimo, estoque_ideal=ideal
@@ -195,4 +190,119 @@ def importar_excel_estoque():
         flash(f'Erro ao processar o arquivo: {str(e)}', 'error')
 
     return redirect(url_for('estoque.gerenciar_estoque'))
+
+# ======================================================================
+# NOVO MÓDULO: PORTAL DE SOLICITAÇÃO DE EPI/UNIFORME
+# ======================================================================
+
+@estoque_bp.route('/api/tamanhos', methods=['GET'])
+@login_required
+def api_buscar_tamanhos():
+    """API Dinâmica: Retorna tamanhos e gêneros disponíveis dado um nome de item."""
+    nome_item = request.args.get('nome')
+    if not nome_item:
+        return jsonify([])
+    
+    # Filtra apenas peças que possuem estoque maior que zero
+    itens = ItemEstoque.query.filter(ItemEstoque.nome == nome_item, ItemEstoque.quantidade > 0).all()
+    
+    resultados = []
+    for item in itens:
+        resultados.append({
+            'id': item.id,
+            'tamanho': item.tamanho,
+            'genero': item.genero,
+            'quantidade': item.quantidade
+        })
+    return jsonify(resultados)
+
+@estoque_bp.route('/solicitar', methods=['GET', 'POST'])
+@login_required
+def solicitar_uniforme():
+    """Rota do Colaborador: Tela onde ele solicita a peça."""
+    if request.method == 'POST':
+        item_id = request.form.get('item_id')
+        quantidade = int(request.form.get('quantidade') or 1)
+        
+        item = ItemEstoque.query.get(item_id)
+        if not item or item.quantidade < quantidade:
+            flash('Erro: O item selecionado não possui stock suficiente no momento.', 'error')
+            return redirect(url_for('estoque.solicitar_uniforme'))
+        
+        nova_solic = SolicitacaoUniforme(
+            user_id=current_user.id,
+            item_id=item.id,
+            item_nome=item.nome,
+            tamanho=item.tamanho,
+            genero=item.genero,
+            quantidade=quantidade,
+            status='Pendente'
+        )
+        db.session.add(nova_solic)
+        db.session.commit()
+        flash('O seu pedido foi enviado ao Departamento de RH! Aguarde a aprovação.', 'success')
+        return redirect(url_for('estoque.solicitar_uniforme'))
+    
+    # Prepara a lista de peças disponíveis (apenas nomes únicos) para o formulário
+    itens_query = db.session.query(ItemEstoque.nome).filter(ItemEstoque.quantidade > 0).distinct().all()
+    nomes_disponiveis = [n[0] for n in itens_query]
+    
+    # Busca o histórico de solicitações deste funcionário
+    minhas_solicitacoes = SolicitacaoUniforme.query.filter_by(user_id=current_user.id).order_by(SolicitacaoUniforme.data_solicitacao.desc()).limit(20).all()
+    
+    return render_template('estoque/solicitar_uniforme.html', nomes_disponiveis=nomes_disponiveis, solicitacoes=minhas_solicitacoes)
+
+@estoque_bp.route('/solicitacoes', methods=['GET', 'POST'])
+@login_required
+@permission_required('ESTOQUE')
+def gestao_solicitacoes():
+    """Rota do Gestor: Tela para aprovar ou recusar os pedidos da equipa."""
+    if request.method == 'POST':
+        solic_id = request.form.get('solicitacao_id')
+        acao = request.form.get('acao')
+        
+        solicitacao = SolicitacaoUniforme.query.get_or_404(solic_id)
+        
+        if acao == 'aprovar':
+            item = ItemEstoque.query.get(solicitacao.item_id)
+            
+            # Trava de segurança: Alguém pode ter esvaziado o stock enquanto o pedido aguardava
+            if not item or item.quantidade < solicitacao.quantidade:
+                flash(f'Erro crítico: O stock atual é insuficiente para aprovar as {solicitacao.quantidade} unidades de {solicitacao.item_nome}.', 'error')
+            else:
+                # Aprova o pedido
+                solicitacao.status = 'Aprovado'
+                solicitacao.data_resposta = get_brasil_time()
+                
+                # Desconta do estoque real
+                item.quantidade -= solicitacao.quantidade
+                
+                # Registo automático na tabela de Histórico de Saída de Stock
+                hist = HistoricoSaida(
+                    coordenador=current_user.real_name, 
+                    colaborador=solicitacao.user.real_name, 
+                    item_nome=item.nome, 
+                    tamanho=item.tamanho, 
+                    genero=item.genero, 
+                    quantidade=solicitacao.quantidade,
+                    data_entrega=get_brasil_time().date()
+                )
+                db.session.add(hist)
+                flash('Pedido APROVADO com sucesso! O inventário foi deduzido automaticamente.', 'success')
+                
+        elif acao == 'recusar':
+            solicitacao.status = 'Recusado'
+            solicitacao.data_resposta = get_brasil_time()
+            flash('Pedido de EPI Recusado.', 'warning')
+            
+        db.session.commit()
+        return redirect(url_for('estoque.gestao_solicitacoes'))
+        
+    # Carrega todas as solicitações pendentes e histórico
+    todas_solicitacoes = SolicitacaoUniforme.query.order_by(
+        db.case({ 'Pendente': 1, 'Aprovado': 2, 'Recusado': 3 }, value=SolicitacaoUniforme.status),
+        SolicitacaoUniforme.data_solicitacao.desc()
+    ).limit(100).all()
+    
+    return render_template('estoque/gestao_pedidos_uniforme.html', solicitacoes=todas_solicitacoes)
 

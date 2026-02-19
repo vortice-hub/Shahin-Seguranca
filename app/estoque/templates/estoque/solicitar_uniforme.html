@@ -1,0 +1,124 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="mb-6">
+    <h2 class="text-2xl font-bold text-slate-800 flex items-center gap-2">
+        <i class="fas fa-hard-hat text-blue-600"></i> Solicitação de Uniforme e EPI
+    </h2>
+    <p class="text-sm text-slate-500 mt-1">Faça o pedido de peças de fardamento ou equipamentos ao departamento de Logística/RH.</p>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
+    
+    <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="bg-blue-600 p-5 text-white flex justify-between items-center">
+            <h3 class="font-bold text-lg"><i class="fas fa-plus-circle mr-2"></i> Novo Pedido</h3>
+        </div>
+        <div class="p-6">
+            <form method="POST" action="{{ url_for('estoque.solicitar_uniforme') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                
+                <div class="mb-4">
+                    <label class="block text-xs uppercase font-bold text-slate-500 mb-1">Qual peça necessita?</label>
+                    <select id="nome_item" onchange="buscarTamanhos()" required class="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-sm font-bold text-slate-800 outline-none focus:border-blue-500 transition focus:ring-2 focus:ring-blue-200 cursor-pointer">
+                        <option value="">-- Selecione uma peça --</option>
+                        {% for nome in nomes_disponiveis %}
+                            <option value="{{ nome }}">{{ nome }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div class="mb-4">
+                    <label class="block text-xs uppercase font-bold text-slate-500 mb-1">Tamanho e Gênero (Em Stock)</label>
+                    <select name="item_id" id="item_id" required class="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-sm font-bold text-slate-800 outline-none focus:border-blue-500 transition focus:ring-2 focus:ring-blue-200 cursor-pointer disabled:opacity-50" disabled>
+                        <option value="">Selecione a peça primeiro...</option>
+                    </select>
+                </div>
+
+                <div class="mb-6">
+                    <label class="block text-xs uppercase font-bold text-slate-500 mb-1">Quantidade</label>
+                    <input type="number" name="quantidade" value="1" min="1" required class="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-sm font-bold text-slate-800 outline-none focus:border-blue-500 transition focus:ring-2 focus:ring-blue-200">
+                </div>
+
+                <button type="submit" class="w-full bg-slate-900 hover:bg-blue-600 text-white font-bold py-3.5 rounded-xl shadow-lg transition flex items-center justify-center gap-2 group">
+                    <i class="fas fa-paper-plane group-hover:-translate-y-1 group-hover:translate-x-1 transition-transform"></i> ENVIAR SOLICITAÇÃO
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+        <h3 class="font-bold text-slate-800 text-lg mb-4 border-b pb-3 flex items-center gap-2">
+            <i class="fas fa-history text-slate-400"></i> Meus Pedidos
+        </h3>
+        <div class="space-y-3 max-h-[500px] overflow-y-auto pr-2">
+            {% for solic in solicitacoes %}
+            <div class="p-4 border border-slate-100 rounded-lg {{ 'bg-slate-50' if solic.status == 'Pendente' else 'bg-white' }} flex flex-col gap-2 hover:border-blue-200 transition shadow-sm">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <span class="font-bold text-sm text-slate-800 block">{{ solic.item_nome }}</span>
+                        <span class="text-xs font-medium text-slate-500 mt-0.5 inline-block bg-slate-200 px-2 py-0.5 rounded">{{ solic.tamanho }} | {{ solic.genero }}</span>
+                        <span class="text-xs font-black text-blue-600 ml-2">{{ solic.quantidade }} un.</span>
+                    </div>
+                    
+                    {% if solic.status == 'Pendente' %}
+                        <span class="text-[10px] bg-amber-100 text-amber-700 px-2.5 py-1 rounded font-black uppercase tracking-wide border border-amber-200"><i class="fas fa-clock mr-1"></i> Pendente</span>
+                    {% elif solic.status == 'Aprovado' %}
+                        <span class="text-[10px] bg-emerald-100 text-emerald-700 px-2.5 py-1 rounded font-black uppercase tracking-wide border border-emerald-200"><i class="fas fa-check mr-1"></i> Aprovado</span>
+                    {% else %}
+                        <span class="text-[10px] bg-red-100 text-red-700 px-2.5 py-1 rounded font-black uppercase tracking-wide border border-red-200"><i class="fas fa-times mr-1"></i> Recusado</span>
+                    {% endif %}
+                </div>
+                <div class="text-[10px] text-slate-400 font-bold uppercase mt-2">
+                    Enviado em: {{ solic.data_solicitacao.strftime('%d/%m/%Y às %H:%M') }}
+                </div>
+            </div>
+            {% else %}
+            <div class="text-center py-12 text-sm text-slate-400 flex flex-col items-center gap-3">
+                <div class="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center text-2xl mb-2">
+                    <i class="fas fa-box-open opacity-50"></i>
+                </div>
+                Você não fez nenhum pedido recente.
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<script>
+    async function buscarTamanhos() {
+        const nome = document.getElementById('nome_item').value;
+        const selectTamanho = document.getElementById('item_id');
+        
+        if (!nome) {
+            selectTamanho.innerHTML = '<option value="">Selecione a peça primeiro...</option>';
+            selectTamanho.disabled = true;
+            return;
+        }
+
+        selectTamanho.innerHTML = '<option value="">Carregando stock...</option>';
+        selectTamanho.disabled = true;
+
+        try {
+            const resposta = await fetch(`/estoque/api/tamanhos?nome=${encodeURIComponent(nome)}`);
+            const dados = await resposta.json();
+            
+            selectTamanho.innerHTML = '<option value="">-- Escolha a Opção Desejada --</option>';
+            
+            if (dados.length === 0) {
+                selectTamanho.innerHTML = '<option value="">Sem stock disponível no momento</option>';
+            } else {
+                dados.forEach(item => {
+                    const opt = document.createElement('option');
+                    opt.value = item.id;
+                    opt.textContent = `Tamanho: ${item.tamanho} - ${item.genero} (Stock: ${item.quantidade})`;
+                    selectTamanho.appendChild(opt);
+                });
+                selectTamanho.disabled = false;
+            }
+        } catch (erro) {
+            selectTamanho.innerHTML = '<option value="">Erro ao carregar tamanhos.</option>';
+        }
+    }
+</script>
+{% endblock %}
+
