@@ -120,7 +120,6 @@ def admin_holerites():
                 
                 if user_id: 
                     sucesso += 1
-                    # GATILHO NOTIFICAÇÃO COLABORADOR
                     enviar_notificacao(user_id, f"Novo Holerite disponível para assinatura ({mes_ref}).", "/documentos/meus-documentos")
                 else: 
                     revisao += 1
@@ -249,7 +248,6 @@ def vincular_holerite():
         h.user_id = u_id
         h.status = 'Enviado'
         db.session.commit()
-        # GATILHO NOTIFICAÇÃO COLABORADOR
         enviar_notificacao(u_id, f"Seu Holerite ({h.mes_referencia}) foi liberado. Assine agora!", "/documentos/meus-documentos")
     return redirect(url_for('documentos.revisao_holerites'))
 
@@ -278,7 +276,6 @@ def novo_recibo():
         r.url_arquivo = caminho_blob
         db.session.add(r); db.session.commit()
         
-        # GATILHO NOTIFICAÇÃO COLABORADOR
         enviar_notificacao(u.id, "Um novo Recibo foi disponibilizado para si.", "/documentos/meus-documentos")
         
         return redirect(url_for('documentos.dashboard_documentos'))
@@ -299,7 +296,6 @@ def disparar_espelhos():
             caminho_blob = salvar_no_storage(pdf_bytes, f"espelhos/{mes}")
             db.session.add(Holerite(user_id=u.id, mes_referencia=mes, url_arquivo=caminho_blob, status='Enviado', enviado_em=get_brasil_time()))
             
-            # GATILHO NOTIFICAÇÃO COLABORADOR (ESPELHO)
             enviar_notificacao(u.id, f"Seu Espelho de Ponto ({mes}) está disponível para validação.", "/documentos/meus-documentos")
             
             sucessos += 1
@@ -332,7 +328,7 @@ def baixar_certificado_auditoria(id):
         print(f"Erro: {e}")
         return redirect(url_for('documentos.revisao_auditoria'))
 
-# --- ROTAS DE ATESTADO ---
+# --- ROTAS DE ATESTADO (COM MODO DEBUG) ---
 @documentos_bp.route('/atestados/meus')
 @login_required
 def meus_atestados():
@@ -342,6 +338,11 @@ def meus_atestados():
 @documentos_bp.route('/atestado/novo', methods=['GET', 'POST'])
 @login_required
 def enviar_atestado():
+    # Variáveis de debug que enviaremos para o HTML
+    debug_mode = False
+    debug_texto = ""
+    debug_dias = None
+
     if request.method == 'POST':
         file = request.files.get('arquivo_atestado')
         if not file or file.filename == '':
@@ -353,7 +354,9 @@ def enviar_atestado():
             caminho_blob = salvar_no_storage(file_bytes, f"atestados/{mes_ref}")
             if not caminho_blob: return redirect(request.url)
 
+            # A MÁGICA ACONTECE AQUI
             dados_ia = analisar_atestado_vision(file_bytes, current_user.real_name)
+            
             data_inicio_db = datetime.strptime(dados_ia['data_inicio'], '%Y-%m-%d').date() if dados_ia['data_inicio'] else None
 
             novo_atestado = Atestado(
@@ -363,17 +366,21 @@ def enviar_atestado():
             )
             db.session.add(novo_atestado); db.session.commit()
             
-            # GATILHO NOTIFICAÇÃO MASTER
             master = User.query.filter_by(username='50097952800').first()
             if master:
                 enviar_notificacao(master.id, f"Novo Atestado de {current_user.real_name} aguardando análise.", "/documentos/admin/atestados")
             
-            flash('Atestado enviado com sucesso!', 'success')
-            return redirect(url_for('documentos.meus_atestados'))
+            # EM VEZ DE REDIRECIONAR, ATIVAMOS O PAINEL DE DEBUG NA PRÓPRIA TELA
+            flash('Atestado enviado com sucesso para o RH!', 'success')
+            debug_mode = True
+            debug_texto = dados_ia['texto_bruto']
+            debug_dias = dados_ia['dias_afastamento']
+            
         except Exception as e:
             db.session.rollback(); flash('Ocorreu um erro ao processar seu atestado.', 'error')
             return redirect(request.url)
-    return render_template('documentos/enviar_atestado.html')
+            
+    return render_template('documentos/enviar_atestado.html', debug_mode=debug_mode, debug_texto=debug_texto, debug_dias=debug_dias)
 
 @documentos_bp.route('/admin/atestados')
 @login_required
@@ -422,14 +429,11 @@ def avaliar_atestado(id):
                     novo_ponto = PontoResumo(user_id=atestado.user_id, data_referencia=dia_atual, minutos_trabalhados=0, minutos_esperados=0, minutos_saldo=0, status_dia='Atestado')
                     db.session.add(novo_ponto)
                     
-            # GATILHO NOTIFICAÇÃO COLABORADOR
             enviar_notificacao(atestado.user_id, "O seu Atestado foi recebido e APROVADO com sucesso.", "/documentos/atestados/meus")
             
         elif acao == 'recusar':
             atestado.status = 'Recusado'
             atestado.motivo_recusa = request.form.get('motivo_recusa', 'Recusado pelo RH')
-            
-            # GATILHO NOTIFICAÇÃO COLABORADOR
             enviar_notificacao(atestado.user_id, "O seu Atestado foi RECUSADO. Verifique o motivo.", "/documentos/atestados/meus")
             
         db.session.commit(); flash(f'Atestado avaliado com sucesso!', 'success')
