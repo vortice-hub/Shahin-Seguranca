@@ -27,11 +27,20 @@
                     </select>
                 </div>
                 
-                <div class="mb-4">
-                    <label class="block text-xs uppercase font-bold text-slate-500 mb-1">Tamanho e Gênero (Em Stock)</label>
-                    <select name="item_id" id="item_id" required class="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-sm font-bold text-slate-800 outline-none focus:border-blue-500 transition focus:ring-2 focus:ring-blue-200 cursor-pointer disabled:opacity-50" disabled>
-                        <option value="">Selecione a peça primeiro...</option>
-                    </select>
+                <div class="grid grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <label class="block text-xs uppercase font-bold text-slate-500 mb-1">Tamanho</label>
+                        <select id="tamanho_select" onchange="atualizarGeneros()" required class="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-sm font-bold text-slate-800 outline-none focus:border-blue-500 transition focus:ring-2 focus:ring-blue-200 cursor-pointer disabled:opacity-50" disabled>
+                            <option value="">Aguardando peça...</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs uppercase font-bold text-slate-500 mb-1">Gênero</label>
+                        <select name="item_id" id="item_id" required class="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-sm font-bold text-slate-800 outline-none focus:border-blue-500 transition focus:ring-2 focus:ring-blue-200 cursor-pointer disabled:opacity-50" disabled>
+                            <option value="">Aguardando tamanho...</option>
+                        </select>
+                    </div>
                 </div>
 
                 <div class="mb-6">
@@ -85,38 +94,79 @@
 </div>
 
 <script>
+    // Variável global para guardar o stock recebido da API
+    let inventarioDisponivel = [];
+
     async function buscarTamanhos() {
         const nome = document.getElementById('nome_item').value;
-        const selectTamanho = document.getElementById('item_id');
+        const selectTamanho = document.getElementById('tamanho_select');
+        const selectGenero = document.getElementById('item_id');
         
+        // Reset das caixas se o usuário limpar a peça
         if (!nome) {
-            selectTamanho.innerHTML = '<option value="">Selecione a peça primeiro...</option>';
+            selectTamanho.innerHTML = '<option value="">Aguardando peça...</option>';
+            selectGenero.innerHTML = '<option value="">Aguardando tamanho...</option>';
             selectTamanho.disabled = true;
+            selectGenero.disabled = true;
+            inventarioDisponivel = [];
             return;
         }
 
-        selectTamanho.innerHTML = '<option value="">Carregando stock...</option>';
+        selectTamanho.innerHTML = '<option value="">Carregando...</option>';
         selectTamanho.disabled = true;
+        selectGenero.innerHTML = '<option value="">Aguardando tamanho...</option>';
+        selectGenero.disabled = true;
 
         try {
-            const resposta = await fetch(`/estoque/api/tamanhos?nome=${encodeURIComponent(nome)}`);
-            const dados = await resposta.json();
+            // Chama a API de forma segura garantindo o link correto com url_for
+            const url = `{{ url_for('estoque.api_buscar_tamanhos') }}?nome=${encodeURIComponent(nome)}`;
+            const resposta = await fetch(url);
+            inventarioDisponivel = await resposta.json();
             
-            selectTamanho.innerHTML = '<option value="">-- Escolha a Opção Desejada --</option>';
+            selectTamanho.innerHTML = '<option value="">-- Escolha --</option>';
             
-            if (dados.length === 0) {
-                selectTamanho.innerHTML = '<option value="">Sem stock disponível no momento</option>';
+            if (inventarioDisponivel.length === 0) {
+                selectTamanho.innerHTML = '<option value="">Sem stock</option>';
             } else {
-                dados.forEach(item => {
+                // Filtra para não repetir tamanhos na lista
+                const tamanhosUnicos = [...new Set(inventarioDisponivel.map(item => item.tamanho))];
+                
+                tamanhosUnicos.forEach(tamanho => {
                     const opt = document.createElement('option');
-                    opt.value = item.id;
-                    opt.textContent = `Tamanho: ${item.tamanho} - ${item.genero} (Stock: ${item.quantidade})`;
+                    opt.value = tamanho;
+                    opt.textContent = tamanho;
                     selectTamanho.appendChild(opt);
                 });
                 selectTamanho.disabled = false;
             }
         } catch (erro) {
-            selectTamanho.innerHTML = '<option value="">Erro ao carregar tamanhos.</option>';
+            selectTamanho.innerHTML = '<option value="">Erro ao buscar</option>';
+        }
+    }
+
+    function atualizarGeneros() {
+        const tamanhoEscolhido = document.getElementById('tamanho_select').value;
+        const selectGenero = document.getElementById('item_id');
+
+        selectGenero.innerHTML = '<option value="">-- Escolha --</option>';
+        selectGenero.disabled = true;
+
+        if (!tamanhoEscolhido) return;
+
+        // Filtra o inventário para encontrar apenas as opções que têm esse tamanho
+        const opcoesFiltradas = inventarioDisponivel.filter(item => item.tamanho === tamanhoEscolhido);
+
+        if (opcoesFiltradas.length === 0) {
+            selectGenero.innerHTML = '<option value="">Sem stock</option>';
+        } else {
+            opcoesFiltradas.forEach(item => {
+                const opt = document.createElement('option');
+                // O VALOR é a ID real do banco de dados, para que o sistema saiba exatamente o que descontar
+                opt.value = item.id;
+                opt.textContent = `${item.genero} (Stock: ${item.quantidade})`;
+                selectGenero.appendChild(opt);
+            });
+            selectGenero.disabled = false;
         }
     }
 </script>
