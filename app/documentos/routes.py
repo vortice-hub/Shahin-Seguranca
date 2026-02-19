@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 from pypdf import PdfReader, PdfWriter
 from thefuzz import process, fuzz
 import io
+import pandas as pd # NOVO: Biblioteca importada para gerar o Excel de Fechamento de Folha
 
 documentos_bp = Blueprint('documentos', __name__, template_folder='templates', url_prefix='/documentos')
 
@@ -328,7 +329,7 @@ def baixar_certificado_auditoria(id):
         print(f"Erro: {e}")
         return redirect(url_for('documentos.revisao_auditoria'))
 
-# --- ROTAS DE ATESTADO (COM MODO DEBUG) ---
+# --- ROTAS DE ATESTADO ---
 @documentos_bp.route('/atestados/meus')
 @login_required
 def meus_atestados():
@@ -338,7 +339,6 @@ def meus_atestados():
 @documentos_bp.route('/atestado/novo', methods=['GET', 'POST'])
 @login_required
 def enviar_atestado():
-    # Variáveis de debug que enviaremos para o HTML
     debug_mode = False
     debug_texto = ""
     debug_dias = None
@@ -354,7 +354,6 @@ def enviar_atestado():
             caminho_blob = salvar_no_storage(file_bytes, f"atestados/{mes_ref}")
             if not caminho_blob: return redirect(request.url)
 
-            # A MÁGICA ACONTECE AQUI
             dados_ia = analisar_atestado_vision(file_bytes, current_user.real_name)
             
             data_inicio_db = datetime.strptime(dados_ia['data_inicio'], '%Y-%m-%d').date() if dados_ia['data_inicio'] else None
@@ -370,7 +369,6 @@ def enviar_atestado():
             if master:
                 enviar_notificacao(master.id, f"Novo Atestado de {current_user.real_name} aguardando análise.", "/documentos/admin/atestados")
             
-            # EM VEZ DE REDIRECIONAR, ATIVAMOS O PAINEL DE DEBUG NA PRÓPRIA TELA
             flash('Atestado enviado com sucesso para o RH!', 'success')
             debug_mode = True
             debug_texto = dados_ia['texto_bruto']
@@ -465,4 +463,91 @@ def migrar_pdfs_para_nuvem():
         flash(f"Migração concluída! {migrados_holerite} Espelhos e {migrados_recibo} Recibos movidos para a nuvem.", "success")
     except Exception as e: db.session.rollback(); flash(f"Erro: {e}", "error")
     return redirect(url_for('documentos.dashboard_documentos'))
+
+# --- NOVO: MÓDULO DE FECHAMENTO DE MÊS (EXCEL) ---
+@documentos_bp.route('/relatorio-folha')
+@login_required
+@permission_required('DOCUMENTOS')
+def relatorio_folha():
+    return render_template('documentos/relatorio_folha.html')
+
+@documentos_bp.route('/relatorio-folha/exportar', methods=['POST'])
+@login_required
+@permission_required('DOCUMENTOS')
+def exportar_relatorio_folha():
+    try:
+        data_inicio_str = request.form.get('data_inicio')
+        data_fim_str = request.form.get('data_fim')
+        
+        if not data_inicio_str or not data_fim_str:
+            flash('Selecione as datas de início e fim.', 'error')
+            return redirect(url_for('documentos.relatorio_folha'))
+            
+        data_inicio = datetime.strptime(data_inicio_str, '%Y-%m-%d').date()
+        data_fim = datetime.strptime(data_fim_str, '%Y-%m-%d').date()
+        
+        # Puxa todos os funcionários (menos Master raiz e Terminal)
+        usuarios = User.query.filter(User.username != '12345678900', User.username != 'terminal').order_by(User.real_name).all()
+        
+        dados_relatorio = []
+        
+        for u in usuarios:
+            # Puxa os espelhos de ponto do período exato selecionado
+            pontos = PontoResumo.query.filter(
+                PontoResumo.user_id == u.id,
+                PontoResumo.data_referencia >= data_inicio,
+                PontoResumo.data_referencia <= data_fim
+            ).all()
+            
+            # Cálculo de Minutos
+            total_esperado = sum(p.minutos_esperados for p in pontos)
+            total_trabalhado = sum(p.minutos_trabalhados for p in pontos)
+            saldo = total_trabalhado - total_esperado
+            
+            # Contagem de Ocorrências
+            faltas = sum(1 for p in pontos if p.status_dia == 'Falta')
+            atestados = sum(1 for p in pontos if p.status_dia == 'Atestado')
+            
+            # Formatação Elegante para o RH
+            sinal = "+" if saldo >= 0 else "-"
+            saldo_str = f"{sinal}{format_minutes_to_hm(abs(saldo))}"
+            
+            dados_relatorio.append({
+                'Nome do Funcionário': u.real_name,
+                'CPF': u.cpf,
+                'Departamento': u.departamento or 'Não Definido',
+                'Cargo': u.role,
+                'Total Horas Esperadas': format_minutes_to_hm(total_esperado),
+                'Total Horas Realizadas': format_minutes_to_hm(total_trabalhado),
+                'Saldo Extra / Débito': saldo_str,
+                'Total Faltas (Dias)': faltas,
+                'Atestados (Dias)': atestados
+            })
+            
+        if not dados_relatorio:
+            flash('Nenhum dado encontrado para o período selecionado.', 'warning')
+            return redirect(url_for('documentos.relatorio_folha'))
+            
+        # Gera o Arquivo Excel via Pandas na Memória
+        df = pd.DataFrame(dados_relatorio)
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False, sheet_name='Fechamento Folha')
+            
+            # Ajuste dinâmico da largura das colunas
+            worksheet = writer.sheets['Fechamento Folha']
+            for i, col in enumerate(df.columns):
+                max_len = max(df[col].astype(str).map(len).max(), len(col)) + 2
+                worksheet.column_dimensions[chr(65 + i)].width = max_len
+
+        output.seek(0)
+        
+        # Formata o nome do arquivo final
+        nome_arquivo = f"Fechamento_Folha_{data_inicio_str}_a_{data_fim_str}.xlsx"
+        
+        return send_file(output, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', as_attachment=True, download_name=nome_arquivo)
+
+    except Exception as e:
+        flash(f'Erro Crítico ao gerar relatório Excel: {str(e)}', 'error')
+        return redirect(url_for('documentos.relatorio_folha'))
 

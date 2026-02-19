@@ -13,7 +13,6 @@
         .sidebar { transition: transform 0.3s ease-in-out; }
         .submenu { transition: max-height 0.3s ease-in-out; overflow: hidden; max-height: 0; }
         .submenu.open { max-height: 500px; } 
-        /* Animação do Sino Tocando */
         @keyframes ring { 0% { transform: rotate(0); } 10% { transform: rotate(15deg); } 20% { transform: rotate(-10deg); } 30% { transform: rotate(5deg); } 40% { transform: rotate(-5deg); } 50% { transform: rotate(0); } 100% { transform: rotate(0); } }
         .bell-ring { animation: ring 2s infinite; display: inline-block; transform-origin: top center; }
     </style>
@@ -138,6 +137,7 @@
                             <ul id="submenu-documentos" class="submenu hidden bg-slate-950">
                                 <li><a href="/documentos/admin" class="block pl-16 pr-6 py-2 text-sm text-slate-400 hover:text-white hover:bg-slate-800 transition border-l-2 border-transparent hover:border-blue-600">Gestão Geral</a></li>
                                 <li><a href="/documentos/admin/atestados" class="block pl-16 pr-6 py-2 text-sm text-slate-400 hover:text-white hover:bg-slate-800 transition border-l-2 border-transparent hover:border-teal-500">Atestados Médicos</a></li>
+                                <li><a href="/documentos/relatorio-folha" class="block pl-16 pr-6 py-2 text-sm text-slate-400 hover:text-white hover:bg-slate-800 transition border-l-2 border-transparent hover:border-yellow-400">Fechamento de Folha</a></li>
                                 {% if is_master or 'AUDITORIA' in perms %}
                                 <li><a href="/documentos/admin/auditoria" class="block pl-16 pr-6 py-2 text-sm text-slate-400 hover:text-white hover:bg-slate-800 transition border-l-2 border-transparent hover:border-purple-500">Auditoria (Assinaturas)</a></li>
                                 {% endif %}
@@ -223,14 +223,11 @@
             });
 
             {% if current_user.is_authenticated and not current_user.is_first_access %}
-            // Inicializa a busca de notificações
             buscarNotificacoes();
-            // Verifica novidades a cada 2 minutos em segundo plano
             setInterval(buscarNotificacoes, 120000); 
             {% endif %}
         });
 
-        // --- SISTEMA DE NOTIFICAÇÕES (AJAX) ---
         async function buscarNotificacoes() {
             try {
                 const req = await fetch('/api/notificacoes');
