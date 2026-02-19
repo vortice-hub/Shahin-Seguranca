@@ -154,3 +154,24 @@ def master_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
+# --- NOVIDADE: MOTOR DE NOTIFICAÇÕES ---
+def enviar_notificacao(user_id, mensagem, link=None):
+    """Envia um alerta interno para o Sininho do utilizador."""
+    from app.extensions import db
+    from app.models import Notificacao
+    try:
+        nova_notif = Notificacao(
+            user_id=user_id,
+            mensagem=mensagem,
+            link=link,
+            lida=False,
+            data_criacao=get_brasil_time()
+        )
+        db.session.add(nova_notif)
+        db.session.commit()
+        return True
+    except Exception as e:
+        db.session.rollback()
+        print(f"Erro ao enviar notificacao: {e}")
+        return False
+

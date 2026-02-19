@@ -17,10 +17,8 @@ class User(UserMixin, db.Model):
     cpf = db.Column(db.String(14), unique=True, nullable=True)
     role = db.Column(db.String(20), default='Funcionario')
     
-    # --- NOVIDADE: ESTRUTURA ORGANIZACIONAL ---
     departamento = db.Column(db.String(100), nullable=True)
     gestor_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
-    # A mágica do auto-relacionamento: o chefe é outro 'User'
     gestor = db.relationship('User', remote_side=[id], backref=db.backref('subordinados', lazy=True))
     
     permissions = db.Column(db.String(500), nullable=True)
@@ -46,11 +44,8 @@ class PreCadastro(db.Model):
     cpf = db.Column(db.String(14), unique=True, nullable=False)
     nome_previsto = db.Column(db.String(120), nullable=False)
     cargo = db.Column(db.String(80))
-    
-    # --- NOVIDADE: ESTRUTURA ORGANIZACIONAL ---
     departamento = db.Column(db.String(100), nullable=True)
     cpf_gestor = db.Column(db.String(14), nullable=True)
-    
     salario = db.Column(db.Float, default=0.0)
     razao_social = db.Column(db.String(200))
     cnpj = db.Column(db.String(20))
@@ -221,4 +216,15 @@ class SolicitacaoUniforme(db.Model):
     data_resposta = db.Column(db.DateTime, nullable=True)
     user = db.relationship('User', backref=db.backref('pedidos_uniforme', lazy=True))
     item = db.relationship('ItemEstoque')
+
+# --- NOVIDADE: CAIXA DE ENTRADA DO SININHO ---
+class Notificacao(db.Model):
+    __tablename__ = 'notificacoes'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    mensagem = db.Column(db.String(255), nullable=False)
+    link = db.Column(db.String(255), nullable=True)
+    lida = db.Column(db.Boolean, default=False)
+    data_criacao = db.Column(db.DateTime, default=get_brasil_time)
+    user = db.relationship('User', backref=db.backref('notificacoes', lazy=True))
 
