@@ -5,24 +5,13 @@
         <h2 class="text-2xl font-bold text-slate-800">Central de Documentos</h2>
         <p class="text-sm text-slate-500">Gestão integrada de RH e Financeiro.</p>
     </div>
+    
     <div class="flex flex-wrap gap-2">
-        <a href="/documentos/admin/atestados" class="bg-teal-600 hover:bg-teal-700 text-white font-bold py-2 px-4 rounded-lg shadow-lg text-xs transition flex items-center gap-2">
-            <i class="fas fa-file-medical"></i> ATESTADOS
-        </a>
-
         {% if pendentes_revisao > 0 %}
         <a href="/documentos/admin/revisao" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg shadow-lg text-xs transition flex items-center gap-2 animate-pulse">
-            <i class="fas fa-exclamation-circle"></i> REVISAR ({{ pendentes_revisao }})
+            <i class="fas fa-exclamation-circle"></i> REVISAR PENDÊNCIAS ({{ pendentes_revisao }})
         </a>
         {% endif %}
-        
-        <a href="/documentos/admin/auditoria" class="bg-slate-800 hover:bg-slate-900 text-white font-bold py-2 px-4 rounded-lg shadow-lg text-xs transition flex items-center gap-2">
-            <i class="fas fa-shield-alt"></i> AUDITORIA
-        </a>
-
-        <a href="/documentos/relatorio-folha" class="bg-yellow-500 hover:bg-yellow-600 text-slate-900 font-bold py-2 px-4 rounded-lg shadow-lg text-xs transition flex items-center gap-2">
-            <i class="fas fa-file-excel"></i> FECHAMENTO DE MÊS
-        </a>
     </div>
 </div>
 
