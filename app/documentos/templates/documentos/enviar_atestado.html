@@ -10,38 +10,6 @@
     </div>
     
     <div class="p-6">
-        
-        {% if debug_mode %}
-        <div class="mb-8 bg-slate-900 rounded-xl p-5 border border-slate-700 shadow-lg relative overflow-hidden">
-            <div class="absolute top-0 right-0 bg-yellow-500 text-slate-900 text-[10px] font-bold px-3 py-1 rounded-bl-lg uppercase tracking-wider">
-                Modo Debug Ativo
-            </div>
-            
-            <h3 class="text-yellow-400 font-bold mb-3 flex items-center gap-2">
-                <i class="fas fa-robot text-lg"></i> Raio-X do Robô (IA)
-            </h3>
-            
-            <div class="mb-4 bg-slate-800 p-4 rounded-lg border border-slate-700">
-                <p class="text-slate-400 text-[10px] font-bold uppercase tracking-wider mb-1">Dias identificados:</p>
-                <div class="text-3xl font-black {% if debug_dias %}text-emerald-400{% else %}text-red-500{% endif %}">
-                    {% if debug_dias %}
-                        {{ debug_dias }} <span class="text-sm text-emerald-600 font-bold uppercase">Dias</span>
-                    {% else %}
-                        FALHA <i class="fas fa-times-circle text-xl"></i>
-                    {% endif %}
-                </div>
-            </div>
-
-            <div>
-                <p class="text-slate-400 text-[10px] font-bold uppercase tracking-wider mb-1">Texto Bruto Lido pela Câmera:</p>
-                <div class="bg-black p-3 rounded-lg border border-slate-700 max-h-48 overflow-y-auto">
-                    <p class="text-emerald-400 font-mono text-[11px] leading-relaxed break-words">{{ debug_texto }}</p>
-                </div>
-            </div>
-            
-            <p class="text-slate-500 text-[10px] mt-3 italic">* Se falhou, copie o texto verde acima e envie para a equipa de engenharia criar uma regra específica.</p>
-        </div>
-        {% endif %}
         <form action="{{ url_for('documentos.enviar_atestado') }}" method="POST" enctype="multipart/form-data">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
             

@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 from pypdf import PdfReader, PdfWriter
 from thefuzz import process, fuzz
 import io
-import pandas as pd # NOVO: Biblioteca importada para gerar o Excel de Fechamento de Folha
+import pandas as pd 
 
 documentos_bp = Blueprint('documentos', __name__, template_folder='templates', url_prefix='/documentos')
 
@@ -142,9 +142,13 @@ def baixar_holerite(id):
     arquivo_bytes = None
     nome_download = "documento.pdf"
     
+    # CORREÇÃO: Nomenclatura dinâmica
     if doc.url_arquivo:
         arquivo_bytes = baixar_bytes_storage(doc.url_arquivo)
-        nome_download = f"holerite_{doc.mes_referencia}.pdf"
+        if 'espelhos' in doc.url_arquivo:
+            nome_download = f"ponto_{doc.mes_referencia}.pdf"
+        else:
+            nome_download = f"holerite_{doc.mes_referencia}.pdf"
     elif doc.conteudo_pdf:
         arquivo_bytes = doc.conteudo_pdf
         nome_download = f"ponto_{doc.mes_referencia}.pdf"
@@ -339,10 +343,7 @@ def meus_atestados():
 @documentos_bp.route('/atestado/novo', methods=['GET', 'POST'])
 @login_required
 def enviar_atestado():
-    debug_mode = False
-    debug_texto = ""
-    debug_dias = None
-
+    # CORREÇÃO: Variáveis de debug totalmente removidas
     if request.method == 'POST':
         file = request.files.get('arquivo_atestado')
         if not file or file.filename == '':
@@ -354,6 +355,7 @@ def enviar_atestado():
             caminho_blob = salvar_no_storage(file_bytes, f"atestados/{mes_ref}")
             if not caminho_blob: return redirect(request.url)
 
+            # A IA analisa o atestado invisivelmente no backend
             dados_ia = analisar_atestado_vision(file_bytes, current_user.real_name)
             
             data_inicio_db = datetime.strptime(dados_ia['data_inicio'], '%Y-%m-%d').date() if dados_ia['data_inicio'] else None
@@ -369,16 +371,15 @@ def enviar_atestado():
             if master:
                 enviar_notificacao(master.id, f"Novo Atestado de {current_user.real_name} aguardando análise.", "/documentos/admin/atestados")
             
+            # CORREÇÃO: Sucesso e Redirect Direto
             flash('Atestado enviado com sucesso para o RH!', 'success')
-            debug_mode = True
-            debug_texto = dados_ia['texto_bruto']
-            debug_dias = dados_ia['dias_afastamento']
+            return redirect(url_for('documentos.meus_atestados'))
             
         except Exception as e:
             db.session.rollback(); flash('Ocorreu um erro ao processar seu atestado.', 'error')
             return redirect(request.url)
             
-    return render_template('documentos/enviar_atestado.html', debug_mode=debug_mode, debug_texto=debug_texto, debug_dias=debug_dias)
+    return render_template('documentos/enviar_atestado.html')
 
 @documentos_bp.route('/admin/atestados')
 @login_required
@@ -464,7 +465,7 @@ def migrar_pdfs_para_nuvem():
     except Exception as e: db.session.rollback(); flash(f"Erro: {e}", "error")
     return redirect(url_for('documentos.dashboard_documentos'))
 
-# --- NOVO: MÓDULO DE FECHAMENTO DE MÊS (EXCEL) ---
+# --- MÓDULO DE FECHAMENTO DE MÊS (EXCEL) ---
 @documentos_bp.route('/relatorio-folha')
 @login_required
 @permission_required('DOCUMENTOS')
