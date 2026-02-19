@@ -6,7 +6,7 @@
     </h2>
     
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-2">
-        <a href="/estoque/entrada" class="bg-white border border-slate-200 hover:border-emerald-500 rounded-2xl p-4 flex items-center gap-4 transition group shadow-sm">
+        <a href="{{ url_for('estoque.entrada_estoque') }}" class="bg-white border border-slate-200 hover:border-emerald-500 rounded-2xl p-4 flex items-center gap-4 transition group shadow-sm">
             <div class="w-12 h-12 bg-emerald-50 text-emerald-600 border border-emerald-100 rounded-full flex items-center justify-center text-xl group-hover:bg-emerald-500 group-hover:text-white transition shadow-inner">
                 <i class="fas fa-box-open"></i>
             </div>
@@ -16,7 +16,7 @@
             </div>
         </a>
 
-        <a href="/estoque/saida" class="bg-white border border-slate-200 hover:border-red-500 rounded-2xl p-4 flex items-center gap-4 transition group shadow-sm">
+        <a href="{{ url_for('estoque.saida_estoque') }}" class="bg-white border border-slate-200 hover:border-red-500 rounded-2xl p-4 flex items-center gap-4 transition group shadow-sm">
             <div class="w-12 h-12 bg-red-50 text-red-600 border border-red-100 rounded-full flex items-center justify-center text-xl group-hover:bg-red-500 group-hover:text-white transition shadow-inner">
                 <i class="fas fa-hand-holding"></i>
             </div>
@@ -117,7 +117,7 @@
                     </td>
                     
                     <td class="px-6 py-4 text-right">
-                        <a href="/estoque/gerenciar/item/{{ item.id }}" class="inline-flex w-8 h-8 items-center justify-center rounded-full text-slate-400 hover:bg-blue-50 hover:text-blue-600 transition border border-transparent hover:border-blue-200" title="Editar / Ajustar">
+                        <a href="{{ url_for('estoque.editar_item', id=item.id) }}" class="inline-flex w-8 h-8 items-center justify-center rounded-full text-slate-400 hover:bg-blue-50 hover:text-blue-600 transition border border-transparent hover:border-blue-200" title="Editar / Ajustar">
                             <i class="fas fa-pencil-alt text-xs"></i>
                         </a>
                     </td>
@@ -142,7 +142,7 @@
             <button onclick="document.getElementById('modalExcelEstoque').classList.add('hidden')" class="hover:text-blue-200 transition"><i class="fas fa-times text-xl"></i></button>
         </div>
         
-        <form action="/estoque/controle-uniforme/importar-excel" method="POST" enctype="multipart/form-data" class="p-6">
+        <form action="{{ url_for('estoque.importar_excel_estoque') }}" method="POST" enctype="multipart/form-data" class="p-6">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
             
             <div class="mb-6 bg-blue-50 p-4 rounded-xl border border-blue-100">
@@ -173,7 +173,6 @@
 </div>
 
 <script>
-// Script atualizado para filtrar a tabela completa
 function filtrarTabela() {
     let input = document.getElementById('buscaEstoque');
     let filter = input.value.toUpperCase();
