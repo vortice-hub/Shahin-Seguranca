@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, time
+import pytz
 import unicodedata
 import re
 import hashlib
@@ -6,10 +7,13 @@ from functools import wraps
 from flask import abort, redirect, url_for, flash, request
 from flask_login import current_user
 
-# --- FUNÇÃO CENTRALIZADA DE TEMPO ---
+# --- FUNÇÃO CENTRALIZADA DE TEMPO (BLINDADA) ---
 def get_brasil_time():
-    """Retorna o horário atual em UTC-3."""
-    return datetime.utcnow() - timedelta(hours=3)
+    """Retorna o horário atual no fuso de Brasília de forma exata e blindada."""
+    fuso_br = pytz.timezone('America/Sao_Paulo')
+    # Pegamos a hora no Brasil e removemos o marcador de fuso para que o 
+    # SQLAlchemy salve o horário exato sem tentar reconverter para UTC no servidor.
+    return datetime.now(fuso_br).replace(tzinfo=None)
 
 # --- UTILITÁRIOS DE TEXTO E DATA ---
 

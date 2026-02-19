@@ -18,6 +18,7 @@ ponto_bp = Blueprint('ponto', __name__, template_folder='templates', url_prefix=
 def gerar_token_qrcode():
     if current_user.role == 'Terminal': return jsonify({'error': 'Terminal não gera token'}), 403
     s = URLSafeTimedSerializer(current_app.secret_key)
+    # Garante que o timestamp do token segue o horário de Brasília
     token = s.dumps({'user_id': current_user.id, 'timestamp': get_brasil_time().timestamp()})
     return jsonify({'token': token})
 
@@ -29,6 +30,7 @@ def check_status_ponto():
     ultimo_ponto = PontoRegistro.query.filter_by(user_id=current_user.id).order_by(PontoRegistro.id.desc()).first()
     if ultimo_ponto:
         dt_ponto = datetime.combine(ultimo_ponto.data_registro, ultimo_ponto.hora_registro)
+        # Comparação segura usando o fuso de Brasília
         if (agora - dt_ponto).total_seconds() < 15:
             return jsonify({'marcado': True, 'tipo': ultimo_ponto.tipo, 'hora': ultimo_ponto.hora_registro.strftime('%H:%M')})
     return jsonify({'marcado': False})
@@ -46,12 +48,15 @@ def registrar_leitura_terminal():
         dados = s.loads(token, max_age=35)
         user_alvo = User.query.get(dados['user_id'])
         if not user_alvo: return jsonify({'error': 'Usuário inválido'}), 404
-        hoje = get_brasil_time().date()
+        
+        # Sincronização total com Brasília
+        tempo_agora = get_brasil_time()
+        hoje = tempo_agora.date()
         
         ultimo = PontoRegistro.query.filter_by(user_id=user_alvo.id, data_registro=hoje).order_by(PontoRegistro.hora_registro.desc()).first()
         if ultimo:
             dt_ultimo = datetime.combine(hoje, ultimo.hora_registro)
-            if (get_brasil_time() - dt_ultimo).total_seconds() < 60:
+            if (tempo_agora - dt_ultimo).total_seconds() < 60:
                  return jsonify({'error': f'Aguarde antes de bater o ponto novamente.'}), 400
 
         pontos_hoje = PontoRegistro.query.filter_by(user_id=user_alvo.id, data_registro=hoje).order_by(PontoRegistro.hora_registro).all()
@@ -61,10 +66,23 @@ def registrar_leitura_terminal():
         elif len(pontos_hoje) == 3: proxima = "Saída"
         elif len(pontos_hoje) >= 4: proxima = "Extra"
         
-        novo = PontoRegistro(user_id=user_alvo.id, data_registro=hoje, hora_registro=get_brasil_time().time(), tipo=proxima, latitude='QR-Code', longitude='Presencial')
+        novo = PontoRegistro(
+            user_id=user_alvo.id, 
+            data_registro=hoje, 
+            hora_registro=tempo_agora.time(), 
+            tipo=proxima, 
+            latitude='QR-Code', 
+            longitude='Presencial'
+        )
         db.session.add(novo); db.session.commit()
         calcular_dia(user_alvo.id, hoje)
-        return jsonify({'success': True, 'message': f'Ponto registrado: {proxima}', 'funcionario': user_alvo.real_name, 'hora': novo.hora_registro.strftime('%H:%M'), 'tipo': proxima})
+        return jsonify({
+            'success': True, 
+            'message': f'Ponto registrado: {proxima}', 
+            'funcionario': user_alvo.real_name, 
+            'hora': novo.hora_registro.strftime('%H:%M'), 
+            'tipo': proxima
+        })
     except SignatureExpired: return jsonify({'error': 'QR Code expirado.'}), 400
     except BadSignature: return jsonify({'error': 'QR Code inválido.'}), 400
     except Exception as e: return jsonify({'error': f'Erro interno: {str(e)}'}), 500
@@ -79,11 +97,19 @@ def terminal_scanner():
 @login_required
 def registrar_ponto():
     if current_user.username == '12345678900': return redirect(url_for('ponto.terminal_scanner'))
-    hoje = get_brasil_time().date()
+    
+    agora_br = get_brasil_time()
+    hoje = agora_br.date()
     hoje_extenso = data_por_extenso(hoje)
     bloqueado, motivo = False, ""
     
-    ausencia = SolicitacaoAusencia.query.filter(SolicitacaoAusencia.user_id == current_user.id, SolicitacaoAusencia.status == 'Aprovado', SolicitacaoAusencia.data_inicio <= hoje, SolicitacaoAusencia.data_fim >= hoje).first()
+    ausencia = SolicitacaoAusencia.query.filter(
+        SolicitacaoAusencia.user_id == current_user.id, 
+        SolicitacaoAusencia.status == 'Aprovado', 
+        SolicitacaoAusencia.data_inicio <= hoje, 
+        SolicitacaoAusencia.data_fim >= hoje
+    ).first()
+    
     if ausencia: bloqueado = True; motivo = f"Afastamento programado: {ausencia.tipo_ausencia}"
     elif current_user.escala == '5x2' and hoje.weekday() >= 5: bloqueado = True; motivo = "Fim de semana (Escala 5x2)."
     elif current_user.escala == '12x36' and current_user.data_inicio_escala:
@@ -98,7 +124,16 @@ def registrar_ponto():
 
     if request.method == 'POST':
         if bloqueado: return redirect(url_for('main.dashboard'))
-        db.session.add(PontoRegistro(user_id=current_user.id, data_registro=hoje, hora_registro=get_brasil_time().time(), tipo=prox, latitude=request.form.get('latitude'), longitude=request.form.get('longitude')))
+        # Registro blindado com get_brasil_time()
+        novo_registro = PontoRegistro(
+            user_id=current_user.id, 
+            data_registro=hoje, 
+            hora_registro=agora_br.time(), 
+            tipo=prox, 
+            latitude=request.form.get('latitude'), 
+            longitude=request.form.get('longitude')
+        )
+        db.session.add(novo_registro)
         db.session.commit()
         calcular_dia(current_user.id, hoje)
         return redirect(url_for('main.dashboard'))
@@ -110,15 +145,25 @@ def espelho_ponto():
     target_user_id = request.args.get('user_id', type=int) or current_user.id
     if target_user_id != current_user.id and current_user.role != 'Master': return redirect(url_for('main.dashboard'))
     user = User.query.get_or_404(target_user_id)
-    mes_ref = request.args.get('mes_ref') or get_brasil_time().strftime('%Y-%m')
-    try: ano, mes = map(int, mes_ref.split('-'))
-    except: hoje = get_brasil_time(); ano, mes = hoje.year, hoje.month; mes_ref = hoje.strftime('%Y-%m')
     
-    resumos = PontoResumo.query.filter(PontoResumo.user_id == target_user_id, func.extract('year', PontoResumo.data_referencia) == ano, func.extract('month', PontoResumo.data_referencia) == mes).order_by(PontoResumo.data_referencia).all()
+    # Referência de mês sempre baseada no Brasil
+    agora_br = get_brasil_time()
+    mes_ref = request.args.get('mes_ref') or agora_br.strftime('%Y-%m')
+    
+    try: ano, mes = map(int, mes_ref.split('-'))
+    except: ano, mes = agora_br.year, agora_br.month; mes_ref = agora_br.strftime('%Y-%m')
+    
+    resumos = PontoResumo.query.filter(
+        PontoResumo.user_id == target_user_id, 
+        func.extract('year', PontoResumo.data_referencia) == ano, 
+        func.extract('month', PontoResumo.data_referencia) == mes
+    ).order_by(PontoResumo.data_referencia).all()
+    
     detalhes = {}
     for r in resumos:
         batidas = PontoRegistro.query.filter_by(user_id=target_user_id, data_registro=r.data_referencia).order_by(PontoRegistro.hora_registro).all()
         detalhes[r.id] = [b.hora_registro.strftime('%H:%M') for b in batidas]
+    
     dias_semana = {0: 'Seg', 1: 'Ter', 2: 'Qua', 3: 'Qui', 4: 'Sex', 5: 'Sáb', 6: 'Dom'}
     return render_template('ponto/ponto_espelho.html', resumos=resumos, user=user, detalhes=detalhes, format_hm=format_minutes_to_hm, mes_ref=mes_ref, dias_semana=dias_semana)
 
@@ -127,6 +172,7 @@ def espelho_ponto():
 def solicitar_ajuste():
     pontos_dia, data_selecionada = [], None
     meus_ajustes = PontoAjuste.query.filter_by(user_id=current_user.id).order_by(PontoAjuste.created_at.desc()).limit(20).all()
+    
     if request.method == 'POST':
         if request.form.get('acao') == 'buscar':
             try: 
@@ -137,7 +183,15 @@ def solicitar_ajuste():
             try:
                 dt_obj = datetime.strptime(request.form.get('data_ref'), '%Y-%m-%d').date()
                 p_id = int(request.form.get('ponto_id')) if request.form.get('ponto_id') else None
-                solic = PontoAjuste(user_id=current_user.id, data_referencia=dt_obj, ponto_original_id=p_id, novo_horario=request.form.get('novo_horario'), tipo_batida=request.form.get('tipo_batida'), tipo_solicitacao=request.form.get('tipo_solicitacao'), justificativa=request.form.get('justificativa'))
+                solic = PontoAjuste(
+                    user_id=current_user.id, 
+                    data_referencia=dt_obj, 
+                    ponto_original_id=p_id, 
+                    novo_horario=request.form.get('novo_horario'), 
+                    tipo_batida=request.form.get('tipo_batida'), 
+                    tipo_solicitacao=request.form.get('tipo_solicitacao'), 
+                    justificativa=request.form.get('justificativa')
+                )
                 db.session.add(solic); db.session.commit(); flash('Enviado!')
                 return redirect(url_for('ponto.solicitar_ajuste'))
             except: pass
@@ -194,7 +248,11 @@ def solicitar_ferias():
     if current_user.data_admissao:
         hoje = get_brasil_time().date()
         um_ano_atras = hoje - timedelta(days=365)
-        faltas = PontoResumo.query.filter(PontoResumo.user_id == current_user.id, PontoResumo.data_referencia >= um_ano_atras, PontoResumo.status_dia == 'Falta').count()
+        faltas = PontoResumo.query.filter(
+            PontoResumo.user_id == current_user.id, 
+            PontoResumo.data_referencia >= um_ano_atras, 
+            PontoResumo.status_dia == 'Falta'
+        ).count()
 
         if faltas <= 5: dias_direito = 30
         elif faltas <= 14: dias_direito = 24
@@ -202,7 +260,11 @@ def solicitar_ferias():
         elif faltas <= 32: dias_direito = 12
         else: dias_direito = 0
 
-        ausencias_ano = SolicitacaoAusencia.query.filter(SolicitacaoAusencia.user_id == current_user.id, SolicitacaoAusencia.tipo_ausencia == 'Férias', SolicitacaoAusencia.status.in_(['Aprovado', 'Pendente'])).all()
+        ausencias_ano = SolicitacaoAusencia.query.filter(
+            SolicitacaoAusencia.user_id == current_user.id, 
+            SolicitacaoAusencia.tipo_ausencia == 'Férias', 
+            SolicitacaoAusencia.status.in_(['Aprovado', 'Pendente'])
+        ).all()
         dias_usados = sum(a.quantidade_dias + a.dias_abono for a in ausencias_ano)
         saldo = dias_direito - dias_usados
 
@@ -247,7 +309,16 @@ def solicitar_ferias():
                 flash("Ilegal: O início das férias não pode ocorrer nos 2 dias que antecedem o repouso semanal (Sáb/Dom).", "error")
                 return redirect(url_for('ponto.solicitar_ferias'))
 
-        nova_solicitacao = SolicitacaoAusencia(user_id=current_user.id, tipo_ausencia=tipo, data_inicio=dt_inicio, data_fim=dt_fim, quantidade_dias=qtd_dias, abono_pecuniario=vender_ferias, dias_abono=dias_abono, observacao=obs)
+        nova_solicitacao = SolicitacaoAusencia(
+            user_id=current_user.id, 
+            tipo_ausencia=tipo, 
+            data_inicio=dt_inicio, 
+            data_fim=dt_fim, 
+            quantidade_dias=qtd_dias, 
+            abono_pecuniario=vender_ferias, 
+            dias_abono=dias_abono, 
+            observacao=obs
+        )
         db.session.add(nova_solicitacao); db.session.commit()
         flash("Solicitação validada e enviada com sucesso ao RH!", "success")
         return redirect(url_for('ponto.solicitar_ferias'))
@@ -304,7 +375,6 @@ def gestao_ausencias():
         db.session.commit()
         return redirect(url_for('ponto.gestao_ausencias'))
 
-    # --- NOVO: LÓGICA DE ALERTAS DE VENCIMENTO DE FÉRIAS (CLT) ---
     alertas_vencimento = []
     hoje = get_brasil_time().date()
     usuarios_clt = User.query.filter(User.username != '12345678900', User.data_admissao.isnot(None)).all()
@@ -314,22 +384,19 @@ def gestao_ausencias():
         anos_completos = dias_trabalhados // 365
         
         if anos_completos >= 1:
-            # Conta dias de férias já tirados por este usuário
             ausencias = SolicitacaoAusencia.query.filter_by(user_id=u.id, tipo_ausencia='Férias', status='Aprovado').all()
             dias_usados = sum(a.quantidade_dias + a.dias_abono for a in ausencias)
             
             saldo_teorico = (anos_completos * 30) - dias_usados
             
             if saldo_teorico > 0:
-                # Descobre de qual "ciclo" é esse saldo pendente
                 ciclos_pendentes = saldo_teorico / 30.0
                 ciclo_critico = anos_completos - int(ciclos_pendentes) + 1
                 anos_para_somar = ciclo_critico + 1
                 
-                # A data limite concessiva é Admissão + 2 anos (para o 1º ciclo pendente)
                 try:
                     data_limite = u.data_admissao.replace(year=u.data_admissao.year + anos_para_somar)
-                except ValueError: # Caso de bissexto
+                except ValueError:
                     data_limite = u.data_admissao + timedelta(days=365 * anos_para_somar)
                     
                 dias_vencimento = (data_limite - hoje).days
@@ -354,7 +421,13 @@ def controle_escala():
     trabalhando, folga = [], []
     
     for u in usuarios:
-        ausencia = SolicitacaoAusencia.query.filter(SolicitacaoAusencia.user_id == u.id, SolicitacaoAusencia.status == 'Aprovado', SolicitacaoAusencia.data_inicio <= data_ref, SolicitacaoAusencia.data_fim >= data_ref).first()
+        ausencia = SolicitacaoAusencia.query.filter(
+            SolicitacaoAusencia.user_id == u.id, 
+            SolicitacaoAusencia.status == 'Aprovado', 
+            SolicitacaoAusencia.data_inicio <= data_ref, 
+            SolicitacaoAusencia.data_fim >= data_ref
+        ).first()
+        
         escala_trabalho = True
         if u.escala == '5x2' and data_ref.weekday() >= 5: escala_trabalho = False
         elif u.escala == '12x36' and u.data_inicio_escala:

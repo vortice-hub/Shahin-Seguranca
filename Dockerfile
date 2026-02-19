@@ -5,9 +5,10 @@ FROM python:3.11-slim
 ENV PYTHONUNBUFFERED True
 ENV APP_HOME /app
 
-# --- AQUI ESTÁ O TRUQUE DO FUSO HORÁRIO ---
-# Força o servidor a operar no horário de Brasília, eliminando cálculos manuais
+# --- AQUI ESTÁ O TRUQUE DO FUSO HORÁRIO (BLINDAGEM NÍVEL SO) ---
+# Força o servidor a operar no horário de Brasília cravado no Linux
 ENV TZ=America/Sao_Paulo
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
 WORKDIR $APP_HOME
 
@@ -18,7 +19,7 @@ RUN apt-get update && apt-get install -y \
     tzdata \
     && rm -rf /var/lib/apt/lists/*
 
-# Copia e instala as bibliotecas do seu projeto
+# Copia e instala as bibliotecas do projeto
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
@@ -28,3 +29,4 @@ COPY . .
 # Comando de inicialização (Igual ao seu Procfile)
 # O Cloud Run vai injetar a variável $PORT automaticamente
 CMD exec gunicorn --bind :$PORT --workers 1 --threads 8 --timeout 0 run:app
+
