@@ -33,8 +33,32 @@
                 </div>
 
                 <div>
-                    <label class="block text-[11px] font-black text-slate-400 uppercase mb-2 ml-1">Função / Cargo</label>
+                    <label class="block text-[11px] font-black text-slate-400 uppercase mb-2 ml-1">Função / Cargo Genérico</label>
                     <input type="text" name="role" class="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 font-bold text-slate-700 focus:border-blue-500 focus:bg-white outline-none transition-all" placeholder="Ex: Controlador de Acesso" required>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
+            <div class="bg-purple-600 px-8 py-4">
+                <h3 class="text-white text-xs font-bold uppercase tracking-widest flex items-center gap-2">
+                    <i class="fas fa-sitemap"></i> Estrutura Organizacional
+                </h3>
+            </div>
+            <div class="p-8 grid grid-cols-1 md:grid-cols-2 gap-x-10 gap-y-6">
+                <div>
+                    <label class="block text-[11px] font-black text-purple-700 uppercase mb-2 ml-1">Departamento / Equipe</label>
+                    <input type="text" name="departamento" class="w-full bg-purple-50 border-2 border-purple-100 rounded-2xl px-5 py-4 font-bold text-purple-900 focus:border-purple-500 focus:bg-white outline-none transition-all" placeholder="Ex: Operacional Sul">
+                </div>
+
+                <div>
+                    <label class="block text-[11px] font-black text-purple-700 uppercase mb-2 ml-1">Liderança (CPF do Gestor)</label>
+                    <select name="cpf_gestor" class="w-full bg-purple-50 border-2 border-purple-100 rounded-2xl px-5 py-4 font-bold text-purple-900 focus:border-purple-500 focus:bg-white outline-none transition-all cursor-pointer">
+                        <option value="">-- Sem Gestor Direto --</option>
+                        {% for gestor in gestores %}
+                            <option value="{{ gestor.cpf }}">{{ gestor.real_name }} ({{ gestor.role }})</option>
+                        {% endfor %}
+                    </select>
                 </div>
             </div>
         </div>

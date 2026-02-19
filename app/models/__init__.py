@@ -6,7 +6,7 @@ import pytz
 
 def get_brasil_time():
     """Retorna o horário atual no fuso de Brasília."""
-    return datetime.now(pytz.timezone('America/Sao_Paulo'))
+    return datetime.now(pytz.timezone('America/Sao_Paulo')).replace(tzinfo=None)
 
 class User(UserMixin, db.Model):
     __tablename__ = 'users'
@@ -16,6 +16,13 @@ class User(UserMixin, db.Model):
     real_name = db.Column(db.String(120), nullable=False)
     cpf = db.Column(db.String(14), unique=True, nullable=True)
     role = db.Column(db.String(20), default='Funcionario')
+    
+    # --- NOVIDADE: ESTRUTURA ORGANIZACIONAL ---
+    departamento = db.Column(db.String(100), nullable=True)
+    gestor_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
+    # A mágica do auto-relacionamento: o chefe é outro 'User'
+    gestor = db.relationship('User', remote_side=[id], backref=db.backref('subordinados', lazy=True))
+    
     permissions = db.Column(db.String(500), nullable=True)
     is_first_access = db.Column(db.Boolean, default=True)
     data_admissao = db.Column(db.Date, nullable=True)
@@ -39,6 +46,11 @@ class PreCadastro(db.Model):
     cpf = db.Column(db.String(14), unique=True, nullable=False)
     nome_previsto = db.Column(db.String(120), nullable=False)
     cargo = db.Column(db.String(80))
+    
+    # --- NOVIDADE: ESTRUTURA ORGANIZACIONAL ---
+    departamento = db.Column(db.String(100), nullable=True)
+    cpf_gestor = db.Column(db.String(14), nullable=True)
+    
     salario = db.Column(db.Float, default=0.0)
     razao_social = db.Column(db.String(200))
     cnpj = db.Column(db.String(20))
@@ -195,7 +207,6 @@ class SolicitacaoAusencia(db.Model):
     data_solicitacao = db.Column(db.DateTime, default=get_brasil_time)
     user = db.relationship('User', backref=db.backref('ausencias', lazy=True))
 
-# --- NOVO MÓDULO: PEDIDOS DE EPI / UNIFORME ---
 class SolicitacaoUniforme(db.Model):
     __tablename__ = 'solicitacoes_uniforme'
     id = db.Column(db.Integer, primary_key=True)
@@ -205,7 +216,7 @@ class SolicitacaoUniforme(db.Model):
     tamanho = db.Column(db.String(10))
     genero = db.Column(db.String(20))
     quantidade = db.Column(db.Integer, nullable=False)
-    status = db.Column(db.String(20), default='Pendente') # Pendente, Aprovado, Recusado
+    status = db.Column(db.String(20), default='Pendente') 
     data_solicitacao = db.Column(db.DateTime, default=get_brasil_time)
     data_resposta = db.Column(db.DateTime, nullable=True)
     user = db.relationship('User', backref=db.backref('pedidos_uniforme', lazy=True))

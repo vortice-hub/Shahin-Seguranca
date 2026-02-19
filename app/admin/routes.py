@@ -4,7 +4,7 @@ from sqlalchemy import func, text
 import io
 import logging
 from datetime import time, datetime, date
-import pandas as pd # Importação da Biblioteca Mágica para Excel
+import pandas as pd 
 
 # Importações do Projeto
 from app.extensions import db
@@ -28,6 +28,9 @@ logger = logging.getLogger(__name__)
 @login_required
 @permission_required('USUARIOS')
 def novo_usuario():
+    # Busca todos os utilizadores para listar como possíveis gestores no formulário
+    gestores = User.query.filter(User.username != '12345678900', User.username != 'terminal').order_by(User.real_name).all()
+    
     if request.method == 'POST':
         try:
             real_name = request.form.get('real_name')
@@ -47,11 +50,16 @@ def novo_usuario():
             carga_hm = request.form.get('carga_horaria') or '08:48'
             carga_minutos = time_to_minutes(carga_hm)
             intervalo_min = int(request.form.get('tempo_intervalo') or 60)
+            
+            # Captura a Estrutura Organizacional
+            cpf_gestor = request.form.get('cpf_gestor', '').replace('.', '').replace('-', '').strip()
 
             novo_pre = PreCadastro(
                 cpf=cpf,
                 nome_previsto=real_name,
                 cargo=request.form.get('role'),
+                departamento=request.form.get('departamento'),
+                cpf_gestor=cpf_gestor if cpf_gestor else None,
                 salario=float(request.form.get('salario') or 0),
                 razao_social=request.form.get('razao_social'),
                 cnpj=request.form.get('cnpj'),
@@ -71,7 +79,7 @@ def novo_usuario():
             db.session.rollback()
             flash(f'Erro interno: {str(e)}', 'error')
             
-    return render_template('admin/novo_usuario.html')
+    return render_template('admin/novo_usuario.html', gestores=gestores)
 
 @admin_bp.route('/usuarios')
 @login_required
@@ -112,6 +120,9 @@ def editar_usuario(id):
     user = User.query.get_or_404(id)
     user_carga_hm = format_minutes_to_hm(user.carga_horaria or 528)
     
+    # Lista de gestores (excluindo a própria pessoa para ela não ser chefe de si mesma)
+    gestores = User.query.filter(User.username != '12345678900', User.username != 'terminal', User.id != user.id).order_by(User.real_name).all()
+    
     if request.method == 'POST':
         acao = request.form.get('acao')
         try:
@@ -119,6 +130,10 @@ def editar_usuario(id):
                 if user.username == '50097952800' or user.username == 'Thaynara':
                     flash('Impossível excluir Master.', 'error')
                 else: 
+                    # Desvincula quem era subordinado desta pessoa antes de apagar
+                    subordinados = User.query.filter_by(gestor_id=user.id).all()
+                    for sub in subordinados: sub.gestor_id = None
+                    
                     PontoRegistro.query.filter_by(user_id=user.id).delete()
                     PontoResumo.query.filter_by(user_id=user.id).delete()
                     Holerite.query.filter_by(user_id=user.id).delete()
@@ -131,6 +146,12 @@ def editar_usuario(id):
             elif acao == 'salvar':
                 user.real_name = request.form.get('real_name')
                 user.role = request.form.get('role')
+                
+                # Salvando Estrutura Organizacional
+                user.departamento = request.form.get('departamento')
+                gestor_req = request.form.get('gestor_id')
+                user.gestor_id = int(gestor_req) if gestor_req else None
+                
                 user.salario = float(request.form.get('salario') or 0)
                 user.razao_social_empregadora = request.form.get('razao_social')
                 user.cnpj_empregador = request.form.get('cnpj')
@@ -162,7 +183,7 @@ def editar_usuario(id):
             db.session.rollback()
             flash(f'Erro: {e}', 'error')
 
-    return render_template('admin/editar_usuario.html', user=user, carga_hm=user_carga_hm)
+    return render_template('admin/editar_usuario.html', user=user, carga_hm=user_carga_hm, gestores=gestores)
 
 @admin_bp.route('/solicitacoes', methods=['GET', 'POST'])
 @login_required
@@ -249,34 +270,35 @@ def importar_excel_usuarios():
         return redirect(url_for('admin.gerenciar_usuarios'))
 
     try:
-        # A mágica do Pandas: lê o Excel diretamente da memória
         df = pd.read_excel(file)
-        df = df.fillna('') # Remove células em branco ("NaN") para evitar erros
-        df.columns = [str(c).strip().lower() for c in df.columns] # Padroniza os nomes das colunas
+        df = df.fillna('') 
+        df.columns = [str(c).strip().lower() for c in df.columns] 
         
-        records = df.to_dict('records') # Transforma a tabela num formato amigável para o Python
+        records = df.to_dict('records') 
         sucesso, falhas = 0, 0
         
         for row in records:
             nome = str(row.get('nome', '')).strip()
             
-            # O Excel pode ler CPFs como números com casas decimais (ex: 123456.0). A função abaixo limpa isso.
             cpf_raw = str(row.get('cpf', '')).replace('.', '').replace('-', '').strip()
             if cpf_raw.endswith('.0'): cpf_raw = cpf_raw[:-2]
             cpf = cpf_raw
             
             cargo = str(row.get('cargo', '')).strip()
             
+            # Captura a Estrutura Organizacional vinda do Excel
+            departamento = str(row.get('departamento', '')).strip()
+            cpf_gestor_raw = str(row.get('cpf_gestor', '')).replace('.', '').replace('-', '').strip()
+            if cpf_gestor_raw.endswith('.0'): cpf_gestor_raw = cpf_gestor_raw[:-2]
+            
             if not nome or not cpf:
                 falhas += 1
                 continue
                 
-            # Trava anti-duplicidade
             if User.query.filter_by(cpf=cpf).first() or PreCadastro.query.filter_by(cpf=cpf).first():
                 falhas += 1
                 continue
 
-            # Processamento de Datas nativas do Excel
             dt_admissao = None
             dt_adm_raw = row.get('data_admissao', '')
             if dt_adm_raw:
@@ -312,7 +334,6 @@ def importar_excel_usuarios():
                             else: dt_escala = datetime.strptime(dt_esc_str, '%Y-%m-%d').date()
                         except ValueError: pass
 
-            # Processamento de Carga Horária e Horários Nativos
             carga_raw = row.get('carga_horaria', '08:48')
             if isinstance(carga_raw, time): carga_hm = carga_raw.strftime('%H:%M')
             else: carga_hm = str(carga_raw).strip() or '08:48'
@@ -329,6 +350,8 @@ def importar_excel_usuarios():
                 cpf=cpf,
                 nome_previsto=nome,
                 cargo=cargo,
+                departamento=departamento if departamento else None,
+                cpf_gestor=cpf_gestor_raw if cpf_gestor_raw else None,
                 salario=salario,
                 data_admissao=dt_admissao,
                 escala=escala,
@@ -344,7 +367,7 @@ def importar_excel_usuarios():
 
         db.session.commit()
         if sucesso > 0:
-            flash(f'Importação Mágica concluída: {sucesso} lidos do Excel. {falhas} ignorados (Duplicados ou em branco).', 'success')
+            flash(f'Importação Mágica concluída: {sucesso} lidos do Excel. {falhas} ignorados.', 'success')
         else:
             flash('Nenhum registro válido encontrado. Verifique se a planilha tem os títulos das colunas corretos.', 'error')
             

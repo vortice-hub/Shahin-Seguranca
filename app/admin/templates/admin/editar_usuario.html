@@ -13,6 +13,25 @@
             <div class="space-y-4">
                 <div><label class="label-pro">Nome Completo</label><input type="text" name="real_name" value="{{ user.real_name }}" class="input-pro"></div>
                 
+                <div class="bg-purple-50 p-4 rounded-lg border border-purple-100">
+                    <p class="text-xs font-bold text-purple-800 uppercase mb-3 flex items-center gap-2"><i class="fas fa-sitemap"></i> Estrutura Organizacional</p>
+                    <div class="space-y-3">
+                        <div>
+                            <label class="label-pro text-purple-700">Departamento / Equipe</label>
+                            <input type="text" name="departamento" class="input-pro border-purple-200 focus:border-purple-500 font-bold" value="{{ user.departamento or '' }}" placeholder="Ex: Operacional">
+                        </div>
+                        <div>
+                            <label class="label-pro text-purple-700">Reporta-se a (Gestor)</label>
+                            <select name="gestor_id" class="input-pro border-purple-200 focus:border-purple-500 cursor-pointer">
+                                <option value="">-- Sem Gestor Direto --</option>
+                                {% for gestor in gestores %}
+                                    <option value="{{ gestor.id }}" {% if user.gestor_id == gestor.id %}selected{% endif %}>{{ gestor.real_name }} ({{ gestor.role }})</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                
                 {% if user.username != '50097952800' %}
                 <div class="bg-blue-50 p-5 rounded-xl border border-blue-100">
                     <div class="flex items-center gap-2 mb-4 text-blue-700">
