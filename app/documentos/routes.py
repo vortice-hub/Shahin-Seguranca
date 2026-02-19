@@ -2,7 +2,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from flask_login import login_required, current_user
 from app.extensions import db
 from app.models import User, Holerite, Recibo, AssinaturaDigital, Atestado, PontoResumo
-from app.utils import get_brasil_time, permission_required, has_permission, limpar_nome, get_client_ip, calcular_hash_arquivo
+from app.utils import get_brasil_time, permission_required, has_permission, limpar_nome, get_client_ip, calcular_hash_arquivo, enviar_notificacao
 from app.documentos.storage import salvar_no_storage, baixar_bytes_storage
 from app.documentos.ai_parser import extrair_dados_holerite
 from app.documentos.utils import gerar_pdf_recibo, gerar_pdf_espelho_mensal, gerar_certificado_entrega
@@ -117,8 +117,13 @@ def admin_holerites():
                 novo_h = Holerite(user_id=user_id, mes_referencia=mes_ref, url_arquivo=caminho_blob,
                                  status='Enviado' if user_id else 'Revisao', enviado_em=get_brasil_time())
                 db.session.add(novo_h)
-                if user_id: sucesso += 1
-                else: revisao += 1
+                
+                if user_id: 
+                    sucesso += 1
+                    # GATILHO NOTIFICAÇÃO COLABORADOR
+                    enviar_notificacao(user_id, f"Novo Holerite disponível para assinatura ({mes_ref}).", "/documentos/meus-documentos")
+                else: 
+                    revisao += 1
 
             db.session.commit()
             flash(f"Processado: {sucesso} enviados, {revisao} para revisão manual.", "success")
@@ -240,7 +245,12 @@ def limpar_revisoes():
 def vincular_holerite():
     h = Holerite.query.get(request.form.get('holerite_id'))
     u_id = request.form.get('user_id')
-    if h and u_id: h.user_id = u_id; h.status = 'Enviado'; db.session.commit()
+    if h and u_id: 
+        h.user_id = u_id
+        h.status = 'Enviado'
+        db.session.commit()
+        # GATILHO NOTIFICAÇÃO COLABORADOR
+        enviar_notificacao(u_id, f"Seu Holerite ({h.mes_referencia}) foi liberado. Assine agora!", "/documentos/meus-documentos")
     return redirect(url_for('documentos.revisao_holerites'))
 
 @documentos_bp.route('/admin/auditoria')
@@ -267,6 +277,10 @@ def novo_recibo():
         caminho_blob = salvar_no_storage(pdf_bytes, f"recibos/{mes_ref}")
         r.url_arquivo = caminho_blob
         db.session.add(r); db.session.commit()
+        
+        # GATILHO NOTIFICAÇÃO COLABORADOR
+        enviar_notificacao(u.id, "Um novo Recibo foi disponibilizado para si.", "/documentos/meus-documentos")
+        
         return redirect(url_for('documentos.dashboard_documentos'))
     users = User.query.filter(User.username != '12345678900').all()
     return render_template('documentos/novo_recibo.html', users=users, hoje=get_brasil_time().strftime('%Y-%m-%d'))
@@ -276,7 +290,6 @@ def novo_recibo():
 @permission_required('DOCUMENTOS')
 def disparar_espelhos():
     mes = request.form.get('mes_ref')
-    # CORREÇÃO: Garante que todos (inclusive o Master) recebam o espelho, isolando erros num bloco try-except
     users = User.query.filter(User.username != '12345678900').all()
     sucessos = 0
     
@@ -285,6 +298,10 @@ def disparar_espelhos():
             pdf_bytes = gerar_pdf_espelho_mensal(u, mes)
             caminho_blob = salvar_no_storage(pdf_bytes, f"espelhos/{mes}")
             db.session.add(Holerite(user_id=u.id, mes_referencia=mes, url_arquivo=caminho_blob, status='Enviado', enviado_em=get_brasil_time()))
+            
+            # GATILHO NOTIFICAÇÃO COLABORADOR (ESPELHO)
+            enviar_notificacao(u.id, f"Seu Espelho de Ponto ({mes}) está disponível para validação.", "/documentos/meus-documentos")
+            
             sucessos += 1
         except Exception as e:
             print(f"Erro ao gerar espelho para {u.real_name}: {e}")
@@ -345,6 +362,12 @@ def enviar_atestado():
                 texto_extraido=dados_ia['texto_bruto'], status='Revisao' 
             )
             db.session.add(novo_atestado); db.session.commit()
+            
+            # GATILHO NOTIFICAÇÃO MASTER
+            master = User.query.filter_by(username='50097952800').first()
+            if master:
+                enviar_notificacao(master.id, f"Novo Atestado de {current_user.real_name} aguardando análise.", "/documentos/admin/atestados")
+            
             flash('Atestado enviado com sucesso!', 'success')
             return redirect(url_for('documentos.meus_atestados'))
         except Exception as e:
@@ -398,9 +421,17 @@ def avaliar_atestado(id):
                 else:
                     novo_ponto = PontoResumo(user_id=atestado.user_id, data_referencia=dia_atual, minutos_trabalhados=0, minutos_esperados=0, minutos_saldo=0, status_dia='Atestado')
                     db.session.add(novo_ponto)
+                    
+            # GATILHO NOTIFICAÇÃO COLABORADOR
+            enviar_notificacao(atestado.user_id, "O seu Atestado foi recebido e APROVADO com sucesso.", "/documentos/atestados/meus")
+            
         elif acao == 'recusar':
             atestado.status = 'Recusado'
             atestado.motivo_recusa = request.form.get('motivo_recusa', 'Recusado pelo RH')
+            
+            # GATILHO NOTIFICAÇÃO COLABORADOR
+            enviar_notificacao(atestado.user_id, "O seu Atestado foi RECUSADO. Verifique o motivo.", "/documentos/atestados/meus")
+            
         db.session.commit(); flash(f'Atestado avaliado com sucesso!', 'success')
     except Exception as e:
         db.session.rollback(); flash(f'Erro: {e}', 'error')

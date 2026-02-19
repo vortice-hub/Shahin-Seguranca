@@ -2,7 +2,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from flask_login import login_required, current_user
 from app.extensions import db, csrf
 from app.models import PontoRegistro, PontoResumo, User, PontoAjuste, SolicitacaoAusencia
-from app.utils import get_brasil_time, calcular_dia, format_minutes_to_hm, data_por_extenso
+from app.utils import get_brasil_time, calcular_dia, format_minutes_to_hm, data_por_extenso, enviar_notificacao
 from datetime import datetime, date, timedelta
 from sqlalchemy import func
 from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadSignature
@@ -18,7 +18,6 @@ ponto_bp = Blueprint('ponto', __name__, template_folder='templates', url_prefix=
 def gerar_token_qrcode():
     if current_user.role == 'Terminal': return jsonify({'error': 'Terminal não gera token'}), 403
     s = URLSafeTimedSerializer(current_app.secret_key)
-    # Garante que o timestamp do token segue o horário de Brasília
     token = s.dumps({'user_id': current_user.id, 'timestamp': get_brasil_time().timestamp()})
     return jsonify({'token': token})
 
@@ -30,7 +29,6 @@ def check_status_ponto():
     ultimo_ponto = PontoRegistro.query.filter_by(user_id=current_user.id).order_by(PontoRegistro.id.desc()).first()
     if ultimo_ponto:
         dt_ponto = datetime.combine(ultimo_ponto.data_registro, ultimo_ponto.hora_registro)
-        # Comparação segura usando o fuso de Brasília
         if (agora - dt_ponto).total_seconds() < 15:
             return jsonify({'marcado': True, 'tipo': ultimo_ponto.tipo, 'hora': ultimo_ponto.hora_registro.strftime('%H:%M')})
     return jsonify({'marcado': False})
@@ -49,7 +47,6 @@ def registrar_leitura_terminal():
         user_alvo = User.query.get(dados['user_id'])
         if not user_alvo: return jsonify({'error': 'Usuário inválido'}), 404
         
-        # Sincronização total com Brasília
         tempo_agora = get_brasil_time()
         hoje = tempo_agora.date()
         
@@ -124,7 +121,6 @@ def registrar_ponto():
 
     if request.method == 'POST':
         if bloqueado: return redirect(url_for('main.dashboard'))
-        # Registro blindado com get_brasil_time()
         novo_registro = PontoRegistro(
             user_id=current_user.id, 
             data_registro=hoje, 
@@ -146,7 +142,6 @@ def espelho_ponto():
     if target_user_id != current_user.id and current_user.role != 'Master': return redirect(url_for('main.dashboard'))
     user = User.query.get_or_404(target_user_id)
     
-    # Referência de mês sempre baseada no Brasil
     agora_br = get_brasil_time()
     mes_ref = request.args.get('mes_ref') or agora_br.strftime('%Y-%m')
     
@@ -192,7 +187,14 @@ def solicitar_ajuste():
                     tipo_solicitacao=request.form.get('tipo_solicitacao'), 
                     justificativa=request.form.get('justificativa')
                 )
-                db.session.add(solic); db.session.commit(); flash('Enviado!')
+                db.session.add(solic); db.session.commit()
+                
+                # GATILHO NOTIFICAÇÃO MASTER
+                master = User.query.filter_by(username='50097952800').first()
+                if master:
+                    enviar_notificacao(master.id, f"{current_user.real_name} solicitou um Ajuste de Ponto.", "/admin/solicitacoes")
+                
+                flash('Enviado!')
                 return redirect(url_for('ponto.solicitar_ajuste'))
             except: pass
             
@@ -320,6 +322,12 @@ def solicitar_ferias():
             observacao=obs
         )
         db.session.add(nova_solicitacao); db.session.commit()
+        
+        # GATILHO NOTIFICAÇÃO MASTER
+        master = User.query.filter_by(username='50097952800').first()
+        if master:
+            enviar_notificacao(master.id, f"{current_user.real_name} enviou uma solicitação de {tipo}.", "/ponto/admin/ausencias")
+
         flash("Solicitação validada e enviada com sucesso ao RH!", "success")
         return redirect(url_for('ponto.solicitar_ferias'))
 
@@ -348,10 +356,15 @@ def gestao_ausencias():
                 else:
                     novo_ponto = PontoResumo(user_id=solicitacao.user_id, data_referencia=dia_atual, minutos_trabalhados=0, minutos_esperados=0, minutos_saldo=0, status_dia=solicitacao.tipo_ausencia)
                     db.session.add(novo_ponto)
+            
+            # GATILHO NOTIFICAÇÃO COLABORADOR
+            enviar_notificacao(solicitacao.user_id, f"A sua solicitação de {solicitacao.tipo_ausencia} foi APROVADA.", "/ponto/solicitar-ferias")
             flash(f"Solicitação aprovada. O ponto foi atualizado.", "success")
             
         elif acao == 'recusar':
             solicitacao.status = 'Recusado'
+            # GATILHO NOTIFICAÇÃO COLABORADOR
+            enviar_notificacao(solicitacao.user_id, f"A sua solicitação de {solicitacao.tipo_ausencia} foi RECUSADA pelo RH.", "/ponto/solicitar-ferias")
             flash("Solicitação recusada.", "success")
             
         elif acao == 'remover':
@@ -370,6 +383,7 @@ def gestao_ausencias():
                         ponto.minutos_esperados = meta
                         ponto.minutos_saldo = ponto.minutos_trabalhados - meta
             solicitacao.status = 'Cancelado'
+            enviar_notificacao(solicitacao.user_id, f"O seu período de {solicitacao.tipo_ausencia} foi CANCELADO pela empresa.", "/ponto/solicitar-ferias")
             flash("Férias revogadas com sucesso. O espelho de ponto foi restaurado.", "success")
             
         db.session.commit()
@@ -442,4 +456,5 @@ def controle_escala():
         else: trabalhando.append(info)
             
     return render_template('ponto/controle_escala.html', trabalhando=trabalhando, folga=folga, data_ref=data_ref)
+
 

@@ -2,7 +2,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from flask_login import login_required, current_user
 from app.extensions import db
 from app.models import ItemEstoque, HistoricoEntrada, HistoricoSaida, SolicitacaoUniforme, User
-from app.utils import get_brasil_time, permission_required
+from app.utils import get_brasil_time, permission_required, enviar_notificacao
 import pandas as pd
 import logging
 
@@ -28,7 +28,6 @@ def entrada_estoque():
         genero = request.form.get('genero')
         qtd = int(request.form.get('quantidade') or 0)
         
-        # Procura se o item já existe para atualizar ou criar novo
         item = ItemEstoque.query.filter_by(nome=nome, tamanho=tamanho, genero=genero).first()
         if not item:
             item = ItemEstoque(
@@ -191,10 +190,6 @@ def importar_excel_estoque():
 
     return redirect(url_for('estoque.gerenciar_estoque'))
 
-# ======================================================================
-# NOVO MÓDULO: PORTAL DE SOLICITAÇÃO DE EPI/UNIFORME
-# ======================================================================
-
 @estoque_bp.route('/api/tamanhos', methods=['GET'])
 @login_required
 def api_buscar_tamanhos():
@@ -203,7 +198,6 @@ def api_buscar_tamanhos():
     if not nome_item:
         return jsonify([])
     
-    # Filtra apenas peças que possuem estoque maior que zero
     itens = ItemEstoque.query.filter(ItemEstoque.nome == nome_item, ItemEstoque.quantidade > 0).all()
     
     resultados = []
@@ -240,14 +234,17 @@ def solicitar_uniforme():
         )
         db.session.add(nova_solic)
         db.session.commit()
+        
+        # GATILHO NOTIFICAÇÃO MASTER
+        master = User.query.filter_by(username='50097952800').first()
+        if master:
+            enviar_notificacao(master.id, f"{current_user.real_name} solicitou {quantidade}x {item.nome}.", url_for('estoque.gestao_solicitacoes'))
+
         flash('O seu pedido foi enviado ao Departamento de RH! Aguarde a aprovação.', 'success')
         return redirect(url_for('estoque.solicitar_uniforme'))
     
-    # Prepara a lista de peças disponíveis (apenas nomes únicos) para o formulário
     itens_query = db.session.query(ItemEstoque.nome).filter(ItemEstoque.quantidade > 0).distinct().all()
     nomes_disponiveis = [n[0] for n in itens_query]
-    
-    # Busca o histórico de solicitações deste funcionário
     minhas_solicitacoes = SolicitacaoUniforme.query.filter_by(user_id=current_user.id).order_by(SolicitacaoUniforme.data_solicitacao.desc()).limit(20).all()
     
     return render_template('estoque/solicitar_uniforme.html', nomes_disponiveis=nomes_disponiveis, solicitacoes=minhas_solicitacoes)
@@ -266,18 +263,13 @@ def gestao_solicitacoes():
         if acao == 'aprovar':
             item = ItemEstoque.query.get(solicitacao.item_id)
             
-            # Trava de segurança: Alguém pode ter esvaziado o stock enquanto o pedido aguardava
             if not item or item.quantidade < solicitacao.quantidade:
                 flash(f'Erro crítico: O stock atual é insuficiente para aprovar as {solicitacao.quantidade} unidades de {solicitacao.item_nome}.', 'error')
             else:
-                # Aprova o pedido
                 solicitacao.status = 'Aprovado'
                 solicitacao.data_resposta = get_brasil_time()
-                
-                # Desconta do estoque real
                 item.quantidade -= solicitacao.quantidade
                 
-                # Registo automático na tabela de Histórico de Saída de Stock
                 hist = HistoricoSaida(
                     coordenador=current_user.real_name, 
                     colaborador=solicitacao.user.real_name, 
@@ -288,17 +280,24 @@ def gestao_solicitacoes():
                     data_entrega=get_brasil_time().date()
                 )
                 db.session.add(hist)
+                
+                # GATILHO NOTIFICAÇÃO COLABORADOR
+                enviar_notificacao(solicitacao.user_id, f"Seu pedido de EPI ({solicitacao.item_nome}) foi APROVADO.", url_for('estoque.solicitar_uniforme'))
+                
                 flash('Pedido APROVADO com sucesso! O inventário foi deduzido automaticamente.', 'success')
                 
         elif acao == 'recusar':
             solicitacao.status = 'Recusado'
             solicitacao.data_resposta = get_brasil_time()
+            
+            # GATILHO NOTIFICAÇÃO COLABORADOR
+            enviar_notificacao(solicitacao.user_id, f"Seu pedido de EPI ({solicitacao.item_nome}) foi RECUSADO.", url_for('estoque.solicitar_uniforme'))
+            
             flash('Pedido de EPI Recusado.', 'warning')
             
         db.session.commit()
         return redirect(url_for('estoque.gestao_solicitacoes'))
         
-    # Carrega todas as solicitações pendentes e histórico
     todas_solicitacoes = SolicitacaoUniforme.query.order_by(
         db.case({ 'Pendente': 1, 'Aprovado': 2, 'Recusado': 3 }, value=SolicitacaoUniforme.status),
         SolicitacaoUniforme.data_solicitacao.desc()
