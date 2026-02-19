@@ -3,6 +3,8 @@ from flask_login import login_required, current_user
 from sqlalchemy import func, text
 import io
 import logging
+import random
+import string
 from datetime import time, datetime, date
 import pandas as pd 
 
@@ -89,10 +91,7 @@ def gerenciar_usuarios():
         flash('Sem acesso à gestão de utilizadores.', 'error')
         return redirect(url_for('main.dashboard'))
 
-    # NOVO: Puxa o número da página da URL (ex: ?page=2), por padrão é a 1
     page = request.args.get('page', 1, type=int)
-    
-    # NOVO: O '.paginate()' quebra o banco de dados em lotes de 15 funcionários
     users_pagination = User.query.filter(
         User.username != '12345678900', 
         User.username != 'terminal'
@@ -128,8 +127,6 @@ def editar_usuario(id):
 
     user = User.query.get_or_404(id)
     user_carga_hm = format_minutes_to_hm(user.carga_horaria or 528)
-    
-    # Lista de gestores (excluindo a própria pessoa para ela não ser chefe de si mesma)
     gestores = User.query.filter(User.username != '12345678900', User.username != 'terminal', User.id != user.id).order_by(User.real_name).all()
     
     if request.method == 'POST':
@@ -139,7 +136,6 @@ def editar_usuario(id):
                 if user.username == '50097952800' or user.username == 'Thaynara':
                     flash('Impossível excluir Master.', 'error')
                 else: 
-                    # Desvincula quem era subordinado desta pessoa antes de apagar
                     subordinados = User.query.filter_by(gestor_id=user.id).all()
                     for sub in subordinados: sub.gestor_id = None
                     
@@ -155,12 +151,9 @@ def editar_usuario(id):
             elif acao == 'salvar':
                 user.real_name = request.form.get('real_name')
                 user.role = request.form.get('role')
-                
-                # Salvando Estrutura Organizacional
                 user.departamento = request.form.get('departamento')
                 gestor_req = request.form.get('gestor_id')
                 user.gestor_id = int(gestor_req) if gestor_req else None
-                
                 user.salario = float(request.form.get('salario') or 0)
                 user.razao_social_empregadora = request.form.get('razao_social')
                 user.cnpj_empregador = request.form.get('cnpj')
@@ -183,10 +176,12 @@ def editar_usuario(id):
                 return redirect(url_for('admin.gerenciar_usuarios'))
                 
             elif acao == 'resetar_senha':
-                user.set_password('mudar123')
+                # NOVO: RESET DE SENHA SEGURO (FRENTE 4)
+                senha_temporaria = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+                user.set_password(senha_temporaria)
                 user.is_first_access = True
                 db.session.commit()
-                flash('Senha resetada.', 'warning')
+                flash(f'Senha resetada com sucesso! A nova senha de acesso é: {senha_temporaria}', 'success')
                 
         except Exception as e:
             db.session.rollback()
@@ -260,7 +255,6 @@ def admin_limpeza():
         except: db.session.rollback()
     return render_template('admin/admin_limpeza.html')
 
-# --- LEITOR INTELIGENTE DE EXCEL NATIVO ---
 @admin_bp.route('/usuarios/importar-excel', methods=['POST'])
 @login_required
 @permission_required('USUARIOS')
@@ -295,7 +289,6 @@ def importar_excel_usuarios():
             
             cargo = str(row.get('cargo', '')).strip()
             
-            # Captura a Estrutura Organizacional vinda do Excel
             departamento = str(row.get('departamento', '')).strip()
             cpf_gestor_raw = str(row.get('cpf_gestor', '')).replace('.', '').replace('-', '').strip()
             if cpf_gestor_raw.endswith('.0'): cpf_gestor_raw = cpf_gestor_raw[:-2]
@@ -376,7 +369,7 @@ def importar_excel_usuarios():
 
         db.session.commit()
         if sucesso > 0:
-            flash(f'Importação Mágica concluída: {sucesso} lidos do Excel. {falhas} ignorados.', 'success')
+            flash(f'Importação concluída com sucesso: {sucesso} registos lidos do Excel. {falhas} ignorados.', 'success')
         else:
             flash('Nenhum registro válido encontrado. Verifique se a planilha tem os títulos das colunas corretos.', 'error')
             
@@ -385,4 +378,5 @@ def importar_excel_usuarios():
         flash(f'Erro ao ler arquivo do Excel: {str(e)}', 'error')
 
     return redirect(url_for('admin.gerenciar_usuarios'))
+
 

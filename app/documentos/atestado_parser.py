@@ -3,10 +3,13 @@ import re
 import unicodedata
 
 def limpar_texto(texto):
-    """Remove acentos e padroniza o texto para facilitar a busca do nome."""
+    """Remove acentos e padroniza o texto para facilitar a busca do nome e regex."""
     if not texto: return ""
     texto = "".join(c for c in unicodedata.normalize('NFD', texto) if unicodedata.category(c) != 'Mn')
-    return texto.upper().replace('\n', ' ').strip()
+    # Substitui quebras de linha por espaço e remove espaços duplos
+    texto = texto.upper().replace('\n', ' ')
+    texto = re.sub(r'\s+', ' ', texto).strip()
+    return texto
 
 def converter_numero_extenso(texto):
     """Mapeia palavras comuns de atestados para números inteiros."""
@@ -44,6 +47,11 @@ def analisar_atestado_vision(imagem_bytes, nome_funcionario):
         texto_limpo = limpar_texto(texto_completo)
         nome_limpo = limpar_texto(nome_funcionario)
 
+        # --- DEBUG: IMPRIME NO CONSOLE O QUE A IA ESTÁ LENDO ---
+        print("=== INICIO DA LEITURA DO ATESTADO ===")
+        print(f"Texto Limpo: {texto_limpo}")
+        print("=====================================")
+
         # 1. Verifica se o nome do funcionário está no atestado (lógica flexível)
         partes_nome = nome_limpo.split()
         if len(partes_nome) >= 2:
@@ -53,25 +61,29 @@ def analisar_atestado_vision(imagem_bytes, nome_funcionario):
              dados["nome_encontrado"] = True
 
         # 2. Busca a quantidade de dias usando RegEx Avançado e Semântica
-        # Tenta encontrar padrões como: "03 dias", "3 (tres) dias", "cinco dias", "repouso de 2 dias"
-        # O \D*? permite que haja parênteses ou lixo entre o número e a palavra dia
         
-        # Estratégia 1: Procura Número Literal perto da palavra DIA/DIAS
-        match_num = re.search(r'(\d{1,2})\s*(?:\([a-z\s]+\))?\s*(?:DIAS|DIA)', texto_limpo)
+        # Estratégia 1: Procura Número Literal perto da palavra DIA/DIAS. 
+        # O [A-Z\s] garante que ele ignora palavras entre parênteses como "2 (DOIS) DIAS"
+        match_num = re.search(r'(\d{1,2})\s*(?:\([A-Z\s]+\))?\s*(?:DIAS|DIA)', texto_limpo)
+        
         if match_num:
             dados["dias_afastamento"] = int(match_num.group(1))
         else:
-            # Estratégia 2: Procura Número por Extenso perto da palavra DIA/DIAS
-            # (Limita a busca aos 15 dias comuns da legislação antes de ir pro INSS)
-            palavras_numero = r'(UM|DOIS|TRES|QUATRO|CINCO|SEIS|SETE|OITO|NOVE|DEZ|ONZE|DOZE|TREZE|QUATORZE|CATORZE|QUINZE)'
-            match_extenso = re.search(f'{palavras_numero}\\s*(?:DIAS|DIA)', texto_limpo)
-            if match_extenso:
-                dados["dias_afastamento"] = converter_numero_extenso(match_extenso.group(1))
+            # Estratégia 2: Palavras-chave de afastamento seguidas de número (ex: AFASTAMENTO POR 5 DIAS, REPOUSO DE 02)
+            match_contexto = re.search(r'(?:AFASTAMENTO|REPOUSO|ATESTO|CONCEDO|NECESSITA DE)\D*?(\d{1,2})\s*(?:\([A-Z\s]+\))?\s*(?:DIAS|DIA)?', texto_limpo)
+            if match_contexto:
+                dados["dias_afastamento"] = int(match_contexto.group(1))
             else:
-                # Estratégia 3 (Desesperada): Procura a palavra "DIA" e pega o primeiro número que aparecer antes dela na mesma frase.
-                match_desespero = re.search(r'(\d{1,2}).{1,15}(?:DIAS|DIA)', texto_limpo)
-                if match_desespero:
-                     dados["dias_afastamento"] = int(match_desespero.group(1))
+                # Estratégia 3: Procura Número por Extenso perto da palavra DIA/DIAS
+                palavras_numero = r'(UM|DOIS|TRES|QUATRO|CINCO|SEIS|SETE|OITO|NOVE|DEZ|ONZE|DOZE|TREZE|QUATORZE|CATORZE|QUINZE)'
+                match_extenso = re.search(f'{palavras_numero}\\s*(?:DIAS|DIA)', texto_limpo)
+                if match_extenso:
+                    dados["dias_afastamento"] = converter_numero_extenso(match_extenso.group(1))
+                else:
+                    # Estratégia 4 (Desesperada): Procura a palavra "DIA" e pega o primeiro número que aparecer até 20 caracteres antes dela.
+                    match_desespero = re.search(r'(\d{1,2}).{1,20}(?:DIAS|DIA)', texto_limpo)
+                    if match_desespero:
+                         dados["dias_afastamento"] = int(match_desespero.group(1))
 
         # 3. Busca a data de emissão (assumindo como data de início)
         match_data = re.search(r'(\d{2})[/\-](\d{2})[/\-](\d{4})', texto_limpo)

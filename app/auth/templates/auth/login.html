@@ -21,7 +21,10 @@
             </div>
 
             <div>
-                <label class="block text-xs font-bold text-slate-500 uppercase mb-2 ml-1">Senha</label>
+                <div class="flex items-center justify-between mb-2 ml-1">
+                    <label class="block text-xs font-bold text-slate-500 uppercase">Senha</label>
+                    <a href="/esqueci-senha" class="text-[10px] font-bold text-blue-500 hover:text-blue-700 transition">Esqueceu a senha?</a>
+                </div>
                 <div class="relative">
                     <i class="fas fa-lock absolute left-4 top-4 text-slate-400"></i>
                     <input type="password" name="password" placeholder="••••••••" 
@@ -42,10 +45,9 @@
 </div>
 
 <script>
-    // Máscara para CPF - Mantida pois agora o login é numérico
     const input = document.getElementById('cpf_input');
     input.addEventListener('input', (e) => {
-        let value = e.target.value.replace(/\D/g, ''); // Remove tudo que não é número
+        let value = e.target.value.replace(/\D/g, ''); 
         if (value.length <= 11) {
             if (value.length > 9) {
                 value = value.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
@@ -59,3 +61,4 @@
     });
 </script>
 {% endblock %}
+

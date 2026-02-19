@@ -4,6 +4,8 @@ from werkzeug.security import generate_password_hash
 from app.extensions import db
 from app.models import User, PreCadastro
 import re
+import random
+import string
 
 auth_bp = Blueprint('auth', __name__, template_folder='templates')
 
@@ -76,10 +78,16 @@ def auto_cadastro():
             return redirect(url_for('auth.auto_cadastro'))
             
         password = request.form.get('password')
+        confirm_password = request.form.get('confirm_password')
+        
         if password:
+            if password != confirm_password:
+                flash('As senhas não coincidem. Tente novamente.', 'error')
+                return render_template('auth/auto_cadastro.html', step=2, cpf=cpf, nome=pre.nome_previsto)
+                
             username_login = cpf 
             
-            # MAGICA DO VÍNCULO: Procura o gestor pelo CPF informado na planilha
+            # Vínculo Hierárquico: Procura o gestor pelo CPF informado na planilha
             gestor_id_final = None
             if pre.cpf_gestor:
                 gestor_encontrado = User.query.filter_by(cpf=pre.cpf_gestor).first()
@@ -95,14 +103,14 @@ def auto_cadastro():
                 salario=pre.salario, 
                 razao_social_empregadora=pre.razao_social,
                 cnpj_empregador=pre.cnpj,
-                data_admissao=pre.data_admissao, # Correção: Migrando a data de admissão
+                data_admissao=pre.data_admissao,
                 carga_horaria=pre.carga_horaria,
                 tempo_intervalo=pre.tempo_intervalo,
                 inicio_jornada_ideal=pre.inicio_jornada_ideal,
                 escala=pre.escala, 
                 data_inicio_escala=pre.data_inicio_escala,
-                departamento=pre.departamento, # Correção: Migrando a equipe
-                gestor_id=gestor_id_final, # Correção: Transformando CPF do chefe em ID
+                departamento=pre.departamento,
+                gestor_id=gestor_id_final,
                 is_first_access=False,
                 permissions="" 
             )
@@ -114,4 +122,30 @@ def auto_cadastro():
             return render_template('auth/auto_cadastro_sucesso.html', username=cpf, nome=pre.nome_previsto)
         else:
             return render_template('auth/auto_cadastro.html', step=2, cpf=cpf, nome=pre.nome_previsto)
+
+# --- NOVO: RECUPERAÇÃO SEGURA DE SENHA ---
+@auth_bp.route('/esqueci-senha', methods=['GET', 'POST'])
+def esqueci_senha():
+    if current_user.is_authenticated: 
+        return redirect(url_for('main.dashboard'))
+        
+    if request.method == 'POST':
+        cpf_input = request.form.get('cpf', '').replace('.', '').replace('-', '').strip()
+        data_admissao_input = request.form.get('data_admissao')
+        
+        user = User.query.filter_by(cpf=cpf_input).first()
+        
+        # Só permite reset se os dados baterem exatamente com o banco de dados
+        if user and user.data_admissao and str(user.data_admissao) == data_admissao_input:
+            senha_temporaria = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+            user.set_password(senha_temporaria)
+            user.is_first_access = True
+            db.session.commit()
+            
+            flash(f'ACESSO RECUPERADO! Sua nova senha temporária é: {senha_temporaria} (Copie-a agora e altere no primeiro acesso).', 'success')
+            return redirect(url_for('auth.login'))
+        else:
+            flash('Dados divergentes. Verifique o seu CPF e Data de Admissão, ou contate o RH.', 'error')
+            
+    return render_template('auth/esqueci_senha.html')
 
