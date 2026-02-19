@@ -2,38 +2,115 @@
 {% block content %}
 <div class="flex flex-col gap-4 mb-8">
     <h2 class="text-2xl font-bold text-slate-800">Controle de Uniforme</h2>
-    <div class="grid grid-cols-2 gap-4">
-        <a href="/entrada" class="bg-emerald-600 hover:bg-emerald-700 text-white p-4 rounded-full shadow-lg flex items-center justify-center gap-2 text-center"><i class="fas fa-arrow-down"></i> <span class="font-bold">ENTRADA</span></a>
-        <a href="/saida" class="bg-red-600 hover:bg-red-700 text-white p-4 rounded-full shadow-lg flex items-center justify-center gap-2 text-center"><i class="fas fa-arrow-up"></i> <span class="font-bold">SAÍDA</span></a>
+    
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        
+        <a href="/entrada" class="bg-white border border-slate-200 hover:border-emerald-500 rounded-2xl p-4 flex items-center gap-4 transition group shadow-sm">
+            <div class="w-12 h-12 bg-emerald-50 text-emerald-600 border border-emerald-100 rounded-full flex items-center justify-center text-xl group-hover:bg-emerald-500 group-hover:text-white transition shadow-inner">
+                <i class="fas fa-box-open"></i>
+            </div>
+            <div>
+                <h3 class="font-bold text-slate-800 text-sm">Registrar Entrada</h3>
+                <p class="text-[10px] text-slate-500 font-medium">Recebimento de fornecedor</p>
+            </div>
+        </a>
+
+        <a href="/saida" class="bg-white border border-slate-200 hover:border-red-500 rounded-2xl p-4 flex items-center gap-4 transition group shadow-sm">
+            <div class="w-12 h-12 bg-red-50 text-red-600 border border-red-100 rounded-full flex items-center justify-center text-xl group-hover:bg-red-500 group-hover:text-white transition shadow-inner">
+                <i class="fas fa-hand-holding"></i>
+            </div>
+            <div>
+                <h3 class="font-bold text-slate-800 text-sm">Registrar Saída</h3>
+                <p class="text-[10px] text-slate-500 font-medium">Entrega para colaborador</p>
+            </div>
+        </a>
+
+        <button onclick="document.getElementById('modalExcelEstoque').classList.remove('hidden')" class="bg-white border border-slate-200 hover:border-blue-500 rounded-2xl p-4 flex items-center gap-4 transition group shadow-sm text-left">
+            <div class="w-12 h-12 bg-blue-50 text-blue-600 border border-blue-100 rounded-full flex items-center justify-center text-xl group-hover:bg-blue-500 group-hover:text-white transition shadow-inner">
+                <i class="fas fa-file-excel"></i>
+            </div>
+            <div>
+                <h3 class="font-bold text-slate-800 text-sm">Sincronizar Estoque</h3>
+                <p class="text-[10px] text-slate-500 font-medium">Importação via Excel (.xlsx)</p>
+            </div>
+        </button>
+
     </div>
 </div>
+
 <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
     <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
         <h2 class="font-semibold text-slate-800">Inventário</h2>
-        <div class="flex gap-2 text-[10px] font-bold uppercase">
-            <span class="text-emerald-600"><i class="fas fa-circle text-[6px]"></i> Bom</span>
-            <span class="text-yellow-600"><i class="fas fa-circle text-[6px]"></i> Médio</span>
-            <span class="text-red-600"><i class="fas fa-circle text-[6px]"></i> Ruim</span>
+        <div class="flex gap-3 text-[10px] font-bold uppercase">
+            <span class="text-emerald-600 bg-emerald-50 px-2 py-1 rounded"><i class="fas fa-circle text-[6px]"></i> Bom</span>
+            <span class="text-yellow-600 bg-yellow-50 px-2 py-1 rounded"><i class="fas fa-circle text-[6px]"></i> Médio</span>
+            <span class="text-red-600 bg-red-50 px-2 py-1 rounded"><i class="fas fa-circle text-[6px]"></i> Ruim</span>
         </div>
     </div>
     <div class="divide-y divide-slate-100">
         {% for item in itens %}
         <div class="px-6 py-4 flex items-center justify-between hover:bg-slate-50 transition">
             <div class="flex items-center gap-4">
-                <div class="w-10 h-10 rounded-full flex items-center justify-center text-slate-500 bg-slate-100 font-bold text-xs border border-slate-200">{{ item.tamanho }}</div>
-                <div><div class="font-semibold text-slate-800 text-sm">{{ item.nome }}</div><div class="text-xs text-slate-500 flex items-center gap-1">{{ item.genero }}</div></div>
+                <div class="w-10 h-10 rounded-full flex items-center justify-center text-slate-500 bg-slate-100 font-bold text-xs border border-slate-200 shadow-inner">{{ item.tamanho }}</div>
+                <div>
+                    <div class="font-semibold text-slate-800 text-sm">{{ item.nome }}</div>
+                    <div class="text-xs text-slate-500 font-medium bg-slate-100 px-2 py-0.5 rounded inline-block mt-1 border border-slate-200">{{ item.genero }}</div>
+                </div>
             </div>
             <div class="flex items-center gap-4">
                 <div class="text-right">
-                    <div class="text-lg font-bold {% if item.quantidade <= item.estoque_minimo %} text-red-600 {% elif item.quantidade >= item.estoque_ideal %} text-emerald-600 {% else %} text-yellow-600 {% endif %}">{{ item.quantidade }}</div>
-                    <div class="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Estoque</div>
+                    <div class="text-lg font-black {% if item.quantidade <= item.estoque_minimo %} text-red-600 {% elif item.quantidade >= item.estoque_ideal %} text-emerald-600 {% else %} text-yellow-600 {% endif %}">{{ item.quantidade }}</div>
+                    <div class="text-[9px] text-slate-400 uppercase font-bold tracking-wider">Unidades</div>
                 </div>
-                <a href="/gerenciar/item/{{ item.id }}" class="text-slate-300 hover:text-blue-500 px-2"><i class="fas fa-pencil-alt"></i></a>
+                <a href="/gerenciar/item/{{ item.id }}" class="w-8 h-8 flex items-center justify-center rounded-full text-slate-300 hover:bg-white hover:text-blue-600 hover:shadow border border-transparent hover:border-slate-200 transition">
+                    <i class="fas fa-pencil-alt text-xs"></i>
+                </a>
             </div>
         </div>
         {% else %}
-        <div class="p-12 text-center text-slate-400">Nenhum item registrado.</div>
+        <div class="p-12 text-center text-slate-400 flex flex-col items-center justify-center gap-3">
+            <i class="fas fa-box-open text-4xl opacity-20"></i>
+            <span class="text-sm font-medium">Nenhum item registrado no inventário.</span>
+        </div>
         {% endfor %}
     </div>
 </div>
+
+<div id="modalExcelEstoque" class="fixed inset-0 bg-black/60 z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden">
+        <div class="bg-blue-600 p-5 flex justify-between items-center text-white">
+            <h3 class="font-bold text-lg"><i class="fas fa-file-excel mr-2"></i> Importar Inventário</h3>
+            <button onclick="document.getElementById('modalExcelEstoque').classList.add('hidden')" class="hover:text-blue-200 transition"><i class="fas fa-times text-xl"></i></button>
+        </div>
+        
+        <form action="/controle-uniforme/importar-excel" method="POST" enctype="multipart/form-data" class="p-6">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            
+            <div class="mb-6 bg-blue-50 p-4 rounded-xl border border-blue-100">
+                <p class="text-xs text-blue-800 mb-2 font-bold uppercase">Como montar sua planilha Excel</p>
+                <p class="text-[10px] text-blue-700 font-mono bg-white p-2 rounded border border-blue-200 mb-3 overflow-x-auto whitespace-nowrap">
+                    Colunas exatas: descricao | tamanho | genero | quantidade | minimo | ideal
+                </p>
+                <ul class="text-[10px] text-blue-600 space-y-1 list-disc list-inside">
+                    <li>O sistema irá <strong>atualizar</strong> itens já existentes (pelo nome e tamanho) ou <strong>criar</strong> novos.</li>
+                    <li>As colunas "descricao" e "tamanho" são obrigatórias.</li>
+                </ul>
+            </div>
+
+            <div class="mb-6">
+                <label class="block w-full border-2 border-dashed border-slate-300 rounded-xl p-6 text-center cursor-pointer hover:border-blue-500 hover:bg-blue-50 transition group">
+                    <i class="fas fa-cloud-upload-alt text-3xl text-slate-400 group-hover:text-blue-500 mb-2 transition"></i>
+                    <p class="text-sm font-bold text-slate-600 group-hover:text-blue-700">Clique para selecionar o arquivo (.xlsx)</p>
+                    <input type="file" name="arquivo_excel" accept=".xlsx, .xls" required class="hidden" id="fileInput" onchange="document.getElementById('fileName').innerText = this.files[0].name">
+                </label>
+                <p id="fileName" class="text-center text-xs font-bold text-blue-600 mt-2 h-4 truncate px-4"></p>
+            </div>
+
+            <button type="submit" class="w-full bg-slate-900 hover:bg-blue-600 text-white font-bold py-3.5 rounded-xl shadow-lg transition flex items-center justify-center gap-2">
+                <i class="fas fa-sync-alt"></i> SINCRONIZAR ESTOQUE
+            </button>
+        </form>
+    </div>
+</div>
 {% endblock %}
+
