@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, redirect, url_for, jsonify
+from flask import render_template, redirect, url_for, jsonify
 from flask_login import login_required, current_user
 from app.extensions import db
 from app.models import User, PontoAjuste, Recibo, Holerite, PreCadastro, Notificacao, PontoResumo, PontoRegistro, HistoricoSaida
@@ -7,7 +7,8 @@ from datetime import timedelta
 from sqlalchemy import func
 import traceback
 
-main_bp = Blueprint('main', __name__)
+# Importamos o Blueprint definido no __init__.py do módulo
+from app.main import main_bp
 
 @main_bp.route('/')
 @login_required
