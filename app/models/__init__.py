@@ -217,7 +217,6 @@ class SolicitacaoUniforme(db.Model):
     user = db.relationship('User', backref=db.backref('pedidos_uniforme', lazy=True))
     item = db.relationship('ItemEstoque')
 
-# --- NOVIDADE: CAIXA DE ENTRADA DO SININHO ---
 class Notificacao(db.Model):
     __tablename__ = 'notificacoes'
     id = db.Column(db.Integer, primary_key=True)
@@ -227,4 +226,15 @@ class Notificacao(db.Model):
     lida = db.Column(db.Boolean, default=False)
     data_criacao = db.Column(db.DateTime, default=get_brasil_time)
     user = db.relationship('User', backref=db.backref('notificacoes', lazy=True))
+
+# --- NOVIDADE: INFRAESTRUTURA PARA NOTIFICAÇÕES PUSH NATIVAS ---
+class PushSubscription(db.Model):
+    __tablename__ = 'push_subscriptions'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    endpoint = db.Column(db.String(500), nullable=False)
+    p256dh = db.Column(db.String(255), nullable=False)
+    auth = db.Column(db.String(255), nullable=False)
+    created_at = db.Column(db.DateTime, default=get_brasil_time)
+    user = db.relationship('User', backref=db.backref('push_subs', lazy=True))
 
