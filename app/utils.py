@@ -3,16 +3,22 @@ import pytz
 import unicodedata
 import re
 import hashlib
+import os
+import json
 from functools import wraps
 from flask import abort, redirect, url_for, flash, request
 from flask_login import current_user
+
+# Tenta importar o motor Push (se não estiver instalado, o sistema não quebra, apenas guarda no sininho)
+try:
+    from pywebpush import webpush, WebPushException
+except ImportError:
+    webpush = None
 
 # --- FUNÇÃO CENTRALIZADA DE TEMPO (BLINDADA) ---
 def get_brasil_time():
     """Retorna o horário atual no fuso de Brasília de forma exata e blindada."""
     fuso_br = pytz.timezone('America/Sao_Paulo')
-    # Pegamos a hora no Brasil e removemos o marcador de fuso para que o 
-    # SQLAlchemy salve o horário exato sem tentar reconverter para UTC no servidor.
     return datetime.now(fuso_br).replace(tzinfo=None)
 
 # --- UTILITÁRIOS DE TEXTO E DATA ---
@@ -71,17 +77,14 @@ def calcular_dia(user_id, data_ref):
 
     registros = PontoRegistro.query.filter_by(user_id=user_id, data_registro=data_ref).order_by(PontoRegistro.hora_registro).all()
     
-    # Meta padrão
     meta = user.carga_horaria if user.carga_horaria else 528
     
-    # Regras de Escala
     if user.escala == '5x2' and data_ref.weekday() >= 5: meta = 0
     elif user.escala == '12x36' and user.data_inicio_escala:
         dias_diff = (data_ref - user.data_inicio_escala).days
         if dias_diff % 2 != 0: meta = 0
         else: meta = 720
             
-    # Cálculo de horas trabalhadas
     trab = 0
     for i in range(0, len(registros), 2):
         if i + 1 < len(registros):
@@ -91,7 +94,6 @@ def calcular_dia(user_id, data_ref):
             
     saldo = trab - meta
     
-    # Definição de Status
     status = "OK"
     if not registros:
         status = "Falta" if meta > 0 else "Folga"
@@ -100,9 +102,8 @@ def calcular_dia(user_id, data_ref):
     elif saldo > 10:
         status = "Hora Extra"
     elif saldo < -10:
-        status = "Débito" if meta > 0 else "Extra" # Extra se for folga trabalhada
+        status = "Débito" if meta > 0 else "Extra" 
         
-    # Salva ou Atualiza Resumo
     resumo = PontoResumo.query.filter_by(user_id=user_id, data_referencia=data_ref).first()
     if not resumo:
         resumo = PontoResumo(user_id=user_id, data_referencia=data_ref)
@@ -154,11 +155,15 @@ def master_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
-# --- NOVIDADE: MOTOR DE NOTIFICAÇÕES ---
+# ============================================================================
+# FASE 4: O MOTOR DE NOTIFICAÇÕES (SININHO + PUSH NATIVO NO ECRÃ)
+# ============================================================================
 def enviar_notificacao(user_id, mensagem, link=None):
-    """Envia um alerta interno para o Sininho do utilizador."""
+    """Envia um alerta interno para o Sininho do utilizador e um Push para o telemóvel."""
     from app.extensions import db
-    from app.models import Notificacao
+    from app.models import Notificacao, PushSubscription
+    
+    # 1. Guarda a notificação na Caixa de Entrada (Sininho) do sistema
     try:
         nova_notif = Notificacao(
             user_id=user_id,
@@ -169,9 +174,59 @@ def enviar_notificacao(user_id, mensagem, link=None):
         )
         db.session.add(nova_notif)
         db.session.commit()
-        return True
     except Exception as e:
         db.session.rollback()
-        print(f"Erro ao enviar notificacao: {e}")
+        print(f"[Shahin Push] Erro ao salvar notificação no banco: {e}")
         return False
+
+    # 2. Dispara o Push Nativo para acordar o telemóvel do funcionário
+    if not webpush:
+        print("[Shahin Push] Aviso: Biblioteca 'pywebpush' não instalada. Apenas notificação web gerada.")
+        return True # Retorna True porque salvou no sininho com sucesso
+
+    # Puxa a chave privada de segurança que vamos configurar no Cloud Run
+    VAPID_PRIVATE_KEY = os.environ.get('VAPID_PRIVATE_KEY')
+    VAPID_CLAIM_EMAIL = 'mailto:contato@shahin.com.br' # Um email padrão obrigatório pelas regras da Web
+
+    if not VAPID_PRIVATE_KEY:
+        print("[Shahin Push] Aviso: VAPID_PRIVATE_KEY não configurada no ambiente. Push não disparado.")
+        return True
+
+    # Procura todos os telemóveis autorizados deste funcionário
+    subs = PushSubscription.query.filter_by(user_id=user_id).all()
+    if not subs:
+        return True # O utilizador ainda não clicou em "Ativar Alertas"
+
+    payload = json.dumps({
+        "title": "Shahin Gestão",
+        "body": mensagem,
+        "url": link or "/"
+    })
+
+    for sub in subs:
+        try:
+            sub_info = {
+                "endpoint": sub.endpoint,
+                "keys": {
+                    "p256dh": sub.p256dh,
+                    "auth": sub.auth
+                }
+            }
+            # A Magia Acontece Aqui: Disparo encriptado!
+            webpush(
+                subscription_info=sub_info,
+                data=payload,
+                vapid_private_key=VAPID_PRIVATE_KEY,
+                vapid_claims={"sub": VAPID_CLAIM_EMAIL}
+            )
+        except WebPushException as e:
+            print(f"[Shahin Push] Falha ao enviar para telemóvel: {e}")
+            # Se a Google/Apple disserem que o telemóvel desinstalou o app (Erro 410), nós limpamos a morada
+            if e.response is not None and e.response.status_code == 410:
+                db.session.delete(sub)
+                db.session.commit()
+        except Exception as e:
+            print(f"[Shahin Push] Erro inesperado no disparo: {e}")
+
+    return True
 

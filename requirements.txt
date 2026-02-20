@@ -19,4 +19,4 @@ itsdangerous
 google-cloud-vision==3.4.4
 pandas
 openpyxl
-
+pywebpush

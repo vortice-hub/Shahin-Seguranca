@@ -1,11 +1,12 @@
-from flask import render_template, redirect, url_for, jsonify
+from flask import render_template, redirect, url_for, jsonify, request
 from flask_login import login_required, current_user
 from app.extensions import db
-from app.models import User, PontoAjuste, Recibo, Holerite, PreCadastro, Notificacao, PontoResumo, PontoRegistro, HistoricoSaida
+from app.models import User, PontoAjuste, Recibo, Holerite, PreCadastro, Notificacao, PontoResumo, PontoRegistro, HistoricoSaida, PushSubscription
 from app.utils import get_brasil_time, has_permission
 from datetime import timedelta
 from sqlalchemy import func
 import traceback
+import json
 
 # Importamos o Blueprint definido no __init__.py do módulo
 from app.main import main_bp
@@ -152,4 +153,53 @@ def api_analytics():
         print("======================================")
         # Devolve o erro formatado para o Frontend poder mostrar na tela
         return jsonify({'error': str(e)}), 500
+
+# ============================================================================
+# FASE 3: O APERTO DE MÃO (REGISTRO DA ASSINATURA PUSH DO TELEMÓVEL)
+# ============================================================================
+@main_bp.route('/api/push/subscribe', methods=['POST'])
+@login_required
+def subscribe_push():
+    """
+    Recebe as chaves de segurança (VAPID) do navegador do utilizador 
+    e guarda-as no banco de dados para permitir envios futuros.
+    """
+    try:
+        sub_data = request.get_json()
+        if not sub_data:
+            return jsonify({'success': False, 'error': 'Nenhum dado recebido'}), 400
+
+        endpoint = sub_data.get('endpoint')
+        keys = sub_data.get('keys', {})
+        p256dh = keys.get('p256dh')
+        auth = keys.get('auth')
+
+        if not endpoint or not p256dh or not auth:
+            return jsonify({'success': False, 'error': 'Dados da subscrição incompletos'}), 400
+
+        # Verifica se o telemóvel já está registado para evitar duplicação
+        existente = PushSubscription.query.filter_by(endpoint=endpoint, user_id=current_user.id).first()
+        
+        if existente:
+            # Se o navegador apenas atualizou a chave, nós atualizamos
+            existente.p256dh = p256dh
+            existente.auth = auth
+        else:
+            # Registo de um dispositivo totalmente novo
+            nova_sub = PushSubscription(
+                user_id=current_user.id,
+                endpoint=endpoint,
+                p256dh=p256dh,
+                auth=auth
+            )
+            db.session.add(nova_sub)
+
+        db.session.commit()
+        return jsonify({'success': True, 'message': 'Dispositivo conectado ao radar Shahin com sucesso!'})
+        
+    except Exception as e:
+        db.session.rollback()
+        print("====== ERRO NA SUBSCRIÇÃO PUSH ======")
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
 
