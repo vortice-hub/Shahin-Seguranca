@@ -95,7 +95,10 @@ def create_app():
             master = User.query.filter_by(username=cpf_master).first()
             if not master:
                 m = User(username=cpf_master, cpf=cpf_master, real_name='Thaynara Master', role='Master', is_first_access=False, permissions="ALL", salario=0.0)
-                m.set_password('1855')
+                
+                # NOVO: Puxa a senha da nuvem. Se não existir lá, usa '1855' como segurança local.
+                senha_master = os.environ.get('MASTER_PASSWORD', '1855')
+                m.set_password(senha_master)
                 db.session.add(m)
             else:
                 master.role = 'Master'
@@ -105,7 +108,10 @@ def create_app():
             term = User.query.filter_by(username='12345678900').first()
             if not term:
                 t = User(username='12345678900', real_name='Terminal de Ponto', role='Terminal', is_first_access=False, cpf='12345678900', salario=0.0)
-                t.set_password('terminal1234')
+                
+                # NOVO: Puxa a senha da nuvem. Se não existir lá, usa 'terminal1234' como segurança local.
+                senha_terminal = os.environ.get('TERMINAL_PASSWORD', 'terminal1234')
+                t.set_password(senha_terminal)
                 db.session.add(t)
             
             db.session.commit()
