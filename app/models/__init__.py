@@ -92,7 +92,7 @@ class Holerite(db.Model):
     mes_referencia = db.Column(db.String(7), nullable=False)
     status = db.Column(db.String(20), default='Enviado')
     url_arquivo = db.Column(db.String(500), nullable=True)
-    conteudo_pdf = db.Column(db.LargeBinary, nullable=True)
+    # COLUNA BINÁRIA REMOVIDA PARA OTIMIZAR ESPAÇO NO SUPABASE
     visualizado = db.Column(db.Boolean, default=False)
     visualizado_em = db.Column(db.DateTime, nullable=True)
     enviado_em = db.Column(db.DateTime, default=get_brasil_time)
@@ -110,7 +110,7 @@ class Recibo(db.Model):
     tipo_cesta_basica = db.Column(db.Boolean, default=False)
     forma_pagamento = db.Column(db.String(50), default="Transferência")
     url_arquivo = db.Column(db.String(500), nullable=True) 
-    conteudo_pdf = db.Column(db.LargeBinary, nullable=True) 
+    # COLUNA BINÁRIA REMOVIDA PARA OTIMIZAR ESPAÇO NO SUPABASE
     visualizado = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=get_brasil_time)
     user = db.relationship('User', backref=db.backref('recibos', lazy=True))
@@ -227,7 +227,6 @@ class Notificacao(db.Model):
     data_criacao = db.Column(db.DateTime, default=get_brasil_time)
     user = db.relationship('User', backref=db.backref('notificacoes', lazy=True))
 
-# --- NOVIDADE: INFRAESTRUTURA PARA NOTIFICAÇÕES PUSH NATIVAS ---
 class PushSubscription(db.Model):
     __tablename__ = 'push_subscriptions'
     id = db.Column(db.Integer, primary_key=True)
@@ -237,4 +236,16 @@ class PushSubscription(db.Model):
     auth = db.Column(db.String(255), nullable=False)
     created_at = db.Column(db.DateTime, default=get_brasil_time)
     user = db.relationship('User', backref=db.backref('push_subs', lazy=True))
+
+# --- NOVIDADE: CONFIGURAÇÕES DINÂMICAS PARA O MASTER ---
+class ConfiguracaoEmpresa(db.Model):
+    __tablename__ = 'configuracoes_empresa'
+    id = db.Column(db.Integer, primary_key=True)
+    # Define qual dia do mês o sistema deve cobrar assinaturas de ponto (ex: dia 01)
+    dia_cobranca_ponto = db.Column(db.Integer, default=1)
+    # Define qual dia do mês o sistema deve cobrar assinaturas de holerite (ex: dia 05)
+    dia_cobranca_holerite = db.Column(db.Integer, default=5)
+    # Chave secreta que o Cloud Scheduler deve enviar para provar que é o Google
+    token_seguranca_task = db.Column(db.String(100), nullable=True)
+    updated_at = db.Column(db.DateTime, default=get_brasil_time, onupdate=get_brasil_time)
 
