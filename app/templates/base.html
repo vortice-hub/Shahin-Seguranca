@@ -107,7 +107,8 @@
                         <li><a href="/documentos/atestados/meus" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-file-medical w-6 text-center mr-2 text-slate-500 group-hover:text-teal-400"></i><span class="font-medium">Meus Atestados</span></a></li>
                         
                         {% set perms = current_user.permissions or "" %}
-                        {% set is_master = current_user.username == '50097952800' %}
+                        {% set clean_username = current_user.username | string | replace('.', '') | replace('-', '') %}
+                        {% set is_master = current_user.role == 'Master' or clean_username == '50097952800' %}
 
                         {% if is_master or 'DOCUMENTOS' in perms or 'PONTO' in perms or 'ESTOQUE' in perms or 'USUARIOS' in perms %}
                         <li class="pt-6 pb-2 px-6 text-[10px] font-bold uppercase text-slate-600 border-t border-slate-800/50 mt-4">Administração</li>

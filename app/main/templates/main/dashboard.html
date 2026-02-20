@@ -1,7 +1,8 @@
 {% extends 'base.html' %}
 {% block content %}
 
-{% set is_master = current_user.role == 'Master' or current_user.username == '50097952800' %}
+{% set clean_username = current_user.username | string | replace('.', '') | replace('-', '') %}
+{% set is_master = current_user.role == 'Master' or clean_username == '50097952800' %}
 
 <div class="bg-gradient-to-r from-blue-900 to-slate-900 rounded-2xl p-6 text-white shadow-xl mb-8 flex justify-between items-center relative overflow-hidden transition transform hover:scale-[1.01]">
     <div class="absolute top-0 right-0 -mr-4 -mt-4 w-24 h-24 bg-white opacity-10 rounded-full blur-xl"></div>
@@ -112,8 +113,12 @@
         try {
             // 1. Busca os dados na API
             const response = await fetch('/api/analytics');
-            if (!response.ok) throw new Error('Falha na API');
             const data = await response.json();
+
+            // Proteção visual caso o Python devolva um erro 500
+            if (!response.ok) {
+                throw new Error(data.error || 'Falha de conexão com a API de dados.');
+            }
 
             // 2. Esconde o Loading e mostra o painel
             document.getElementById('loading-analytics').classList.add('hidden');
@@ -257,7 +262,8 @@
 
         } catch (error) {
             console.error("Erro ao carregar Analytics:", error);
-            document.getElementById('loading-analytics').innerHTML = '<div class="text-red-500"><i class="fas fa-exclamation-triangle mb-2 text-2xl"></i><p class="text-xs">Erro ao carregar gráficos.</p></div>';
+            // Agora o HTML vai imprimir exatamente qual foi o erro matemático/backend que aconteceu
+            document.getElementById('loading-analytics').innerHTML = `<div class="text-red-500 text-center"><i class="fas fa-exclamation-triangle mb-2 text-2xl"></i><p class="text-xs font-bold">Erro do Sistema:</p><p class="text-[10px] text-slate-500 mt-1">${error.message}</p></div>`;
         }
     });
 </script>

@@ -86,7 +86,9 @@ def ler_todas_notificacoes():
 @login_required
 def api_analytics():
     """Fornece dados em tempo real para os 5 gráficos do Dashboard Master."""
-    is_master = current_user.role == 'Master' or current_user.username == '50097952800'
+    # CORREÇÃO: Limpando a string do CPF para ignorar pontos e traços
+    clean_username = str(current_user.username).replace('.', '').replace('-', '')
+    is_master = current_user.role == 'Master' or clean_username == '50097952800'
     
     if not is_master:
         return jsonify({'error': 'Acesso negado'}), 403
