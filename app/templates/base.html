@@ -187,6 +187,15 @@
                         </button>
                     </li>
                     
+                    {% if is_master %}
+                    <li>
+                        <a href="{{ url_for('admin.configuracoes_sistema') }}" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group border-t border-slate-800/50 mt-2">
+                            <i class="fas fa-cog w-6 text-center mr-2 text-slate-500 group-hover:text-blue-400"></i>
+                            <span class="font-medium">Configurações</span>
+                        </a>
+                    </li>
+                    {% endif %}
+
                     <li class="{% if current_user.role != 'Terminal' %}mt-2{% endif %}"><a href="/logout" class="flex items-center px-6 py-3 hover:bg-red-900/20 hover:text-red-400 transition group"><i class="fas fa-sign-out-alt w-6 text-center mr-2 text-slate-500 group-hover:text-red-400"></i><span class="font-medium">Sair</span></a></li>
                 </ul>
             </nav>
@@ -318,15 +327,11 @@
     </script>
     
     <script>
-        // ==============================================================
-        // MOTOR UNIFICADO: PWA (INSTALAÇÃO) + NOTIFICAÇÕES PUSH NATIVAS
-        // ==============================================================
         const installContainer = document.getElementById('pwa-install-container');
         const installBtn = document.getElementById('pwa-install-btn');
         const pushContainer = document.getElementById('push-subscribe-container');
         const pushBtn = document.getElementById('push-subscribe-btn');
 
-        // A SUA CHAVE CORRETA (MANTIDA)
         const PUBLIC_VAPID_KEY = 'BCA3_Fa5ZC7AN78uY1Ob_Q3qqNL9GoowZcix2BskNqG6oUbWVzRc8W82T8fI2GkQNC7T3oVZZ8ANYDABJbuRWPo';
 
         function urlB64ToUint8Array(base64String) {
@@ -340,7 +345,6 @@
             return outputArray;
         }
 
-        // --- 1. CAPTURA DO INSTALADOR PWA ---
         let deferredPrompt;
         window.addEventListener('beforeinstallprompt', (e) => {
             e.preventDefault();
@@ -366,36 +370,29 @@
             console.log('Shahin App instalado com sucesso!');
         });
 
-        // --- 2. O SEGREDO: REGISTO DIRETO DO PUSH BYPASSANDO O SCOPE TRAP ---
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', function() {
                 
-                // Registramos e usamos a 'registration' imediata (sem esperar o .ready)
                 navigator.serviceWorker.register('/static/service-worker.js').then(function(registration) {
                     console.log('Shahin App: ServiceWorker ativado com sucesso!');
                     
                     if ('PushManager' in window) {
-                        // Verifica se o telemóvel já ativou os alertas antes
                         registration.pushManager.getSubscription().then(function(subscription) {
                             if (subscription === null) {
-                                // Se não tem subscrição, mostra o botão na hora!
                                 if(pushContainer) pushContainer.classList.remove('hidden');
                             }
                         });
 
-                        // Configura a ação de clique no Botão "Ativar Alertas"
                         if (pushBtn) {
                             pushBtn.addEventListener('click', async () => {
                                 try {
                                     const permission = await Notification.requestPermission();
                                     if (permission === 'granted') {
-                                        // Usa o objeto registration que já temos em mãos
                                         const subscription = await registration.pushManager.subscribe({
                                             userVisibleOnly: true,
                                             applicationServerKey: urlB64ToUint8Array(PUBLIC_VAPID_KEY)
                                         });
 
-                                        // Envia o aperto de mão (Handshake) para o Python
                                         const response = await fetch('/api/push/subscribe', {
                                             method: 'POST',
                                             headers: {
@@ -408,14 +405,14 @@
                                         const data = await response.json();
                                         if (data.success) {
                                             pushContainer.classList.add('hidden');
-                                            Toastify({ text: "Alertas ativados com sucesso! O seu telemóvel irá vibrar com as novidades.", duration: 5000, style: { background: "#10b981" } }).showToast();
+                                            Toastify({ text: "Alertas ativados com sucesso!", duration: 5000, style: { background: "#10b981" } }).showToast();
                                         }
                                     } else {
-                                        Toastify({ text: "Permissão negada. Não poderemos avisar-lhe das novidades.", style: { background: "#ef4444" } }).showToast();
+                                        Toastify({ text: "Permissão negada.", style: { background: "#ef4444" } }).showToast();
                                     }
                                 } catch (error) {
                                     console.error('Erro ao ativar Push:', error);
-                                    Toastify({ text: "Ocorreu um erro ao ativar. Verifique se o site está em HTTPS.", style: { background: "#ef4444" } }).showToast();
+                                    Toastify({ text: "Ocorreu um erro ao ativar.", style: { background: "#ef4444" } }).showToast();
                                 }
                             });
                         }
