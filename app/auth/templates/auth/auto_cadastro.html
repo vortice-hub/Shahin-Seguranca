@@ -10,10 +10,10 @@
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
             <input type="hidden" name="step" value="1">
             <div>
-                <label class="block text-xs font-bold text-slate-400 uppercase mb-2">CPF (Somente Números)</label>
-                <input type="text" name="cpf" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 font-bold text-lg tracking-wide focus:outline-none focus:border-blue-500" placeholder="000.000.000-00" required>
+                <label class="label-pro">CPF (Somente Números)</label>
+                <input type="text" name="cpf" class="input-pro text-lg tracking-wide" placeholder="000.000.000-00" required>
             </div>
-            <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-lg shadow-lg transition">CONTINUAR</button>
+            <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-lg shadow-lg transition mt-2">CONTINUAR</button>
         </form>
         {% endif %}
 
@@ -31,21 +31,21 @@
             </div>
 
             <div>
-                <label class="block text-xs font-bold text-slate-400 uppercase mb-2">Crie sua Senha</label>
-                <input type="password" name="password" class="w-full bg-white border border-slate-200 rounded-lg px-4 py-3 focus:outline-none focus:border-emerald-500" placeholder="Mínimo 6 caracteres" required minlength="6">
+                <label class="label-pro">Crie sua Senha</label>
+                <input type="password" name="password" class="input-pro" placeholder="Mínimo 6 caracteres" required minlength="6">
             </div>
 
             <div>
-                <label class="block text-xs font-bold text-slate-400 uppercase mb-2">Confirme a Senha</label>
-                <input type="password" name="confirm_password" class="w-full bg-white border border-slate-200 rounded-lg px-4 py-3 focus:outline-none focus:border-emerald-500" placeholder="Digite a senha novamente" required minlength="6">
+                <label class="label-pro">Confirme a Senha</label>
+                <input type="password" name="confirm_password" class="input-pro" placeholder="Digite a senha novamente" required minlength="6">
             </div>
             
-            <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-4 rounded-lg shadow-lg transition mt-2">FINALIZAR CADASTRO</button>
+            <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-4 rounded-lg shadow-lg transition mt-4">FINALIZAR CADASTRO</button>
         </form>
         {% endif %}
 
-        <div class="text-center mt-4">
-            <a href="/login" class="text-xs text-slate-400 hover:text-slate-600">Voltar para Login</a>
+        <div class="text-center mt-6">
+            <a href="/login" class="text-xs text-slate-400 hover:text-slate-600 font-bold">Voltar para Login</a>
         </div>
     </div>
 </div>

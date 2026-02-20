@@ -7,15 +7,16 @@
         <form action="/primeiro-acesso" method="POST" class="space-y-4">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
             <div>
-                <label class="block text-xs font-bold text-slate-400 uppercase mb-2">Nova Senha</label>
-                <input type="password" name="nova_senha" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 focus:outline-none focus:border-yellow-500" required>
+                <label class="label-pro">Nova Senha</label>
+                <input type="password" name="nova_senha" class="input-pro" required>
             </div>
             <div>
-                <label class="block text-xs font-bold text-slate-400 uppercase mb-2">Confirmar Senha</label>
-                <input type="password" name="confirmacao" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 focus:outline-none focus:border-yellow-500" required>
+                <label class="label-pro">Confirmar Senha</label>
+                <input type="password" name="confirmacao" class="input-pro" required>
             </div>
-            <button type="submit" class="w-full bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-4 rounded-lg shadow-lg transition">SALVAR E ACESSAR</button>
+            <button type="submit" class="w-full bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-4 rounded-lg shadow-lg transition mt-4">SALVAR E ACESSAR</button>
         </form>
     </div>
 </div>
 {% endblock %}
+

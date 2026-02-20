@@ -1,11 +1,20 @@
-/* Estilos Globais do Thay-RH */
+/* ========================================= */
+/* Estilos Globais do Shahin Gestão          */
+/* ========================================= */
 
-/* Componentes de Formulário (Extraídos dos templates) */
+body { 
+    font-family: 'Inter', sans-serif; 
+}
+
+/* ========================================= */
+/* Componentes de Formulário Pro             */
+/* ========================================= */
+
 .label-pro { 
     display: block; 
-    font-size: 0.7rem; 
-    font-weight: 700; 
-    color: #64748b; 
+    font-size: 0.75rem; /* text-xs */
+    font-weight: 700; /* font-bold */
+    color: #64748b; /* text-slate-500 */
     text-transform: uppercase; 
     margin-bottom: 0.5rem; 
     letter-spacing: 0.05em;
@@ -13,12 +22,12 @@
 
 .input-pro { 
     width: 100%; 
-    background-color: #f8fafc; 
-    border: 1px solid #e2e8f0; 
+    background-color: #f8fafc; /* bg-slate-50 */
+    border: 1px solid #e2e8f0; /* border-slate-200 */
     border-radius: 0.5rem; 
-    padding: 0.75rem 1rem; 
-    color: #1e293b; 
-    font-weight: 500; 
+    padding: 0.75rem 1rem; /* py-3 px-4 */
+    color: #334155; /* text-slate-700 */
+    font-weight: 700; 
     outline: none; 
     transition: all 0.2s;
 }
@@ -26,10 +35,13 @@
 .input-pro:focus {
     background-color: #ffffff;
     border-color: #3b82f6;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.1);
 }
 
-/* Utilitários de Animação */
+/* ========================================= */
+/* Utilitários de Animação e Transições      */
+/* ========================================= */
+
 .animate-fade-in { 
     animation: fadeIn 0.5s ease-out; 
 }
@@ -38,3 +50,25 @@
     from { opacity: 0; transform: translateY(10px); } 
     to { opacity: 1; transform: translateY(0); } 
 }
+
+/* Menu Lateral e Submenus */
+.sidebar { transition: transform 0.3s ease-in-out; }
+.submenu { transition: max-height 0.3s ease-in-out; overflow: hidden; max-height: 0; }
+.submenu.open { max-height: 500px; } 
+
+/* Sino de Notificações */
+@keyframes ring { 
+    0% { transform: rotate(0); } 
+    10% { transform: rotate(15deg); } 
+    20% { transform: rotate(-10deg); } 
+    30% { transform: rotate(5deg); } 
+    40% { transform: rotate(-5deg); } 
+    50% { transform: rotate(0); } 
+    100% { transform: rotate(0); } 
+}
+.bell-ring { 
+    animation: ring 2s infinite; 
+    display: inline-block; 
+    transform-origin: top center; 
+}
+
