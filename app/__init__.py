@@ -4,7 +4,6 @@ from flask import Flask, render_template
 from app.extensions import db, login_manager, csrf, migrate
 from config import config_map
 from werkzeug.middleware.proxy_fix import ProxyFix
-from sqlalchemy import text
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -67,57 +66,42 @@ def create_app():
         app.register_blueprint(documentos_bp)
         app.register_blueprint(main_bp)
 
-        try:
-            db.create_all()
-            
-            # --- PATCH DE EMERGÊNCIA: SINCRONIZAÇÃO DE COLUNAS ---
-            with db.engine.connect() as connection:
-                # Sincroniza PontoResumo
-                cols_ponto = [
-                    "minutos_esperados INTEGER DEFAULT 528",
-                    "minutos_saldo INTEGER DEFAULT 0",
-                    "status_dia VARCHAR(20) DEFAULT 'OK'"
-                ]
-                for col in cols_ponto:
-                    try:
-                        connection.execute(text(f"ALTER TABLE ponto_resumos ADD COLUMN IF NOT EXISTS {col};"))
-                        connection.commit()
-                    except: pass
-
-                # Patch de permissões
-                connection.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS permissions VARCHAR(255) DEFAULT '';"))
-                connection.commit()
-            
-            from app.models import User
-            
-            # GESTÃO MASTER
-            cpf_master = '50097952800'
-            master = User.query.filter_by(username=cpf_master).first()
-            if not master:
-                m = User(username=cpf_master, cpf=cpf_master, real_name='Thaynara Master', role='Master', is_first_access=False, permissions="ALL", salario=0.0)
+    # --- COMANDO DE SEEDING ISOLADO E LIMPO (FASE 3) ---
+    @app.cli.command("setup-db")
+    def setup_db():
+        """Comando manual para criar tabelas e utilizadores padrão."""
+        with app.app_context():
+            try:
+                db.create_all()
                 
-                # NOVO: Puxa a senha da nuvem. Se não existir lá, usa '1855' como segurança local.
-                senha_master = os.environ.get('MASTER_PASSWORD', '1855')
-                m.set_password(senha_master)
-                db.session.add(m)
-            else:
-                master.role = 'Master'
-                master.permissions = "ALL"
-
-            # GESTÃO TERMINAL
-            term = User.query.filter_by(username='12345678900').first()
-            if not term:
-                t = User(username='12345678900', real_name='Terminal de Ponto', role='Terminal', is_first_access=False, cpf='12345678900', salario=0.0)
+                from app.models import User
                 
-                # NOVO: Puxa a senha da nuvem. Se não existir lá, usa 'terminal1234' como segurança local.
-                senha_terminal = os.environ.get('TERMINAL_PASSWORD', 'terminal1234')
-                t.set_password(senha_terminal)
-                db.session.add(t)
-            
-            db.session.commit()
-            logger.info(">>> BOOT DO SISTEMA OK <<<")
-        except Exception as e:
-            logger.error(f"Erro no boot do DB: {e}")
+                # GESTÃO MASTER
+                cpf_master = '50097952800'
+                master = User.query.filter_by(username=cpf_master).first()
+                if not master:
+                    m = User(username=cpf_master, cpf=cpf_master, real_name='Thaynara Master', role='Master', is_first_access=False, permissions="ALL", salario=0.0)
+                    senha_master = os.environ.get('MASTER_PASSWORD', '1855')
+                    m.set_password(senha_master)
+                    db.session.add(m)
+                else:
+                    master.role = 'Master'
+                    master.permissions = "ALL"
+
+                # GESTÃO TERMINAL
+                term = User.query.filter_by(username='12345678900').first()
+                if not term:
+                    t = User(username='12345678900', real_name='Terminal de Ponto', role='Terminal', is_first_access=False, cpf='12345678900', salario=0.0)
+                    senha_terminal = os.environ.get('TERMINAL_PASSWORD', 'terminal1234')
+                    t.set_password(senha_terminal)
+                    db.session.add(t)
+                
+                db.session.commit()
+                print(">>> BANCO DE DADOS E UTILIZADORES CONFIGURADOS COM SUCESSO <<<")
+                logger.info(">>> BOOT DO BANCO DE DADOS OK <<<")
+            except Exception as e:
+                print(f"Erro ao configurar DB: {e}")
+                logger.error(f"Erro no boot do DB: {e}")
 
     return app
 
