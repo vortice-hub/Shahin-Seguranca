@@ -13,7 +13,6 @@
         </div>
         <form action="/admin/liberar-acesso" method="POST" class="p-6 space-y-4">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-            <!-- Dados Basicos -->
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                     <label class="label-pro">CPF (Somente Números)</label>
@@ -25,7 +24,6 @@
                 </div>
             </div>
             
-            <!-- EMPRESA -->
             <div class="bg-slate-50 p-4 rounded-lg border border-slate-100">
                 <div class="grid grid-cols-1 gap-3">
                     <div>
@@ -50,7 +48,6 @@
                 </div>
             </div>
 
-            <!-- Regras de Jornada -->
             <div class="bg-slate-50 p-4 rounded-lg border border-slate-100">
                 <label class="label-pro mb-3 text-slate-500">Definir Regras de Ponto</label>
                 
@@ -65,7 +62,7 @@
                 
                 <div id="divDtRef" class="hidden mb-4">
                     <label class="label-pro text-blue-700">Data Ref (Dia de Trabalho)</label>
-                    <input type="date" name="dt_escala" class="input-pro">
+                    <input type="date" name="dt_escala" class="input-pro border-blue-200">
                 </div>
 
                 <div class="grid grid-cols-2 gap-4">
@@ -107,5 +104,4 @@
     function toggleDtRef(sel) { if (sel.value === '12x36') document.getElementById('divDtRef').classList.remove('hidden'); else document.getElementById('divDtRef').classList.add('hidden'); }
 </script>
 {% endblock %}
-
 

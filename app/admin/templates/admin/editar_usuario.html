@@ -11,14 +11,17 @@
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
             
             <div class="space-y-4">
-                <div><label class="label-pro">Nome Completo</label><input type="text" name="real_name" value="{{ user.real_name }}" class="input-pro"></div>
+                <div>
+                    <label class="label-pro">Nome Completo</label>
+                    <input type="text" name="real_name" value="{{ user.real_name }}" class="input-pro">
+                </div>
                 
                 <div class="bg-purple-50 p-4 rounded-lg border border-purple-100">
                     <p class="text-xs font-bold text-purple-800 uppercase mb-3 flex items-center gap-2"><i class="fas fa-sitemap"></i> Estrutura Organizacional</p>
                     <div class="space-y-3">
                         <div>
                             <label class="label-pro text-purple-700">Departamento / Equipe</label>
-                            <input type="text" name="departamento" class="input-pro border-purple-200 focus:border-purple-500 font-bold" value="{{ user.departamento or '' }}" placeholder="Ex: Operacional">
+                            <input type="text" name="departamento" class="input-pro border-purple-200 focus:border-purple-500" value="{{ user.departamento or '' }}" placeholder="Ex: Operacional">
                         </div>
                         <div>
                             <label class="label-pro text-purple-700">Reporta-se a (Gestor)</label>
@@ -74,17 +77,29 @@
                     <p class="text-xs font-bold text-slate-400 uppercase mb-3">Contratação e Vínculo</p>
                     <div class="space-y-3">
                         <div>
-                            <label class="label-pro text-emerald-700"><i class="fas fa-calendar-check mr-1"></i> Data de Admissão (Férias)</label>
-                            <input type="date" name="data_admissao" class="input-pro text-xs font-bold text-slate-700 border-emerald-200 focus:border-emerald-500" value="{{ user.data_admissao.strftime('%Y-%m-%d') if user.data_admissao else '' }}">
+                            <label class="label-pro text-emerald-700"><i class="fas fa-calendar-check mr-1"></i> Data de Admissão</label>
+                            <input type="date" name="data_admissao" class="input-pro border-emerald-200 focus:border-emerald-500" value="{{ user.data_admissao.strftime('%Y-%m-%d') if user.data_admissao else '' }}">
                         </div>
-                        <div><label class="label-pro">Razão Social</label><input type="text" name="razao_social" class="input-pro text-xs" value="{{ user.razao_social_empregadora }}"></div>
-                        <div><label class="label-pro">CNPJ</label><input type="text" name="cnpj" class="input-pro text-xs font-mono" value="{{ user.cnpj_empregador }}"></div>
+                        <div>
+                            <label class="label-pro">Razão Social</label>
+                            <input type="text" name="razao_social" class="input-pro" value="{{ user.razao_social_empregadora }}">
+                        </div>
+                        <div>
+                            <label class="label-pro">CNPJ</label>
+                            <input type="text" name="cnpj" class="input-pro font-mono" value="{{ user.cnpj_empregador }}">
+                        </div>
                     </div>
                 </div>
 
                 <div class="grid grid-cols-2 gap-4">
-                    <div><label class="label-pro">Login</label><input type="text" name="username" value="{{ user.username }}" class="input-pro" {% if user.username == '50097952800' %}readonly{% endif %}></div>
-                    <div><label class="label-pro">Cargo</label><input type="text" name="role" value="{{ user.role }}" class="input-pro" {% if user.username == '50097952800' %}disabled{% endif %}></div>
+                    <div>
+                        <label class="label-pro">Login</label>
+                        <input type="text" name="username" value="{{ user.username }}" class="input-pro" {% if user.username == '50097952800' %}readonly{% endif %}>
+                    </div>
+                    <div>
+                        <label class="label-pro">Cargo</label>
+                        <input type="text" name="role" value="{{ user.role }}" class="input-pro" {% if user.username == '50097952800' %}disabled{% endif %}>
+                    </div>
                 </div>
             </div>
 
@@ -125,11 +140,5 @@
         </form>
     </div>
 </div>
-
-<style>
-    .label-pro { display: block; font-size: 0.7rem; font-weight: 700; color: #64748b; text-transform: uppercase; margin-bottom: 0.5rem; }
-    .input-pro { width: 100%; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 0.5rem; padding: 0.75rem 1rem; outline: none; transition: border-color 0.2s; }
-    .input-pro:focus { border-color: #3b82f6; }
-</style>
 {% endblock %}
 

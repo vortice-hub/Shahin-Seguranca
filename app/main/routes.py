@@ -5,6 +5,7 @@ from app.models import User, PontoAjuste, Recibo, Holerite, PreCadastro, Notific
 from app.utils import get_brasil_time, has_permission
 from datetime import timedelta
 from sqlalchemy import func
+import traceback
 
 main_bp = Blueprint('main', __name__)
 
@@ -80,64 +81,72 @@ def ler_todas_notificacoes():
     db.session.commit()
     return jsonify({'success': True})
 
-# --- NOVIDADE: API DE INTELIGÊNCIA EXECUTIVA (CHART.JS) ---
+# --- API DE INTELIGÊNCIA EXECUTIVA (CHART.JS) BLINDADA ---
 @main_bp.route('/api/analytics', methods=['GET'])
 @login_required
 def api_analytics():
     """Fornece dados em tempo real para os 5 gráficos do Dashboard Master."""
-    # CORREÇÃO: Reconhecer a Chave Mestra pelo CPF
     is_master = current_user.role == 'Master' or current_user.username == '50097952800'
     
     if not is_master:
         return jsonify({'error': 'Acesso negado'}), 403
         
-    hoje = get_brasil_time().date()
-    sete_dias_atras = hoje - timedelta(days=6)
-    primeiro_dia_mes = hoje.replace(day=1)
+    try:
+        hoje = get_brasil_time().date()
+        sete_dias_atras = hoje - timedelta(days=6)
+        primeiro_dia_mes = hoje.replace(day=1)
 
-    # 1. Raio-X da Operação Hoje (Donut)
-    ponto_hoje = db.session.query(PontoResumo.status_dia, func.count(PontoResumo.id)).filter(PontoResumo.data_referencia == hoje).group_by(PontoResumo.status_dia).all()
-    raio_x = {status: qtd for status, qtd in ponto_hoje}
-    
-    # 2. Termômetro de Risco (Linhas: Faltas vs Horas Extras nos últimos 7 dias)
-    dias_labels = [(sete_dias_atras + timedelta(days=i)).strftime('%d/%m') for i in range(7)]
-    risco_faltas = []
-    risco_extras = []
-    for i in range(7):
-        dia_alvo = sete_dias_atras + timedelta(days=i)
-        faltas = PontoResumo.query.filter(PontoResumo.data_referencia == dia_alvo, PontoResumo.status_dia == 'Falta').count()
-        extras_min = db.session.query(func.sum(PontoResumo.minutos_saldo)).filter(PontoResumo.data_referencia == dia_alvo, PontoResumo.minutos_saldo > 0).scalar() or 0
-        risco_faltas.append(faltas)
-        risco_extras.append(round(extras_min / 60, 1)) # Converte para horas
+        # 1. Raio-X da Operação Hoje (Donut)
+        ponto_hoje = db.session.query(PontoResumo.status_dia, func.count(PontoResumo.id)).filter(PontoResumo.data_referencia == hoje).group_by(PontoResumo.status_dia).all()
+        raio_x = {status: qtd for status, qtd in ponto_hoje}
+        
+        # 2. Termômetro de Risco (Linhas: Faltas vs Horas Extras nos últimos 7 dias)
+        dias_labels = [(sete_dias_atras + timedelta(days=i)).strftime('%d/%m') for i in range(7)]
+        risco_faltas = []
+        risco_extras = []
+        for i in range(7):
+            dia_alvo = sete_dias_atras + timedelta(days=i)
+            faltas = PontoResumo.query.filter(PontoResumo.data_referencia == dia_alvo, PontoResumo.status_dia == 'Falta').count()
+            extras_min = db.session.query(func.sum(PontoResumo.minutos_saldo)).filter(PontoResumo.data_referencia == dia_alvo, PontoResumo.minutos_saldo > 0).scalar() or 0
+            risco_faltas.append(faltas)
+            risco_extras.append(round(extras_min / 60, 1))
 
-    # 3. Termômetro de Custos (Barras: EPI por Depto no mês atual)
-    saidas = db.session.query(User.departamento, func.sum(HistoricoSaida.quantidade))\
-        .join(User, User.real_name == HistoricoSaida.colaborador)\
-        .filter(HistoricoSaida.data_entrega >= primeiro_dia_mes)\
-        .group_by(User.departamento).all()
-    custos_labels = [s[0] or 'Geral' for s in saidas]
-    custos_data = [s[1] for s in saidas]
+        # 3. Termômetro de Custos (Barras: EPI por Depto no mês atual)
+        saidas = db.session.query(User.departamento, func.sum(HistoricoSaida.quantidade))\
+            .join(User, User.real_name == HistoricoSaida.colaborador)\
+            .filter(HistoricoSaida.data_entrega >= primeiro_dia_mes)\
+            .group_by(User.departamento).all()
+        custos_labels = [s[0] or 'Geral' for s in saidas]
+        custos_data = [s[1] for s in saidas]
 
-    # 4. Escudo Legal (Velocímetro: % Documentos Lidos no Mês)
-    tot_holerites = Holerite.query.filter(Holerite.enviado_em >= primeiro_dia_mes).count()
-    lid_holerites = Holerite.query.filter(Holerite.enviado_em >= primeiro_dia_mes, Holerite.visualizado == True).count()
-    tot_recibos = Recibo.query.filter(Recibo.created_at >= primeiro_dia_mes).count()
-    lid_recibos = Recibo.query.filter(Recibo.created_at >= primeiro_dia_mes, Recibo.visualizado == True).count()
-    
-    total_docs = tot_holerites + tot_recibos
-    lidos_docs = lid_holerites + lid_recibos
-    taxa_assinatura = round((lidos_docs / total_docs * 100) if total_docs > 0 else 100, 1)
+        # 4. Escudo Legal (Velocímetro: % Documentos Lidos no Mês)
+        tot_holerites = Holerite.query.filter(Holerite.enviado_em >= primeiro_dia_mes).count()
+        lid_holerites = Holerite.query.filter(Holerite.enviado_em >= primeiro_dia_mes, Holerite.visualizado == True).count()
+        tot_recibos = Recibo.query.filter(Recibo.created_at >= primeiro_dia_mes).count()
+        lid_recibos = Recibo.query.filter(Recibo.created_at >= primeiro_dia_mes, Recibo.visualizado == True).count()
+        
+        total_docs = tot_holerites + tot_recibos
+        lidos_docs = lid_holerites + lid_recibos
+        taxa_assinatura = round((lidos_docs / total_docs * 100) if total_docs > 0 else 100, 1)
 
-    # 5. Radar de Pontualidade (Barras Empilhadas: Atrasos no Mês)
-    pontual = PontoResumo.query.filter(PontoResumo.data_referencia >= primeiro_dia_mes, PontoResumo.minutos_saldo >= 0).count()
-    atraso_leve = PontoResumo.query.filter(PontoResumo.data_referencia >= primeiro_dia_mes, PontoResumo.minutos_saldo < 0, PontoResumo.minutos_saldo >= -15).count()
-    atraso_critico = PontoResumo.query.filter(PontoResumo.data_referencia >= primeiro_dia_mes, PontoResumo.minutos_saldo < -15).count()
+        # 5. Radar de Pontualidade (Barras Empilhadas: Atrasos no Mês)
+        pontual = PontoResumo.query.filter(PontoResumo.data_referencia >= primeiro_dia_mes, PontoResumo.minutos_saldo >= 0).count()
+        atraso_leve = PontoResumo.query.filter(PontoResumo.data_referencia >= primeiro_dia_mes, PontoResumo.minutos_saldo < 0, PontoResumo.minutos_saldo >= -15).count()
+        atraso_critico = PontoResumo.query.filter(PontoResumo.data_referencia >= primeiro_dia_mes, PontoResumo.minutos_saldo < -15).count()
 
-    return jsonify({
-        'raio_x': raio_x,
-        'risco': {'labels': dias_labels, 'faltas': risco_faltas, 'extras': risco_extras},
-        'custos': {'labels': custos_labels, 'data': custos_data},
-        'escudo': taxa_assinatura,
-        'pontualidade': [pontual, atraso_leve, atraso_critico]
-    })
+        return jsonify({
+            'raio_x': raio_x,
+            'risco': {'labels': dias_labels, 'faltas': risco_faltas, 'extras': risco_extras},
+            'custos': {'labels': custos_labels, 'data': custos_data},
+            'escudo': taxa_assinatura,
+            'pontualidade': [pontual, atraso_leve, atraso_critico]
+        })
+        
+    except Exception as e:
+        # Imprime o erro no console do backend (GCP Logs) para diagnóstico profundo
+        print("====== ERRO NA API DE ANALYTICS ======")
+        traceback.print_exc()
+        print("======================================")
+        # Devolve o erro formatado para o Frontend poder mostrar na tela
+        return jsonify({'error': str(e)}), 500
 

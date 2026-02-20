@@ -14,18 +14,18 @@
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
             
             <div class="mb-6">
-                <label class="block text-sm font-bold text-slate-700 mb-2">Selecione a Imagem ou PDF</label>
+                <label class="label-pro mb-3">Selecione a Imagem ou PDF</label>
                 <div class="border-2 border-dashed border-slate-300 rounded-lg p-6 text-center hover:bg-slate-50 transition cursor-pointer">
                     <i class="fas fa-camera text-slate-400 text-3xl mb-2"></i>
                     <input type="file" name="arquivo_atestado" accept=".jpg,.jpeg,.png,.pdf" required class="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer">
                 </div>
-                <p class="text-xs text-slate-500 mt-2"><i class="fas fa-info-circle"></i> Certifique-se de que o seu nome, a data e a quantidade de dias estão bem visíveis na foto.</p>
+                <p class="text-[10px] text-slate-500 mt-3"><i class="fas fa-info-circle text-blue-400 mr-1"></i> Certifique-se de que o seu nome, a data e a quantidade de dias estão bem visíveis na foto.</p>
             </div>
             
-            <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition shadow-md flex items-center justify-center gap-2">
+            <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl transition shadow-md flex items-center justify-center gap-2">
                 <i class="fas fa-paper-plane"></i> ENVIAR ATESTADO
             </button>
-            <a href="{{ url_for('documentos.meus_documentos') }}" class="block text-center w-full text-slate-500 hover:text-slate-700 text-sm font-bold mt-4 transition">Cancelar</a>
+            <a href="{{ url_for('documentos.meus_documentos') }}" class="block text-center w-full text-slate-400 hover:text-slate-600 text-xs font-bold mt-4 transition">CANCELAR</a>
         </form>
     </div>
 </div>

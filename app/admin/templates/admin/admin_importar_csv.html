@@ -7,7 +7,7 @@
         <form action="/admin/usuarios/importar-csv" method="POST" enctype="multipart/form-data" class="space-y-6">
             <div>
                 <label class="label-pro">Arquivo CSV ou Excel (.csv)</label>
-                <input type="file" name="arquivo_csv" accept=".csv" class="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100" required>
+                <input type="file" name="arquivo_csv" accept=".csv" class="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer" required>
             </div>
             
             <div class="bg-slate-50 p-4 rounded-lg text-xs text-slate-500 border border-slate-200">
@@ -21,5 +21,5 @@
         </form>
     </div>
 </div>
-<style>.label-pro { display: block; font-size: 0.7rem; font-weight: 700; color: #64748b; text-transform: uppercase; margin-bottom: 0.5rem; }</style>
 {% endblock %}
+

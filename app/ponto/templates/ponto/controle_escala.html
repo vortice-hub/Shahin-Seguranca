@@ -9,10 +9,10 @@
     </div>
     
     <div class="bg-white p-2 rounded-lg border border-slate-200 shadow-sm flex items-center gap-3">
-        <label class="text-xs font-bold text-slate-500 uppercase ml-2"><i class="fas fa-calendar-day mr-1"></i> Data Base:</label>
+        <label class="label-pro !mb-0 ml-2"><i class="fas fa-calendar-day mr-1"></i> Data Base:</label>
         <form action="{{ url_for('ponto.controle_escala') }}" method="GET" class="m-0 p-0">
             <input type="date" name="data_ref" value="{{ data_ref.strftime('%Y-%m-%d') }}" onchange="this.form.submit()" 
-                   class="bg-slate-50 border border-slate-200 text-slate-800 font-bold py-1.5 px-3 rounded outline-none focus:border-blue-500 transition text-sm cursor-pointer">
+                   class="input-pro cursor-pointer" style="width: auto; padding-top: 0.5rem; padding-bottom: 0.5rem;">
         </form>
     </div>
 </div>

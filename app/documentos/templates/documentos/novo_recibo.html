@@ -1,6 +1,5 @@
 {% extends 'base.html' %}
 {% block content %}
-<!-- Plugin para Select Pesquisável -->
 <link href="https://cdn.jsdelivr.net/npm/tom-select@2.2.2/dist/css/tom-select.css" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/tom-select@2.2.2/dist/js/tom-select.complete.min.js"></script>
 
@@ -18,9 +17,8 @@
         <form action="/documentos/admin/recibo/novo" method="POST" class="p-8 space-y-6">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
 
-            <!-- 1. Seleção do Funcionário (Agora Pesquisável) -->
             <div>
-                <label class="label-pro mb-2">Selecione o Funcionário</label>
+                <label class="label-pro">Selecione o Funcionário</label>
                 <select name="user_id" id="userSelect" class="w-full" onchange="carregarDadosUser(this.value)" required>
                     <option value="">Digite para pesquisar...</option>
                     {% for u in users %}
@@ -29,7 +27,6 @@
                 </select>
             </div>
 
-            <!-- Preview do Texto Legal -->
             <div class="bg-yellow-50 p-4 rounded-lg border border-yellow-100 text-sm font-serif text-slate-700 italic">
                 "Recebi de <strong id="previewEmpresa" class="text-slate-900">...</strong>, inscrita no CNPJ <strong id="previewCnpj" class="text-slate-900">...</strong> a quantia abaixo..."
             </div>
@@ -46,8 +43,8 @@
             </div>
 
             <div>
-                <label class="label-pro mb-3">Tipo de Benefício (Marque as opções)</label>
-                <div class="grid grid-cols-2 gap-3">
+                <label class="label-pro">Tipo de Benefício (Marque as opções)</label>
+                <div class="grid grid-cols-2 gap-3 mt-2">
                     <label class="flex items-center p-3 border rounded-lg hover:bg-slate-50 cursor-pointer transition">
                         <input type="checkbox" name="va" checked class="w-5 h-5 text-blue-600 rounded">
                         <span class="ml-2 text-sm font-bold text-slate-700">Vale Alimentação (VA)</span>
@@ -68,15 +65,15 @@
             </div>
 
             <div>
-                <label class="label-pro mb-2">Forma de Pagamento</label>
-                <div class="flex gap-4">
-                    <label class="flex items-center"><input type="radio" name="forma_pagamento" value="Pix" checked class="mr-2"> Pix</label>
-                    <label class="flex items-center"><input type="radio" name="forma_pagamento" value="Dinheiro" class="mr-2"> Dinheiro</label>
-                    <label class="flex items-center"><input type="radio" name="forma_pagamento" value="Transferência" class="mr-2"> Transferência</label>
+                <label class="label-pro">Forma de Pagamento</label>
+                <div class="flex gap-4 mt-2 text-sm text-slate-700 font-bold">
+                    <label class="flex items-center cursor-pointer"><input type="radio" name="forma_pagamento" value="Pix" checked class="mr-2"> Pix</label>
+                    <label class="flex items-center cursor-pointer"><input type="radio" name="forma_pagamento" value="Dinheiro" class="mr-2"> Dinheiro</label>
+                    <label class="flex items-center cursor-pointer"><input type="radio" name="forma_pagamento" value="Transferência" class="mr-2"> Transferência</label>
                 </div>
             </div>
 
-            <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-lg shadow-lg transition">
+            <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl shadow-lg transition">
                 <i class="fas fa-file-signature mr-2"></i> GERAR E SALVAR RECIBO
             </button>
         </form>
@@ -109,6 +106,4 @@
     }
 </script>
 {% endblock %}
-
-
 

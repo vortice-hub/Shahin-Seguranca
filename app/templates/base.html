@@ -170,7 +170,15 @@
                         {% endif %}
                         {% endif %}
                     {% endif %}
-                    <li><a href="/logout" class="flex items-center px-6 py-3 hover:bg-red-900/20 hover:text-red-400 transition group mt-8"><i class="fas fa-sign-out-alt w-6 text-center mr-2 text-slate-500 group-hover:text-red-400"></i><span class="font-medium">Sair</span></a></li>
+                    
+                    <li id="pwa-install-container" class="hidden mt-6 mb-2 mx-4">
+                        <button id="pwa-install-btn" class="w-full flex items-center justify-center px-4 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl shadow-lg transition-transform transform active:scale-95 group">
+                            <i class="fas fa-download mr-2 group-hover:animate-bounce"></i>
+                            <span class="font-bold text-xs tracking-wide uppercase">Instalar App</span>
+                        </button>
+                    </li>
+                    
+                    <li class="{% if current_user.role != 'Terminal' %}mt-2{% endif %}"><a href="/logout" class="flex items-center px-6 py-3 hover:bg-red-900/20 hover:text-red-400 transition group"><i class="fas fa-sign-out-alt w-6 text-center mr-2 text-slate-500 group-hover:text-red-400"></i><span class="font-medium">Sair</span></a></li>
                 </ul>
             </nav>
         </aside>
@@ -214,6 +222,7 @@
             {% endif %}
         </div>
     </div>
+    
     <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
@@ -300,15 +309,52 @@
     </script>
     
     <script>
+        // 1. Regista o Motor Offline
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', function() {
                 navigator.serviceWorker.register('/static/service-worker.js').then(function(registration) {
-                    console.log('Shahin App: ServiceWorker ativado com sucesso!', registration.scope);
+                    console.log('Shahin App: ServiceWorker ativado com sucesso!');
                 }, function(err) {
                     console.log('Shahin App: Falha ao ativar o ServiceWorker.', err);
                 });
             });
         }
+
+        // 2. Lógica do Botão de Instalação Nativo
+        let deferredPrompt;
+        const installContainer = document.getElementById('pwa-install-container');
+        const installBtn = document.getElementById('pwa-install-btn');
+
+        // Este evento é disparado pelo Chrome/Safari silenciosamente quando ele acha que o site é instalável
+        window.addEventListener('beforeinstallprompt', (e) => {
+            // Impede o pop-up automático
+            e.preventDefault();
+            // Guarda o evento para dispararmos quando o utilizador clicar no nosso botão
+            deferredPrompt = e;
+            // Mostra o botão Azul elegante no menu lateral
+            if(installContainer) installContainer.classList.remove('hidden');
+        });
+
+        if(installBtn) {
+            installBtn.addEventListener('click', async () => {
+                if (deferredPrompt !== null) {
+                    // Dispara a janela nativa do telemóvel
+                    deferredPrompt.prompt();
+                    const { outcome } = await deferredPrompt.userChoice;
+                    if (outcome === 'accepted') {
+                        console.log('Utilizador aceitou a instalação!');
+                        installContainer.classList.add('hidden');
+                    }
+                    deferredPrompt = null;
+                }
+            });
+        }
+
+        // Se o utilizador já instalou, garantimos que o botão some
+        window.addEventListener('appinstalled', () => {
+            if(installContainer) installContainer.classList.add('hidden');
+            console.log('Shahin App instalado com sucesso!');
+        });
     </script>
 </body>
 </html>

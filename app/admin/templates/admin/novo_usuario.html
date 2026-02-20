@@ -23,18 +23,18 @@
             </div>
             <div class="p-8 grid grid-cols-1 md:grid-cols-2 gap-x-10 gap-y-6">
                 <div class="md:col-span-2">
-                    <label class="block text-[11px] font-black text-slate-400 uppercase mb-2 ml-1">Nome Completo do Colaborador</label>
-                    <input type="text" name="real_name" class="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 font-bold text-slate-700 focus:border-blue-500 focus:bg-white outline-none transition-all" placeholder="Ex: Marcos Oliveira dos Santos" required>
+                    <label class="label-pro ml-1">Nome Completo do Colaborador</label>
+                    <input type="text" name="real_name" class="input-pro" placeholder="Ex: Marcos Oliveira dos Santos" required>
                 </div>
 
                 <div>
-                    <label class="block text-[11px] font-black text-slate-400 uppercase mb-2 ml-1">CPF (Apenas números)</label>
-                    <input type="text" name="cpf" class="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 font-mono font-bold text-slate-700 text-lg focus:border-blue-500 focus:bg-white outline-none transition-all" placeholder="00000000000" required>
+                    <label class="label-pro ml-1">CPF (Apenas números)</label>
+                    <input type="text" name="cpf" class="input-pro font-mono text-lg" placeholder="00000000000" required>
                 </div>
 
                 <div>
-                    <label class="block text-[11px] font-black text-slate-400 uppercase mb-2 ml-1">Função / Cargo Genérico</label>
-                    <input type="text" name="role" class="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 font-bold text-slate-700 focus:border-blue-500 focus:bg-white outline-none transition-all" placeholder="Ex: Controlador de Acesso" required>
+                    <label class="label-pro ml-1">Função / Cargo Genérico</label>
+                    <input type="text" name="role" class="input-pro" placeholder="Ex: Controlador de Acesso" required>
                 </div>
             </div>
         </div>
@@ -47,13 +47,13 @@
             </div>
             <div class="p-8 grid grid-cols-1 md:grid-cols-2 gap-x-10 gap-y-6">
                 <div>
-                    <label class="block text-[11px] font-black text-purple-700 uppercase mb-2 ml-1">Departamento / Equipe</label>
-                    <input type="text" name="departamento" class="w-full bg-purple-50 border-2 border-purple-100 rounded-2xl px-5 py-4 font-bold text-purple-900 focus:border-purple-500 focus:bg-white outline-none transition-all" placeholder="Ex: Operacional Sul">
+                    <label class="label-pro text-purple-700 ml-1">Departamento / Equipe</label>
+                    <input type="text" name="departamento" class="input-pro bg-purple-50 border-purple-200 focus:border-purple-500" placeholder="Ex: Operacional Sul">
                 </div>
 
                 <div>
-                    <label class="block text-[11px] font-black text-purple-700 uppercase mb-2 ml-1">Liderança (CPF do Gestor)</label>
-                    <select name="cpf_gestor" class="w-full bg-purple-50 border-2 border-purple-100 rounded-2xl px-5 py-4 font-bold text-purple-900 focus:border-purple-500 focus:bg-white outline-none transition-all cursor-pointer">
+                    <label class="label-pro text-purple-700 ml-1">Liderança (CPF do Gestor)</label>
+                    <select name="cpf_gestor" class="input-pro bg-purple-50 border-purple-200 focus:border-purple-500 cursor-pointer">
                         <option value="">-- Sem Gestor Direto --</option>
                         {% for gestor in gestores %}
                             <option value="{{ gestor.cpf }}">{{ gestor.real_name }} ({{ gestor.role }})</option>
@@ -71,21 +71,21 @@
             </div>
             <div class="p-8 grid grid-cols-1 md:grid-cols-3 gap-x-6 gap-y-6">
                 <div>
-                    <label class="block text-[11px] font-black text-emerald-700 uppercase mb-2 ml-1">Data de Admissão</label>
-                    <input type="date" name="data_admissao" class="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 font-bold text-slate-700 focus:border-emerald-500 focus:bg-white outline-none transition-all" required>
+                    <label class="label-pro text-emerald-700 ml-1">Data de Admissão</label>
+                    <input type="date" name="data_admissao" class="input-pro border-emerald-200 focus:border-emerald-500" required>
                 </div>
 
                 <div>
-                    <label class="block text-[11px] font-black text-slate-400 uppercase mb-2 ml-1">Salário Base (R$)</label>
+                    <label class="label-pro text-emerald-700 ml-1">Salário Base (R$)</label>
                     <div class="relative">
-                        <span class="absolute left-5 top-4 font-bold text-emerald-600">R$</span>
-                        <input type="number" step="0.01" name="salario" class="w-full bg-emerald-50 border-2 border-emerald-100 rounded-2xl pl-12 pr-5 py-4 font-black text-emerald-700 text-xl focus:border-emerald-500 focus:bg-white outline-none transition-all" placeholder="0.00">
+                        <span class="absolute left-4 top-3 font-bold text-emerald-600">R$</span>
+                        <input type="number" step="0.01" name="salario" class="input-pro pl-10 border-emerald-200 focus:border-emerald-500" placeholder="0.00">
                     </div>
                 </div>
 
                 <div class="opacity-60">
-                    <label class="block text-[11px] font-black text-slate-400 uppercase mb-2 ml-1">Empresa Pagadora</label>
-                    <input type="text" class="w-full bg-slate-100 border-2 border-slate-200 rounded-2xl px-5 py-4 text-xs font-bold text-slate-500 cursor-not-allowed" value="LA SHAHIN SERVIÇOS DE SEGURANÇA LTDA" readonly>
+                    <label class="label-pro ml-1">Empresa Pagadora</label>
+                    <input type="text" class="input-pro cursor-not-allowed text-xs" value="LA SHAHIN SERVIÇOS DE SEGURANÇA LTDA" readonly>
                     <input type="hidden" name="razao_social" value="LA SHAHIN SERVIÇOS DE SEGURANÇA LTDA">
                     <input type="hidden" name="cnpj" value="50.537.235/0001-95">
                 </div>
@@ -101,8 +101,8 @@
             <div class="p-8">
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
                     <div class="md:col-span-1">
-                        <label class="block text-[11px] font-black text-slate-400 uppercase mb-2 ml-1">Escala de Trabalho</label>
-                        <select name="escala" onchange="toggleDtRef(this)" class="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 font-bold text-slate-700 outline-none focus:border-blue-500 transition-all cursor-pointer">
+                        <label class="label-pro ml-1">Escala de Trabalho</label>
+                        <select name="escala" onchange="toggleDtRef(this)" class="input-pro cursor-pointer">
                             <option value="Livre">Livre (Sem Bloqueios)</option>
                             <option value="5x2">5x2 (Segunda a Sexta)</option>
                             <option value="12x36">12x36 (Plantão)</option>
@@ -111,32 +111,32 @@
 
                     <div id="divDtRef" class="hidden md:col-span-2 animate-fade-in">
                         <div class="bg-amber-50 border-2 border-amber-100 rounded-2xl p-5">
-                            <label class="block text-[11px] font-black text-amber-700 uppercase mb-2">Data de Referência (Dia de Trabalho)</label>
-                            <input type="date" name="dt_escala" class="w-full bg-white border-2 border-amber-200 rounded-xl px-4 py-2 font-bold text-slate-700 outline-none focus:border-amber-500">
+                            <label class="label-pro text-amber-700">Data de Referência (Dia de Trabalho)</label>
+                            <input type="date" name="dt_escala" class="input-pro border-amber-200 focus:border-amber-500">
                             <p class="text-[10px] text-amber-600 mt-2 font-medium">* O sistema usará esta data para alternar folgas e plantões no cálculo de 12x36.</p>
                         </div>
                     </div>
                 </div>
 
-                <div class="grid grid-cols-3 gap-4 p-6 bg-slate-50 rounded-3xl border-2 border-slate-100">
+                <div class="grid grid-cols-3 gap-4 p-6 bg-slate-50 rounded-xl border border-slate-200">
                     <div class="text-center">
-                        <label class="block text-[10px] font-black text-slate-400 uppercase mb-2">Carga Diária</label>
-                        <input type="time" name="carga_horaria" value="08:48" class="w-full bg-white border-2 border-slate-200 rounded-xl p-3 text-center font-mono font-bold text-slate-700">
+                        <label class="label-pro">Carga Diária</label>
+                        <input type="time" name="carga_horaria" value="08:48" class="input-pro text-center font-mono">
                     </div>
                     <div class="text-center">
-                        <label class="block text-[10px] font-black text-slate-400 uppercase mb-2">Intervalo (Min)</label>
-                        <input type="number" name="tempo_intervalo" value="60" class="w-full bg-white border-2 border-slate-200 rounded-xl p-3 text-center font-mono font-bold text-slate-700">
+                        <label class="label-pro">Intervalo (Min)</label>
+                        <input type="number" name="tempo_intervalo" value="60" class="input-pro text-center font-mono">
                     </div>
                     <div class="text-center">
-                        <label class="block text-[10px] font-black text-slate-400 uppercase mb-2">Entrada Ideal</label>
-                        <input type="time" name="h_ent" value="07:12" class="w-full bg-white border-2 border-slate-200 rounded-xl p-3 text-center font-mono font-bold text-slate-700">
+                        <label class="label-pro">Entrada Ideal</label>
+                        <input type="time" name="h_ent" value="07:12" class="input-pro text-center font-mono">
                     </div>
                 </div>
             </div>
         </div>
 
         <div class="pt-6">
-            <button type="submit" class="w-full bg-slate-900 hover:bg-blue-600 text-white font-black py-6 rounded-3xl shadow-xl hover:shadow-blue-500/20 transition-all transform active:scale-[0.98] flex items-center justify-center gap-4 group">
+            <button type="submit" class="w-full bg-slate-900 hover:bg-blue-600 text-white font-black py-4 rounded-xl shadow-xl hover:shadow-blue-500/20 transition-all transform active:scale-[0.98] flex items-center justify-center gap-4 group">
                 <span class="text-lg">FINALIZAR ADMISSÃO E CRIAR ACESSO</span>
                 <i class="fas fa-chevron-right group-hover:translate-x-2 transition-transform"></i>
             </button>
@@ -154,10 +154,5 @@
         }
     }
 </script>
-
-<style>
-    .animate-fade-in { animation: fadeIn 0.4s ease-out forwards; }
-    @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
-</style>
 {% endblock %}
 
