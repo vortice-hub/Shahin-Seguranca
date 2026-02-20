@@ -43,9 +43,6 @@ def dashboard_documentos():
     if not f_tipo or f_tipo in ['Holerite', 'Espelho']:
         for h in holerites_db:
             is_ponto = True if h.url_arquivo and 'espelhos' in h.url_arquivo else False
-            if f_tipo == 'Holerite' and is_ponto: continue
-            if f_tipo == 'Espelho' and not is_ponto: continue
-            
             tipo_label = "Espelho de Ponto" if is_ponto else "Holerite"
             historico.append({
                 'id': h.id, 'doc_type': 'holerite',
@@ -75,7 +72,7 @@ def baixar_holerite(id):
         return redirect(url_for('main.dashboard'))
     
     if not doc.url_arquivo:
-        flash("Arquivo não encontrado no servidor.", "error")
+        flash("Arquivo não encontrado no servidor de nuvem.", "error")
         return redirect(url_for('documentos.dashboard_documentos'))
 
     arquivo_bytes = baixar_bytes_storage(doc.url_arquivo)
@@ -102,7 +99,7 @@ def baixar_recibo(id):
         return redirect(url_for('main.dashboard'))
         
     if not doc.url_arquivo:
-        flash("Arquivo não encontrado.", "error")
+        flash("Recibo não encontrado na nuvem.", "error")
         return redirect(url_for('documentos.dashboard_documentos'))
 
     arquivo_bytes = baixar_bytes_storage(doc.url_arquivo)
@@ -132,6 +129,38 @@ def meus_documentos():
     for r in recibos:
         docs.append({'id': r.id, 'tipo': 'Recibo', 'titulo': 'Recibo', 'cor': 'emerald', 'icone': 'fa-receipt', 'data': r.created_at, 'visto': r.visualizado, 'rota': 'baixar_recibo'})
     return render_template('documentos/meus_documentos.html', docs=docs)
+
+@documentos_bp.route('/admin/revisao')
+@login_required
+@permission_required('DOCUMENTOS')
+def revisao_holerites():
+    pendentes = Holerite.query.filter_by(status='Revisao').all()
+    funcionarios = User.query.filter(User.username != '12345678900', User.username != 'terminal').order_by(User.real_name).all()
+    return render_template('documentos/revisao.html', pendentes=pendentes, funcionarios=funcionarios)
+
+@documentos_bp.route('/admin/revisao/vincular', methods=['POST'])
+@login_required
+def vincular_holerite():
+    h = Holerite.query.get(request.form.get('holerite_id'))
+    u_id = request.form.get('user_id')
+    if h and u_id: 
+        h.user_id = u_id
+        h.status = 'Enviado'
+        db.session.commit()
+        enviar_notificacao(u_id, f"Seu Holerite ({h.mes_referencia}) foi liberado.", "/documentos/meus-documentos")
+    return redirect(url_for('documentos.revisao_holerites'))
+
+@documentos_bp.route('/admin/auditoria')
+@login_required
+@permission_required('DOCUMENTOS')
+def revisao_auditoria():
+    usuarios = User.query.filter(User.username != '12345678900', User.username != 'terminal').order_by(User.real_name).all()
+    auditores = []
+    for u in usuarios:
+        assinaturas = AssinaturaDigital.query.filter_by(user_id=u.id).order_by(AssinaturaDigital.data_assinatura.desc()).all()
+        l = [{'id':a.id, 'tipo':a.tipo_documento, 'data':a.data_assinatura, 'ip':a.ip_address} for a in assinaturas]
+        auditores.append({'user': u, 'total': len(assinaturas), 'assinaturas': l})
+    return render_template('documentos/auditoria.html', auditores=auditores)
 
 @documentos_bp.route('/admin/holerites', methods=['GET', 'POST'])
 @login_required
@@ -203,4 +232,83 @@ def disparar_espelhos():
         except Exception as e: print(f"Erro: {e}")
     db.session.commit(); flash(f'{sucessos} espelhos gerados!', 'success')
     return redirect(url_for('documentos.dashboard_documentos'))
+
+# --- MÓDULO DE ATESTADOS ---
+@documentos_bp.route('/atestados/meus')
+@login_required
+def meus_atestados():
+    atestados = Atestado.query.filter_by(user_id=current_user.id).order_by(Atestado.data_envio.desc()).all()
+    return render_template('documentos/meus_atestados.html', atestados=atestados)
+
+@documentos_bp.route('/atestado/novo', methods=['GET', 'POST'])
+@login_required
+def enviar_atestado():
+    if request.method == 'POST':
+        file = request.files.get('arquivo_atestado')
+        if not file:
+            flash('Selecione um arquivo.', 'error')
+            return redirect(request.url)
+        try:
+            file_bytes = file.read()
+            caminho_blob = salvar_no_storage(file_bytes, f"atestados/{get_brasil_time().strftime('%Y-%m')}")
+            dados_ia = analisar_atestado_vision(file_bytes, current_user.real_name)
+            dt_inicio = datetime.strptime(dados_ia['data_inicio'], '%Y-%m-%d').date() if dados_ia['data_inicio'] else None
+            novo_at = Atestado(user_id=current_user.id, data_envio=get_brasil_time(), url_arquivo=caminho_blob,
+                              data_inicio_afastamento=dt_inicio, quantidade_dias=dados_ia['dias_afastamento'],
+                              texto_extraido=dados_ia['texto_bruto'], status='Revisao')
+            db.session.add(novo_at); db.session.commit()
+            flash('Atestado enviado com sucesso!', 'success')
+            return redirect(url_for('documentos.meus_atestados'))
+        except: flash('Erro ao processar atestado.', 'error')
+    return render_template('documentos/enviar_atestado.html')
+
+@documentos_bp.route('/admin/atestados')
+@login_required
+@permission_required('DOCUMENTOS')
+def gestao_atestados():
+    atestados = Atestado.query.order_by(Atestado.data_envio.desc()).all()
+    return render_template('documentos/gestao_atestados.html', atestados=atestados)
+
+@documentos_bp.route('/admin/atestados/<int:id>/avaliar', methods=['POST'])
+@login_required
+@permission_required('DOCUMENTOS')
+def avaliar_atestado(id):
+    at = Atestado.query.get_or_404(id)
+    acao = request.form.get('acao')
+    if acao == 'aprovar':
+        at.status = 'Aprovado'
+        enviar_notificacao(at.user_id, "Seu atestado foi APROVADO.", "/documentos/atestados/meus")
+    else:
+        at.status = 'Recusado'
+        at.motivo_recusa = request.form.get('motivo_recusa')
+        enviar_notificacao(at.user_id, "Seu atestado foi RECUSADO.", "/documentos/atestados/meus")
+    db.session.commit(); flash('Avaliação concluída.', 'success')
+    return redirect(url_for('documentos.gestao_atestados'))
+
+# --- MÓDULO DE RELATÓRIO DE FOLHA (EXCEL) ---
+@documentos_bp.route('/relatorio-folha')
+@login_required
+@permission_required('DOCUMENTOS')
+def relatorio_folha():
+    return render_template('documentos/relatorio_folha.html')
+
+@documentos_bp.route('/relatorio-folha/exportar', methods=['POST'])
+@login_required
+@permission_required('DOCUMENTOS')
+def exportar_relatorio_folha():
+    data_inicio = datetime.strptime(request.form.get('data_inicio'), '%Y-%m-%d').date()
+    data_fim = datetime.strptime(request.form.get('data_fim'), '%Y-%m-%d').date()
+    usuarios = User.query.filter(User.username != 'terminal').all()
+    dados = []
+    for u in usuarios:
+        pontos = PontoResumo.query.filter(PontoResumo.user_id == u.id, PontoResumo.data_referencia >= data_inicio, PontoResumo.data_referencia <= data_fim).all()
+        esperado = sum(p.minutos_esperados for p in pontos)
+        realizado = sum(p.minutos_trabalhados for p in pontos)
+        dados.append({'Nome': u.real_name, 'CPF': u.cpf, 'Horas Esperadas': format_minutes_to_hm(esperado), 'Horas Realizadas': format_minutes_to_hm(realizado), 'Saldo': format_minutes_to_hm(realizado - esperado)})
+    df = pd.DataFrame(dados)
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False)
+    output.seek(0)
+    return send_file(output, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', as_attachment=True, download_name="relatorio_folha.xlsx")
 
