@@ -111,158 +111,39 @@
 <script>
     document.addEventListener('DOMContentLoaded', async function() {
         try {
-            // 1. Busca os dados na API
             const response = await fetch('/api/analytics');
             const data = await response.json();
 
-            // Proteção visual caso o Python devolva um erro 500
             if (!response.ok) {
                 throw new Error(data.error || 'Falha de conexão com a API de dados.');
             }
 
-            // 2. Esconde o Loading e mostra o painel
             document.getElementById('loading-analytics').classList.add('hidden');
             document.getElementById('painel-analytics').classList.remove('hidden');
 
-            // ---------------------------------------------------------
-            // GRÁFICO 1: RAIO-X DA OPERAÇÃO (Donut)
-            // ---------------------------------------------------------
+            // GRÁFICO 1: RAIO-X
             const labelsRaioX = Object.keys(data.raio_x).length > 0 ? Object.keys(data.raio_x) : ['Sem dados hoje'];
             const valoresRaioX = Object.keys(data.raio_x).length > 0 ? Object.values(data.raio_x) : [1];
-            
-            // Mapeia cores padronizadas baseadas no status
-            const colorMap = {
-                'OK': '#10b981', 'Trabalhando': '#10b981', 
-                'Falta': '#ef4444', 
-                'Atestado': '#f59e0b', 
-                'Folga': '#3b82f6',
-                'Sem dados hoje': '#e2e8f0'
-            };
+            const colorMap = { 'OK': '#10b981', 'Trabalhando': '#10b981', 'Falta': '#ef4444', 'Atestado': '#f59e0b', 'Folga': '#3b82f6', 'Sem dados hoje': '#e2e8f0' };
             const bgColorsRaioX = labelsRaioX.map(l => colorMap[l] || '#8b5cf6');
+            new Chart(document.getElementById('chartRaioX'), { type: 'doughnut', data: { labels: labelsRaioX, datasets: [{ data: valoresRaioX, backgroundColor: bgColorsRaioX, borderWidth: 2, hoverOffset: 4 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' } }, cutout: '70%' } });
 
-            new Chart(document.getElementById('chartRaioX'), {
-                type: 'doughnut',
-                data: {
-                    labels: labelsRaioX,
-                    datasets: [{
-                        data: valoresRaioX,
-                        backgroundColor: bgColorsRaioX,
-                        borderWidth: 2,
-                        hoverOffset: 4
-                    }]
-                },
-                options: {
-                    responsive: true, maintainAspectRatio: false,
-                    plugins: { legend: { position: 'right' } },
-                    cutout: '70%'
-                }
-            });
+            // GRÁFICO 2: RISCO
+            new Chart(document.getElementById('chartRisco'), { type: 'line', data: { labels: data.risco.labels, datasets: [{ label: 'Faltas (Dias)', data: data.risco.faltas, borderColor: '#ef4444', backgroundColor: 'rgba(239, 68, 68, 0.1)', borderWidth: 3, tension: 0.4, fill: true }, { label: 'Horas Extras (h)', data: data.risco.extras, borderColor: '#3b82f6', backgroundColor: 'rgba(59, 130, 246, 0.1)', borderWidth: 3, tension: 0.4, fill: true }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top' } }, scales: { y: { beginAtZero: true, grid: { borderDash: [4, 4] } }, x: { grid: { display: false } } } } });
 
-            // ---------------------------------------------------------
-            // GRÁFICO 2: TERMÓMETRO DE RISCO (Linhas Faltas vs Extras)
-            // ---------------------------------------------------------
-            new Chart(document.getElementById('chartRisco'), {
-                type: 'line',
-                data: {
-                    labels: data.risco.labels,
-                    datasets: [
-                        {
-                            label: 'Faltas (Dias)',
-                            data: data.risco.faltas,
-                            borderColor: '#ef4444',
-                            backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                            borderWidth: 3,
-                            tension: 0.4,
-                            fill: true
-                        },
-                        {
-                            label: 'Horas Extras (h)',
-                            data: data.risco.extras,
-                            borderColor: '#3b82f6',
-                            backgroundColor: 'rgba(59, 130, 246, 0.1)',
-                            borderWidth: 3,
-                            tension: 0.4,
-                            fill: true
-                        }
-                    ]
-                },
-                options: {
-                    responsive: true, maintainAspectRatio: false,
-                    plugins: { legend: { position: 'top' } },
-                    scales: { y: { beginAtZero: true, grid: { borderDash: [4, 4] } }, x: { grid: { display: false } } }
-                }
-            });
+            // GRÁFICO 3: CUSTOS
+            new Chart(document.getElementById('chartCustos'), { type: 'bar', data: { labels: data.custos.labels.length > 0 ? data.custos.labels : ['Nenhuma saída'], datasets: [{ label: 'Peças Entregues', data: data.custos.data.length > 0 ? data.custos.data : [0], backgroundColor: '#8b5cf6', borderRadius: 4 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } }, x: { grid: { display: false } } } } });
 
-            // ---------------------------------------------------------
-            // GRÁFICO 3: CUSTOS EPI (Barras)
-            // ---------------------------------------------------------
-            new Chart(document.getElementById('chartCustos'), {
-                type: 'bar',
-                data: {
-                    labels: data.custos.labels.length > 0 ? data.custos.labels : ['Nenhuma saída'],
-                    datasets: [{
-                        label: 'Peças Entregues',
-                        data: data.custos.data.length > 0 ? data.custos.data : [0],
-                        backgroundColor: '#8b5cf6',
-                        borderRadius: 4
-                    }]
-                },
-                options: {
-                    responsive: true, maintainAspectRatio: false,
-                    plugins: { legend: { display: false } },
-                    scales: { y: { beginAtZero: true, ticks: { precision: 0 } }, x: { grid: { display: false } } }
-                }
-            });
-
-            // ---------------------------------------------------------
-            // GRÁFICO 4: ESCUDO LEGAL (Velocímetro / Meio Donut)
-            // ---------------------------------------------------------
+            // GRÁFICO 4: ESCUDO
             document.getElementById('escudo-valor').innerText = data.escudo + '%';
-            let corEscudo = '#10b981'; // Verde se > 80%
-            if (data.escudo < 50) corEscudo = '#ef4444'; // Vermelho se < 50%
-            else if (data.escudo < 80) corEscudo = '#f59e0b'; // Amarelo
-            
-            new Chart(document.getElementById('chartEscudo'), {
-                type: 'doughnut',
-                data: {
-                    labels: ['Lidos', 'Pendentes'],
-                    datasets: [{
-                        data: [data.escudo, 100 - data.escudo],
-                        backgroundColor: [corEscudo, '#f1f5f9'],
-                        borderWidth: 0
-                    }]
-                },
-                options: {
-                    responsive: true, maintainAspectRatio: false,
-                    circumference: 180, rotation: 270, // Faz o formato de arco (velocímetro)
-                    cutout: '80%',
-                    plugins: { legend: { display: false }, tooltip: { enabled: false } }
-                }
-            });
+            let corEscudo = '#10b981'; if (data.escudo < 50) corEscudo = '#ef4444'; else if (data.escudo < 80) corEscudo = '#f59e0b';
+            new Chart(document.getElementById('chartEscudo'), { type: 'doughnut', data: { labels: ['Lidos', 'Pendentes'], datasets: [{ data: [data.escudo, 100 - data.escudo], backgroundColor: [corEscudo, '#f1f5f9'], borderWidth: 0 }] }, options: { responsive: true, maintainAspectRatio: false, circumference: 180, rotation: 270, cutout: '80%', plugins: { legend: { display: false }, tooltip: { enabled: false } } } });
 
-            // ---------------------------------------------------------
-            // GRÁFICO 5: RADAR DE PONTUALIDADE (Barras)
-            // ---------------------------------------------------------
-            new Chart(document.getElementById('chartPontualidade'), {
-                type: 'bar',
-                data: {
-                    labels: ['No Horário', 'Atraso Leve', 'Atraso Crítico'],
-                    datasets: [{
-                        data: data.pontualidade,
-                        backgroundColor: ['#10b981', '#f59e0b', '#ef4444'],
-                        borderRadius: 4
-                    }]
-                },
-                options: {
-                    responsive: true, maintainAspectRatio: false,
-                    plugins: { legend: { display: false } },
-                    scales: { y: { beginAtZero: true, ticks: { precision: 0 } }, x: { grid: { display: false } } }
-                }
-            });
+            // GRÁFICO 5: PONTUALIDADE
+            new Chart(document.getElementById('chartPontualidade'), { type: 'bar', data: { labels: ['No Horário', 'Atraso Leve', 'Atraso Crítico'], datasets: [{ data: data.pontualidade, backgroundColor: ['#10b981', '#f59e0b', '#ef4444'], borderRadius: 4 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } }, x: { grid: { display: false } } } } });
 
         } catch (error) {
             console.error("Erro ao carregar Analytics:", error);
-            // Agora o HTML vai imprimir exatamente qual foi o erro matemático/backend que aconteceu
             document.getElementById('loading-analytics').innerHTML = `<div class="text-red-500 text-center"><i class="fas fa-exclamation-triangle mb-2 text-2xl"></i><p class="text-xs font-bold">Erro do Sistema:</p><p class="text-[10px] text-slate-500 mt-1">${error.message}</p></div>`;
         }
     });
