@@ -19,17 +19,53 @@
     <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
     
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+
+    <style>
+        /* CSS para controle de modos Browser vs PWA */
+        
+        /* 1. Comportamento no modo PWA (Mobile Forçado) */
+        body.is-pwa .mobile-header-bar { display: flex !important; }
+        body.is-pwa aside#sidebar { 
+            position: fixed !important; 
+            transform: translateX(-100%); 
+        }
+        body.is-pwa aside#sidebar.translate-x-0 { transform: translateX(0); }
+        body.is-pwa .desktop-header { display: none !important; }
+        body.is-pwa .browser-only { display: none !important; }
+
+        /* 2. Comportamento no modo Navegador (Desktop) */
+        body.is-browser .pwa-only { display: none !important; }
+        @media (min-width: 768px) {
+            body.is-browser .mobile-header-bar { display: none !important; }
+        }
+
+        /* Animações suaves para transição de modo */
+        .sidebar { transition: transform 0.3s ease-in-out; }
+    </style>
     
     <script>
+        // Função de Detecção de Modo
+        function aplicarModoVisual() {
+            const isPWA = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+            const body = document.body;
+
+            if (isPWA) {
+                body.classList.add('is-pwa');
+                console.log("Shahin: Modo PWA/Mobile Ativado");
+            } else {
+                body.classList.add('is-browser');
+                console.log("Shahin: Modo Navegador/Desktop Ativado");
+            }
+        }
+
         function toggleSidebar() {
             const sb = document.getElementById('sidebar');
             const ov = document.getElementById('overlay');
-            if (sb.classList.contains('-translate-x-full')) { 
-                sb.classList.remove('-translate-x-full'); ov.classList.remove('hidden'); 
-            } else { 
-                sb.classList.add('-translate-x-full'); ov.classList.add('hidden'); 
-            }
+            sb.classList.toggle('-translate-x-full');
+            sb.classList.toggle('translate-x-0');
+            ov.classList.toggle('hidden');
         }
+
         function toggleSubmenu(id, iconId) {
             const menu = document.getElementById(id);
             const icon = document.getElementById(iconId);
@@ -43,6 +79,7 @@
                 if(icon) icon.classList.add('rotate-180');
             }
         }
+
         function toggleNotificacoes() {
             const painel = document.getElementById('painel-notificacoes');
             painel.classList.toggle('hidden');
@@ -50,8 +87,10 @@
     </script>
 </head>
 <body class="bg-slate-100 text-slate-800">
+    <script>aplicarModoVisual(); // Executa imediatamente para evitar flash visual</script>
+
     {% if current_user.is_authenticated and not current_user.is_first_access %}
-    <div class="md:hidden bg-white border-b border-slate-200 p-4 flex justify-between items-center sticky top-0 z-40">
+    <div class="mobile-header-bar md:hidden bg-white border-b border-slate-200 p-4 flex justify-between items-center sticky top-0 z-40">
         <button onclick="toggleSidebar()" class="text-slate-600 focus:outline-none"><i class="fas fa-bars text-xl"></i></button>
         <span class="font-bold text-lg text-slate-800">Shahin</span>
         <button onclick="toggleNotificacoes()" class="relative text-slate-500 hover:text-blue-600 focus:outline-none w-8">
@@ -59,7 +98,7 @@
             <span id="badge-notif-mobile" class="hidden absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full border border-white">0</span>
         </button>
     </div>
-    <div id="overlay" onclick="toggleSidebar()" class="fixed inset-0 bg-black bg-opacity-50 z-40 hidden md:hidden"></div>
+    <div id="overlay" onclick="toggleSidebar()" class="fixed inset-0 bg-black bg-opacity-50 z-40 hidden"></div>
     {% endif %}
 
     <div class="{% if current_user.is_authenticated and not current_user.is_first_access %}flex h-screen overflow-hidden{% endif %}">
@@ -188,7 +227,7 @@
         <div class="flex-1 h-full overflow-y-auto bg-slate-50 relative w-full">
             
             {% if current_user.is_authenticated and not current_user.is_first_access %}
-            <div class="hidden md:flex justify-end items-center px-8 py-4 bg-white/50 border-b border-slate-200 sticky top-0 z-30 backdrop-blur-md">
+            <div class="desktop-header hidden md:flex justify-end items-center px-8 py-4 bg-white/50 border-b border-slate-200 sticky top-0 z-30 backdrop-blur-md">
                 <div class="relative">
                     <button onclick="toggleNotificacoes()" class="relative text-slate-500 hover:text-blue-600 focus:outline-none transition group bg-white p-2.5 rounded-full border border-slate-200 shadow-sm hover:shadow">
                         <i class="fas fa-bell text-lg" id="bell-icon-desktop"></i>
@@ -219,7 +258,7 @@
                 {% block content %}{% endblock %}
             </div>
             {% if current_user.is_authenticated and not current_user.is_first_access %}
-            <footer class="py-6 text-center text-xs text-slate-400">&copy; 2026 Shahin Gestão</footer>
+            <footer class="py-6 text-center text-xs text-slate-400 browser-only">&copy; 2026 Shahin Gestão</footer>
             {% endif %}
         </div>
     </div>
@@ -259,15 +298,15 @@
             const iMobile = document.getElementById('bell-icon-mobile');
 
             if (qtd > 0) {
-                bDesktop.innerText = qtd; bDesktop.classList.remove('hidden'); bDesktop.style.transform = 'scale(1)';
-                bMobile.innerText = qtd; bMobile.classList.remove('hidden');
-                iDesktop.classList.add('bell-ring', 'text-blue-500');
-                iMobile.classList.add('bell-ring', 'text-blue-500');
+                bDesktop.innerText = qtd; if(bDesktop) bDesktop.classList.remove('hidden'); if(bDesktop) bDesktop.style.transform = 'scale(1)';
+                bMobile.innerText = qtd; if(bMobile) bMobile.classList.remove('hidden');
+                if(iDesktop) iDesktop.classList.add('bell-ring', 'text-blue-500');
+                if(iMobile) iMobile.classList.add('bell-ring', 'text-blue-500');
             } else {
-                bDesktop.classList.add('hidden'); bDesktop.style.transform = 'scale(0)';
-                bMobile.classList.add('hidden');
-                iDesktop.classList.remove('bell-ring', 'text-blue-500');
-                iMobile.classList.remove('bell-ring', 'text-blue-500');
+                if(bDesktop) bDesktop.classList.add('hidden'); if(bDesktop) bDesktop.style.transform = 'scale(0)';
+                if(bMobile) bMobile.classList.add('hidden');
+                if(iDesktop) iDesktop.classList.remove('bell-ring', 'text-blue-500');
+                if(iMobile) iMobile.classList.remove('bell-ring', 'text-blue-500');
             }
         }
 
@@ -310,7 +349,6 @@
     </script>
     
     <script>
-        // 1. Regista o Motor Offline
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', function() {
                 navigator.serviceWorker.register('/static/service-worker.js').then(function(registration) {
@@ -321,29 +359,22 @@
             });
         }
 
-        // 2. Lógica do Botão de Instalação Nativo
         let deferredPrompt;
         const installContainer = document.getElementById('pwa-install-container');
         const installBtn = document.getElementById('pwa-install-btn');
 
-        // Este evento é disparado pelo Chrome/Safari silenciosamente quando ele acha que o site é instalável
         window.addEventListener('beforeinstallprompt', (e) => {
-            // Impede o pop-up automático
             e.preventDefault();
-            // Guarda o evento para dispararmos quando o utilizador clicar no nosso botão
             deferredPrompt = e;
-            // Mostra o botão Azul elegante no menu lateral
             if(installContainer) installContainer.classList.remove('hidden');
         });
 
         if(installBtn) {
             installBtn.addEventListener('click', async () => {
                 if (deferredPrompt !== null) {
-                    // Dispara a janela nativa do telemóvel
                     deferredPrompt.prompt();
                     const { outcome } = await deferredPrompt.userChoice;
                     if (outcome === 'accepted') {
-                        console.log('Utilizador aceitou a instalação!');
                         installContainer.classList.add('hidden');
                     }
                     deferredPrompt = null;
@@ -351,7 +382,6 @@
             });
         }
 
-        // Se o utilizador já instalou, garantimos que o botão some
         window.addEventListener('appinstalled', () => {
             if(installContainer) installContainer.classList.add('hidden');
             console.log('Shahin App instalado com sucesso!');

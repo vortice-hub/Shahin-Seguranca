@@ -1,6 +1,6 @@
 import os
 import logging
-from flask import Flask
+from flask import Flask, render_template
 from app.extensions import db, login_manager, csrf, migrate
 from config import config_map
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -38,6 +38,19 @@ def create_app():
     def inject_permissions():
         from app.utils import has_permission
         return dict(has_permission=has_permission)
+
+    # --- INTERCETORES DE ERRO GLOBAIS ---
+    @app.errorhandler(404)
+    def page_not_found(e):
+        return render_template('errors/404.html'), 404
+
+    @app.errorhandler(403)
+    def forbidden(e):
+        return render_template('errors/403.html'), 403
+
+    @app.errorhandler(500)
+    def internal_server_error(e):
+        return render_template('errors/500.html'), 500
 
     with app.app_context():
         from app.auth.routes import auth_bp
