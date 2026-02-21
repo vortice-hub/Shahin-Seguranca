@@ -10,7 +10,7 @@
     </div>
     
     <div class="p-6">
-        <form action="{{ url_for('documentos.enviar_atestado') }}" method="POST" enctype="multipart/form-data">
+        <form id="form-atestado" action="{{ url_for('documentos.enviar_atestado') }}" method="POST" enctype="multipart/form-data">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
             
             <div class="mb-6">
@@ -22,12 +22,35 @@
                 <p class="text-[10px] text-slate-500 mt-3"><i class="fas fa-info-circle text-blue-400 mr-1"></i> Certifique-se de que o seu nome, a data e a quantidade de dias estão bem visíveis na foto.</p>
             </div>
             
-            <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl transition shadow-md flex items-center justify-center gap-2">
-                <i class="fas fa-paper-plane"></i> ENVIAR ATESTADO
+            <button type="submit" id="btn-submit-atestado" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl transition shadow-md flex items-center justify-center gap-2">
+                <i id="icon-submit" class="fas fa-paper-plane"></i> 
+                <span id="text-submit">ENVIAR ATESTADO</span>
             </button>
             <a href="{{ url_for('documentos.meus_documentos') }}" class="block text-center w-full text-slate-400 hover:text-slate-600 text-xs font-bold mt-4 transition">CANCELAR</a>
         </form>
     </div>
 </div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const form = document.getElementById('form-atestado');
+        const btnSubmit = document.getElementById('btn-submit-atestado');
+        const iconSubmit = document.getElementById('icon-submit');
+        const textSubmit = document.getElementById('text-submit');
+
+        form.addEventListener('submit', function() {
+            // Desabilita o botão para evitar múltiplos envios
+            btnSubmit.disabled = true;
+            btnSubmit.classList.remove('hover:bg-blue-700');
+            btnSubmit.classList.add('opacity-75', 'cursor-not-allowed');
+
+            // Troca o ícone para um spinner rodando
+            iconSubmit.className = 'fas fa-spinner fa-spin';
+
+            // Altera o texto exatamente como solicitado
+            textSubmit.innerText = 'Enviando atestado, aguarde...';
+        });
+    });
+</script>
 {% endblock %}
 

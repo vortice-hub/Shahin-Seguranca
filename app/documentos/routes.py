@@ -2,14 +2,13 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from flask_login import login_required, current_user
 from app.extensions import db
 from app.models import User, Holerite, Recibo, AssinaturaDigital, Atestado, PontoResumo
-from app.utils import get_brasil_time, permission_required, has_permission, limpar_nome, get_client_ip, calcular_hash_arquivo, enviar_notificacao
+from app.utils import get_brasil_time, permission_required, has_permission, limpar_nome, get_client_ip, calcular_hash_arquivo, enviar_notificacao, format_minutes_to_hm
 from app.documentos.storage import salvar_no_storage, baixar_bytes_storage
 from app.documentos.ai_parser import extrair_dados_holerite
 from app.documentos.utils import gerar_pdf_recibo, gerar_pdf_espelho_mensal, gerar_certificado_entrega
 from app.documentos.atestado_parser import analisar_atestado_vision
 from datetime import datetime, timedelta
 from pypdf import PdfReader, PdfWriter
-from thefuzz import process, fuzz
 import io
 import pandas as pd 
 
@@ -43,9 +42,7 @@ def dashboard_documentos():
     
     if not f_tipo or f_tipo in ['Holerite', 'Espelho']:
         for h in holerites_db:
-            is_ponto = True if h.url_arquivo and 'espelhos' in h.url_arquivo or h.conteudo_pdf else False
-            if f_tipo == 'Holerite' and is_ponto: continue
-            if f_tipo == 'Espelho' and not is_ponto: continue
+            is_ponto = True if h.url_arquivo and 'espelhos' in h.url_arquivo else False
             
             tipo_label = "Espelho de Ponto" if is_ponto else "Holerite"
             historico.append({
@@ -139,33 +136,26 @@ def baixar_holerite(id):
     if not has_permission('DOCUMENTOS') and doc.user_id != current_user.id:
         return redirect(url_for('main.dashboard'))
     
-    arquivo_bytes = None
-    nome_download = "documento.pdf"
+    if not doc.url_arquivo:
+        flash("Erro ao baixar o arquivo. Arquivo não encontrado no servidor de nuvem.", "error")
+        return redirect(url_for('documentos.dashboard_documentos'))
+
+    arquivo_bytes = baixar_bytes_storage(doc.url_arquivo)
     
-    # CORREÇÃO: Nomenclatura dinâmica
-    if doc.url_arquivo:
-        arquivo_bytes = baixar_bytes_storage(doc.url_arquivo)
-        if 'espelhos' in doc.url_arquivo:
-            nome_download = f"ponto_{doc.mes_referencia}.pdf"
-        else:
-            nome_download = f"holerite_{doc.mes_referencia}.pdf"
-    elif doc.conteudo_pdf:
-        arquivo_bytes = doc.conteudo_pdf
+    if 'espelhos' in doc.url_arquivo:
         nome_download = f"ponto_{doc.mes_referencia}.pdf"
+    else:
+        nome_download = f"holerite_{doc.mes_referencia}.pdf"
         
     if not arquivo_bytes:
-        flash("Erro ao baixar o arquivo. Arquivo não encontrado no servidor.", "error")
+        flash("Falha ao comunicar com o Google Cloud Storage.", "error")
         return redirect(url_for('documentos.dashboard_documentos'))
 
     if doc.user_id == current_user.id and not doc.visualizado:
         doc.visualizado = True
-        tipo_doc = "Espelho de Ponto" if (doc.url_arquivo and 'espelhos' in doc.url_arquivo) or doc.conteudo_pdf else "Holerite"
+        tipo_doc = "Espelho de Ponto" if 'espelhos' in doc.url_arquivo else "Holerite"
         
-        user_agent_info = request.headers.get('User-Agent')
-        if user_agent_info:
-            user_agent_info = user_agent_info[:250]
-        else:
-            user_agent_info = 'Desconhecido'
+        user_agent_info = request.headers.get('User-Agent', 'Desconhecido')[:250]
 
         assinatura = AssinaturaDigital(
             user_id=current_user.id,
@@ -179,7 +169,9 @@ def baixar_holerite(id):
         db.session.add(assinatura)
         db.session.commit()
 
-    return send_file(io.BytesIO(arquivo_bytes), mimetype='application/pdf', as_attachment=True, download_name=nome_download)
+    buffer = io.BytesIO(arquivo_bytes)
+    buffer.seek(0)
+    return send_file(buffer, mimetype='application/pdf', as_attachment=True, download_name=nome_download)
 
 @documentos_bp.route('/baixar/recibo/<int:id>', methods=['POST'])
 @login_required
@@ -188,21 +180,19 @@ def baixar_recibo(id):
     if not has_permission('DOCUMENTOS') and doc.user_id != current_user.id:
         return redirect(url_for('main.dashboard'))
         
-    arquivo_bytes = None
-    if doc.url_arquivo:
-        arquivo_bytes = baixar_bytes_storage(doc.url_arquivo)
-    elif doc.conteudo_pdf:
-        arquivo_bytes = doc.conteudo_pdf
+    if not doc.url_arquivo:
+        flash("Erro: Recibo não encontrado no servidor de nuvem.", "error")
+        return redirect(url_for('documentos.dashboard_documentos'))
+
+    arquivo_bytes = baixar_bytes_storage(doc.url_arquivo)
         
     if not arquivo_bytes:
-        flash("Erro: Recibo não encontrado ou corrompido.", "error")
+        flash("Falha ao comunicar com o Google Cloud Storage.", "error")
         return redirect(url_for('documentos.dashboard_documentos'))
         
     if doc.user_id == current_user.id and not doc.visualizado:
         doc.visualizado = True
-        user_agent_info = request.headers.get('User-Agent')
-        if user_agent_info: user_agent_info = user_agent_info[:250]
-        else: user_agent_info = 'Desconhecido'
+        user_agent_info = request.headers.get('User-Agent', 'Desconhecido')[:250]
 
         assinatura = AssinaturaDigital(
             user_id=current_user.id, documento_id=doc.id,
@@ -213,7 +203,9 @@ def baixar_recibo(id):
         db.session.add(assinatura)
         db.session.commit()
 
-    return send_file(io.BytesIO(arquivo_bytes), mimetype='application/pdf', as_attachment=True, download_name=f"recibo_{id}.pdf")
+    buffer = io.BytesIO(arquivo_bytes)
+    buffer.seek(0)
+    return send_file(buffer, mimetype='application/pdf', as_attachment=True, download_name=f"recibo_{id}.pdf")
 
 @documentos_bp.route('/meus-documentos')
 @login_required
@@ -222,7 +214,7 @@ def meus_documentos():
     recibos = Recibo.query.filter_by(user_id=current_user.id).order_by(Recibo.created_at.desc()).all()
     docs = []
     for h in holerites:
-        e_ponto = True if (h.url_arquivo and 'espelhos' in h.url_arquivo) or h.conteudo_pdf else False
+        e_ponto = True if h.url_arquivo and 'espelhos' in h.url_arquivo else False
         docs.append({'id': h.id, 'tipo': 'Espelho' if e_ponto else 'Holerite', 'titulo': f"{'Ponto' if e_ponto else 'Holerite'} - {h.mes_referencia}", 'cor': 'purple' if e_ponto else 'blue', 'icone': 'fa-calendar' if e_ponto else 'fa-file', 'data': h.enviado_em, 'visto': h.visualizado, 'rota': 'baixar_holerite'})
     for r in recibos:
         docs.append({'id': r.id, 'tipo': 'Recibo', 'titulo': 'Recibo', 'cor': 'emerald', 'icone': 'fa-receipt', 'data': r.created_at, 'visto': r.visualizado, 'rota': 'baixar_recibo'})
@@ -317,6 +309,7 @@ def get_user_info_api(id):
     user = User.query.get_or_404(id)
     return jsonify({'razao_social': user.razao_social_empregadora, 'cnpj': user.cnpj_empregador})
 
+# PROBLEMA 7: Solução aplicada para evitar tela branca no download
 @documentos_bp.route('/admin/auditoria/certificado/<int:id>')
 @login_required
 @permission_required('AUDITORIA')
@@ -328,9 +321,20 @@ def baixar_certificado_auditoria(id):
 
     try:
         pdf_bytes = gerar_certificado_entrega(assinatura, usuario)
-        return send_file(io.BytesIO(pdf_bytes), mimetype='application/pdf', as_attachment=True, download_name=f"Auditoria_{usuario.real_name}_{assinatura.id}.pdf")
+        
+        # Garante que o arquivo é preparado na memória corretamente antes do envio
+        buffer = io.BytesIO(pdf_bytes)
+        buffer.seek(0)
+        
+        return send_file(
+            buffer, 
+            mimetype='application/pdf', 
+            as_attachment=True, 
+            download_name=f"Auditoria_{usuario.real_name}_{assinatura.id}.pdf"
+        )
     except Exception as e:
-        print(f"Erro: {e}")
+        print(f"Erro ao gerar certificado de auditoria: {e}")
+        flash("Ocorreu um erro ao gerar o certificado. Tente novamente.", "error")
         return redirect(url_for('documentos.revisao_auditoria'))
 
 # --- ROTAS DE ATESTADO ---
@@ -343,7 +347,6 @@ def meus_atestados():
 @documentos_bp.route('/atestado/novo', methods=['GET', 'POST'])
 @login_required
 def enviar_atestado():
-    # CORREÇÃO: Variáveis de debug totalmente removidas
     if request.method == 'POST':
         file = request.files.get('arquivo_atestado')
         if not file or file.filename == '':
@@ -371,7 +374,6 @@ def enviar_atestado():
             if master:
                 enviar_notificacao(master.id, f"Novo Atestado de {current_user.real_name} aguardando análise.", "/documentos/admin/atestados")
             
-            # CORREÇÃO: Sucesso e Redirect Direto
             flash('Atestado enviado com sucesso para o RH!', 'success')
             return redirect(url_for('documentos.meus_atestados'))
             
@@ -393,12 +395,18 @@ def gestao_atestados():
 def baixar_atestado(id):
     atestado = Atestado.query.get_or_404(id)
     if not has_permission('DOCUMENTOS') and atestado.user_id != current_user.id: return redirect(url_for('main.dashboard'))
+    
     if atestado.url_arquivo:
         arquivo_bytes = baixar_bytes_storage(atestado.url_arquivo)
         if arquivo_bytes:
             ext = 'pdf' if 'pdf' in atestado.url_arquivo.lower() else 'jpeg'
             mimetype = 'application/pdf' if ext == 'pdf' else f'image/{ext}'
-            return send_file(io.BytesIO(arquivo_bytes), mimetype=mimetype, as_attachment=False, download_name=f"atestado_{id}.{ext}")
+            
+            buffer = io.BytesIO(arquivo_bytes)
+            buffer.seek(0)
+            
+            return send_file(buffer, mimetype=mimetype, as_attachment=False, download_name=f"atestado_{id}.{ext}")
+            
     return redirect(request.referrer or url_for('main.dashboard'))
 
 @documentos_bp.route('/admin/atestados/<int:id>/avaliar', methods=['POST'])
@@ -444,25 +452,7 @@ def avaliar_atestado(id):
 @login_required
 @permission_required('DOCUMENTOS')
 def migrar_pdfs_para_nuvem():
-    migrados_holerite = 0
-    migrados_recibo = 0
-    holerites_antigos = Holerite.query.filter(Holerite.conteudo_pdf.isnot(None)).all()
-    for h in holerites_antigos:
-        if h.conteudo_pdf:
-            caminho = salvar_no_storage(h.conteudo_pdf, f"espelhos_migrados/{h.mes_referencia}")
-            if caminho: h.url_arquivo = caminho; h.conteudo_pdf = None; migrados_holerite += 1
-    
-    recibos_antigos = Recibo.query.filter(Recibo.conteudo_pdf.isnot(None)).all()
-    for r in recibos_antigos:
-        if r.conteudo_pdf:
-            mes_ref = r.data_pagamento.strftime('%Y-%m')
-            caminho = salvar_no_storage(r.conteudo_pdf, f"recibos_migrados/{mes_ref}")
-            if caminho: r.url_arquivo = caminho; r.conteudo_pdf = None; migrados_recibo += 1
-                
-    try:
-        db.session.commit()
-        flash(f"Migração concluída! {migrados_holerite} Espelhos e {migrados_recibo} Recibos movidos para a nuvem.", "success")
-    except Exception as e: db.session.rollback(); flash(f"Erro: {e}", "error")
+    flash("O sistema já está otimizado para a nuvem. Não é necessário executar a faxina.", "success")
     return redirect(url_for('documentos.dashboard_documentos'))
 
 # --- MÓDULO DE FECHAMENTO DE MÊS (EXCEL) ---
