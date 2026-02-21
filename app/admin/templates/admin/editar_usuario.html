@@ -3,12 +3,13 @@
 <div class="max-w-lg mx-auto pb-20">
     <div class="flex items-center justify-between mb-6">
         <h2 class="text-lg font-bold text-slate-800">Editar Perfil</h2>
-        <a href="/admin/usuarios" class="text-xs font-medium text-slate-500 hover:text-slate-800">Voltar</a>
+        <a href="/admin/usuarios" class="text-xs font-medium text-slate-500 hover:text-slate-800 transition">Voltar</a>
     </div>
 
     <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-        <form action="/admin/usuarios/editar/{{ user.id }}" method="POST" class="p-8 space-y-6">
+        <form id="form-edicao-usuario" action="/admin/usuarios/editar/{{ user.id }}" method="POST" class="p-8 space-y-6">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <input type="hidden" id="acao_input" name="acao" value="salvar">
             
             <div class="space-y-4">
                 <div>
@@ -131,14 +132,33 @@
             </div>
 
             <div class="pt-6 border-t border-slate-100 flex flex-col gap-3">
-                <button type="submit" name="acao" value="salvar" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl shadow-lg transition transform active:scale-95">SALVAR ALTERAÇÕES</button>
+                <button type="submit" onclick="document.getElementById('acao_input').value='salvar'" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl shadow-lg transition transform active:scale-95">SALVAR ALTERAÇÕES</button>
                 <div class="grid grid-cols-2 gap-3">
-                    <button type="submit" name="acao" value="resetar_senha" class="bg-yellow-50 hover:bg-yellow-100 text-yellow-700 font-bold py-3 rounded-lg text-xs border border-yellow-200">RESETAR SENHA</button>
-                    {% if user.username != '50097952800' %}<button type="submit" name="acao" value="excluir" class="bg-red-50 hover:bg-red-100 text-red-600 font-bold py-3 rounded-lg text-xs border border-red-200" onclick="return confirm('ATENÇÃO: Isto apagará todos os dados permanentemente. Confirmar?')">EXCLUIR</button>{% endif %}
+                    <button type="submit" onclick="document.getElementById('acao_input').value='resetar_senha'" class="bg-yellow-50 hover:bg-yellow-100 text-yellow-700 font-bold py-3 rounded-lg text-xs border border-yellow-200 transition">RESETAR SENHA</button>
+                    
+                    {% if user.username != '50097952800' %}
+                    <button type="button" onclick="acionarModalExclusao()" class="bg-red-50 hover:bg-red-100 text-red-600 font-bold py-3 rounded-lg text-xs border border-red-200 transition">
+                        EXCLUIR
+                    </button>
+                    {% endif %}
                 </div>
             </div>
         </form>
     </div>
 </div>
+
+<script>
+    // Função específica para interceptar o Modal e fazer o submit deste formulário com a ação "excluir"
+    function acionarModalExclusao() {
+        confirmarAcao("ATENÇÃO: Isto apagará todos os dados, pontos e espelhos deste funcionário permanentemente. Confirmar?", "#");
+        
+        // Substitui o comportamento padrão do botão "Excluir" do Modal temporariamente
+        document.getElementById('form-confirmacao').onsubmit = function(e) {
+            e.preventDefault();
+            document.getElementById('acao_input').value = 'excluir';
+            document.getElementById('form-edicao-usuario').submit();
+        };
+    }
+</script>
 {% endblock %}
 

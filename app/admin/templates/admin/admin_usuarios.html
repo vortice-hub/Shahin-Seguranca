@@ -30,9 +30,9 @@
                 <div class="text-xs font-mono text-slate-500">CPF: {{ p.cpf }}</div>
                 <div class="text-[10px] text-slate-400 mt-1">{{ p.cargo }}</div>
             </div>
-            <a href="/admin/liberar-acesso/excluir/{{ p.id }}" class="text-red-400 hover:text-red-600 p-2" onclick="return confirm('Remover da lista de espera?')">
+            <button type="button" onclick="confirmarAcao('Tem certeza que deseja remover {{ p.nome_previsto }} da lista de espera? Esta ação não pode ser desfeita.', '/admin/liberar-acesso/excluir/{{ p.id }}')" class="text-red-400 hover:text-red-600 p-2 cursor-pointer transition">
                 <i class="fas fa-trash"></i>
-            </a>
+            </button>
         </div>
         {% endfor %}
     </div>

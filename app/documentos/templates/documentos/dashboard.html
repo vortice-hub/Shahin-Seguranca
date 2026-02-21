@@ -101,10 +101,10 @@
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                             <button type="submit" class="text-slate-400 hover:text-blue-600 p-2" title="Visualizar"><i class="fas fa-file-pdf text-lg"></i></button>
                         </form>
-                        <form action="{{ url_for('documentos.excluir_documento', doc_type=doc['doc_type'], id=doc['id']) }}" method="POST" onsubmit="return confirm('ATENÇÃO: Deseja realmente excluir este documento? O funcionário perderá o acesso.');">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                            <button type="submit" class="text-slate-300 hover:text-red-500 p-2 transition" title="Excluir"><i class="fas fa-trash-alt text-lg"></i></button>
-                        </form>
+                        
+                        <button type="button" onclick="confirmarAcao('ATENÇÃO: Deseja realmente excluir este documento? O funcionário perderá o acesso.', '{{ url_for('documentos.excluir_documento', doc_type=doc['doc_type'], id=doc['id']) }}')" class="text-slate-300 hover:text-red-500 p-2 transition cursor-pointer" title="Excluir">
+                            <i class="fas fa-trash-alt text-lg"></i>
+                        </button>
                     </td>
                 </tr>
                 {% else %}
