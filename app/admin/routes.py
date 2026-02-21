@@ -1,103 +1,57 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash
-from flask_login import login_required, current_user
+from flask_login import login_required
 from sqlalchemy import func, text
 import io
 import logging
-import random
-import string
 from datetime import time, datetime, date
 import pandas as pd 
 
-# Importações do Projeto - Adicionadas TODAS as tabelas dependentes para limpeza
 from app.extensions import db
-from app.models import User, PreCadastro, PontoResumo, PontoAjuste, PontoRegistro, Holerite, Recibo, AssinaturaDigital, Atestado, PeriodoAquisitivo, SolicitacaoAusencia, SolicitacaoUniforme, Notificacao, PushSubscription
-from app.utils import (
-    calcular_dia, 
-    get_brasil_time, 
-    format_minutes_to_hm, 
-    time_to_minutes,
-    gerar_login_automatico,
-    master_required,
-    permission_required
-)
+from app.models import (User, PreCadastro, PontoResumo, PontoAjuste, PontoRegistro, 
+                        Holerite, Recibo)
+from app.utils import (calcular_dia, format_minutes_to_hm, master_required, permission_required)
+
+# --- IMPORTAÇÃO DOS NOVOS SERVICES E REPOSITORIES ---
+from app.services.user_service import UserService
+from app.repositories.user_repository import UserRepository, PreCadastroRepository
 
 admin_bp = Blueprint('admin', __name__, template_folder='templates', url_prefix='/admin')
 logger = logging.getLogger(__name__)
 
-# --- GESTÃO DE UTILIZADORES ---
+# ==============================================================================
+# GESTÃO DE UTILIZADORES (Refatorado para Phase 3: Services)
+# ==============================================================================
 
 @admin_bp.route('/usuarios/novo', methods=['GET', 'POST'])
 @login_required
 @permission_required('USUARIOS')
 def novo_usuario():
-    # Busca todos os utilizadores para listar como possíveis gestores no formulário
-    gestores = User.query.filter(User.username != '12345678900', User.username != 'terminal').order_by(User.real_name).all()
+    user_repo = UserRepository()
+    gestores = user_repo.get_gestores()
     
     if request.method == 'POST':
+        user_service = UserService()
         try:
-            real_name = request.form.get('real_name')
-            cpf = request.form.get('cpf', '').replace('.', '').replace('-', '').strip()
-            
-            if not real_name or not cpf:
-                flash('Nome e CPF são obrigatórios.', 'error')
-                return redirect(url_for('admin.novo_usuario'))
-
-            if User.query.filter_by(cpf=cpf).first() or PreCadastro.query.filter_by(cpf=cpf).first():
-                flash('CPF já cadastrado!', 'error')
-                return redirect(url_for('admin.novo_usuario'))
-
-            dt_adm_str = request.form.get('data_admissao')
-            dt_admissao = datetime.strptime(dt_adm_str, '%Y-%m-%d').date() if dt_adm_str else None
-
-            carga_hm = request.form.get('carga_horaria') or '08:48'
-            carga_minutos = time_to_minutes(carga_hm)
-            intervalo_min = int(request.form.get('tempo_intervalo') or 60)
-            
-            # Captura a Estrutura Organizacional
-            cpf_gestor = request.form.get('cpf_gestor', '').replace('.', '').replace('-', '').strip()
-
-            novo_pre = PreCadastro(
-                cpf=cpf,
-                nome_previsto=real_name,
-                cargo=request.form.get('role'),
-                departamento=request.form.get('departamento'),
-                cpf_gestor=cpf_gestor if cpf_gestor else None,
-                salario=float(request.form.get('salario') or 0),
-                razao_social=request.form.get('razao_social'),
-                cnpj=request.form.get('cnpj'),
-                data_admissao=dt_admissao,
-                carga_horaria=carga_minutos,
-                tempo_intervalo=intervalo_min,
-                inicio_jornada_ideal=request.form.get('h_ent') or '08:00',
-                escala=request.form.get('escala'),
-                data_inicio_escala=request.form.get('dt_escala') if request.form.get('dt_escala') else None
-            )
-            
-            db.session.add(novo_pre)
-            db.session.commit()
-            return render_template('admin/sucesso_usuario.html', nome_real=real_name, cpf=cpf)
-            
+            nome_real, cpf = user_service.criar_pre_cadastro(request.form)
+            return render_template('admin/sucesso_usuario.html', nome_real=nome_real, cpf=cpf)
+        except ValueError as ve:
+            flash(str(ve), 'error')
         except Exception as e:
-            db.session.rollback()
             flash(f'Erro interno: {str(e)}', 'error')
             
     return render_template('admin/novo_usuario.html', gestores=gestores)
 
 @admin_bp.route('/usuarios')
 @login_required
+@permission_required('USUARIOS')
 def gerenciar_usuarios():
-    from app.utils import has_permission
-    if not has_permission('USUARIOS'):
-        flash('Sem acesso à gestão de utilizadores.', 'error')
-        return redirect(url_for('main.dashboard'))
-
     page = request.args.get('page', 1, type=int)
-    users_pagination = User.query.filter(
-        User.username != '12345678900', 
-        User.username != 'terminal'
-    ).order_by(User.real_name).paginate(page=page, per_page=15, error_out=False)
     
-    pendentes = PreCadastro.query.order_by(PreCadastro.nome_previsto).all()
+    user_repo = UserRepository()
+    pre_repo = PreCadastroRepository()
+
+    users_pagination = user_repo.get_active_users_paginated(page)
+    pendentes = pre_repo.get_all_ordered()
     
     return render_template('admin/admin_usuarios.html', users_pagination=users_pagination, pendentes=pendentes)
 
@@ -105,101 +59,68 @@ def gerenciar_usuarios():
 @login_required
 @permission_required('USUARIOS')
 def excluir_pre_cadastro(id):
-    pre_cadastro = PreCadastro.query.get_or_404(id)
+    pre_repo = PreCadastroRepository()
+    pre_cadastro = pre_repo.get_by_id(id)
+    
+    if not pre_cadastro:
+        flash('Pré-cadastro não encontrado.', 'error')
+        return redirect(url_for('admin.gerenciar_usuarios'))
+        
     try:
         nome = pre_cadastro.nome_previsto
-        db.session.delete(pre_cadastro)
-        db.session.commit()
-        flash(f'O pré-cadastro de {nome} foi removido com sucesso da fila.', 'success')
+        pre_repo.delete(pre_cadastro)
+        pre_repo.commit()
+        flash(f'O pré-cadastro de {nome} foi removido com sucesso.', 'success')
     except Exception as e:
-        db.session.rollback()
-        flash(f'Erro ao tentar remover: {str(e)}', 'error')
+        pre_repo.rollback()
+        flash(f'Erro ao remover: {str(e)}', 'error')
     
     return redirect(url_for('admin.gerenciar_usuarios'))
 
 @admin_bp.route('/usuarios/editar/<int:id>', methods=['GET', 'POST'])
 @login_required
+@permission_required('USUARIOS')
 def editar_usuario(id):
-    from app.utils import has_permission
-    if not has_permission('USUARIOS'):
-        flash('Sem acesso.', 'error')
-        return redirect(url_for('main.dashboard'))
+    user_repo = UserRepository()
+    user = user_repo.get_by_id(id)
+    
+    if not user:
+        flash('Utilizador não encontrado.', 'error')
+        return redirect(url_for('admin.gerenciar_usuarios'))
 
-    user = User.query.get_or_404(id)
     user_carga_hm = format_minutes_to_hm(user.carga_horaria or 528)
-    gestores = User.query.filter(User.username != '12345678900', User.username != 'terminal', User.id != user.id).order_by(User.real_name).all()
+    gestores = user_repo.get_gestores(exclude_id=user.id)
     
     if request.method == 'POST':
+        user_service = UserService()
         acao = request.form.get('acao')
+        
         try:
             if acao == 'excluir':
-                if user.username == '50097952800' or user.username == 'Thaynara':
-                    flash('Impossível excluir Master.', 'error')
-                else: 
-                    # 1. Liberta os funcionários que eram subordinados dele
-                    subordinados = User.query.filter_by(gestor_id=user.id).all()
-                    for sub in subordinados: sub.gestor_id = None
-                    
-                    # 2. Limpeza Profunda: Apaga TODAS as dependências do funcionário no banco
-                    AssinaturaDigital.query.filter_by(user_id=user.id).delete()
-                    Atestado.query.filter_by(user_id=user.id).delete()
-                    Notificacao.query.filter_by(user_id=user.id).delete()
-                    PushSubscription.query.filter_by(user_id=user.id).delete()
-                    PontoAjuste.query.filter_by(user_id=user.id).delete()
-                    PeriodoAquisitivo.query.filter_by(user_id=user.id).delete()
-                    SolicitacaoAusencia.query.filter_by(user_id=user.id).delete()
-                    SolicitacaoUniforme.query.filter_by(user_id=user.id).delete()
-                    PontoRegistro.query.filter_by(user_id=user.id).delete()
-                    PontoResumo.query.filter_by(user_id=user.id).delete()
-                    Holerite.query.filter_by(user_id=user.id).delete()
-                    Recibo.query.filter_by(user_id=user.id).delete()
-                    
-                    # 3. Finalmente, apaga o funcionário
-                    db.session.delete(user)
-                    db.session.commit()
-                    flash('Utilizador e todos os seus dados foram excluídos com sucesso.', 'success')
-                    return redirect(url_for('admin.gerenciar_usuarios'))
+                user_service.excluir_usuario(user)
+                flash('Utilizador e todos os seus dados foram excluídos com sucesso.', 'success')
+                return redirect(url_for('admin.gerenciar_usuarios'))
 
             elif acao == 'salvar':
-                user.real_name = request.form.get('real_name')
-                user.role = request.form.get('role')
-                user.departamento = request.form.get('departamento')
-                gestor_req = request.form.get('gestor_id')
-                user.gestor_id = int(gestor_req) if gestor_req else None
-                user.salario = float(request.form.get('salario') or 0)
-                user.razao_social_empregadora = request.form.get('razao_social')
-                user.cnpj_empregador = request.form.get('cnpj')
-                
-                dt_adm_str = request.form.get('data_admissao')
-                if dt_adm_str: user.data_admissao = datetime.strptime(dt_adm_str, '%Y-%m-%d').date()
-                
-                user.carga_horaria = time_to_minutes(request.form.get('carga_horaria'))
-                user.tempo_intervalo = int(request.form.get('tempo_intervalo') or 60)
-                user.inicio_jornada_ideal = request.form.get('h_ent')
-                user.escala = request.form.get('escala')
-                if request.form.get('dt_escala'): user.data_inicio_escala = request.form.get('dt_escala')
-
-                if user.username != '50097952800' and user.username != 'Thaynara':
-                    lista_perms = request.form.getlist('perm_keys')
-                    user.permissions = ",".join(lista_perms)
-                
-                db.session.commit()
+                user_service.atualizar_usuario(user, request.form)
                 flash('Dados atualizados com sucesso.', 'success')
                 return redirect(url_for('admin.gerenciar_usuarios'))
                 
             elif acao == 'resetar_senha':
-                # RESET DE SENHA SEGURO
-                senha_temporaria = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
-                user.set_password(senha_temporaria)
-                user.is_first_access = True
-                db.session.commit()
-                flash(f'Senha resetada com sucesso! A nova senha de acesso é: {senha_temporaria}', 'success')
+                nova_senha = user_service.resetar_senha(user)
+                flash(f'Senha resetada com sucesso! A nova senha é: {nova_senha}', 'success')
                 
+        except ValueError as ve:
+            flash(str(ve), 'error')
         except Exception as e:
-            db.session.rollback()
-            flash(f'Erro: {e}', 'error')
+            flash(f'Erro: {str(e)}', 'error')
 
     return render_template('admin/editar_usuario.html', user=user, carga_hm=user_carga_hm, gestores=gestores)
+
+
+# ==============================================================================
+# OUTROS MÓDULOS (Mantidos iguais nesta iteração para estabilidade)
+# ==============================================================================
 
 @admin_bp.route('/solicitacoes', methods=['GET', 'POST'])
 @login_required
@@ -360,7 +281,6 @@ def importar_excel_usuarios():
             if isinstance(entrada_raw, time): entrada = entrada_raw.strftime('%H:%M')
             else: entrada = str(entrada_raw).strip() or '08:00'
             
-            # PROBLEMA 3: Lendo Razão Social e CNPJ diretamente da planilha
             razao_social_excel = str(row.get('razao_social', '')).strip()
             cnpj_excel = str(row.get('cnpj', '')).strip()
 
@@ -377,7 +297,6 @@ def importar_excel_usuarios():
                 carga_horaria=carga_min,
                 tempo_intervalo=intervalo,
                 inicio_jornada_ideal=entrada,
-                # Se não vier na planilha, usa o padrão da LA SHAHIN
                 razao_social=razao_social_excel if razao_social_excel else "LA SHAHIN SERVIÇOS DE SEGURANÇA LTDA",
                 cnpj=cnpj_excel if cnpj_excel else "50.537.235/0001-95"
             )
