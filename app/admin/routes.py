@@ -8,9 +8,9 @@ import string
 from datetime import time, datetime, date
 import pandas as pd 
 
-# Importações do Projeto
+# Importações do Projeto - Adicionadas TODAS as tabelas dependentes para limpeza
 from app.extensions import db
-from app.models import User, PreCadastro, PontoResumo, PontoAjuste, PontoRegistro, Holerite, Recibo
+from app.models import User, PreCadastro, PontoResumo, PontoAjuste, PontoRegistro, Holerite, Recibo, AssinaturaDigital, Atestado, PeriodoAquisitivo, SolicitacaoAusencia, SolicitacaoUniforme, Notificacao, PushSubscription
 from app.utils import (
     calcular_dia, 
     get_brasil_time, 
@@ -136,16 +136,28 @@ def editar_usuario(id):
                 if user.username == '50097952800' or user.username == 'Thaynara':
                     flash('Impossível excluir Master.', 'error')
                 else: 
+                    # 1. Liberta os funcionários que eram subordinados dele
                     subordinados = User.query.filter_by(gestor_id=user.id).all()
                     for sub in subordinados: sub.gestor_id = None
                     
+                    # 2. Limpeza Profunda: Apaga TODAS as dependências do funcionário no banco
+                    AssinaturaDigital.query.filter_by(user_id=user.id).delete()
+                    Atestado.query.filter_by(user_id=user.id).delete()
+                    Notificacao.query.filter_by(user_id=user.id).delete()
+                    PushSubscription.query.filter_by(user_id=user.id).delete()
+                    PontoAjuste.query.filter_by(user_id=user.id).delete()
+                    PeriodoAquisitivo.query.filter_by(user_id=user.id).delete()
+                    SolicitacaoAusencia.query.filter_by(user_id=user.id).delete()
+                    SolicitacaoUniforme.query.filter_by(user_id=user.id).delete()
                     PontoRegistro.query.filter_by(user_id=user.id).delete()
                     PontoResumo.query.filter_by(user_id=user.id).delete()
                     Holerite.query.filter_by(user_id=user.id).delete()
                     Recibo.query.filter_by(user_id=user.id).delete()
+                    
+                    # 3. Finalmente, apaga o funcionário
                     db.session.delete(user)
                     db.session.commit()
-                    flash('Utilizador excluído.', 'success')
+                    flash('Utilizador e todos os seus dados foram excluídos com sucesso.', 'success')
                     return redirect(url_for('admin.gerenciar_usuarios'))
 
             elif acao == 'salvar':
