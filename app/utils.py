@@ -51,7 +51,7 @@ def data_por_extenso(data_obj):
              7:'Julho', 8:'Agosto', 9:'Setembro', 10:'Outubro', 11:'Novembro', 12:'Dezembro'}
     return f"{data_obj.day} de {meses[data_obj.month]} de {data_obj.year}"
 
-# --- CÁLCULOS DE PONTO (ESSENCIAIS) ---
+# --- CÁLCULOS DE TEMPO (GENÉRICOS) ---
 
 def time_to_minutes(t):
     if not t: return 0
@@ -66,56 +66,6 @@ def format_minutes_to_hm(total_minutes):
     h = total_minutes // 60
     m = total_minutes % 60
     return f"{sinal}{h:02d}:{m:02d}"
-
-def calcular_dia(user_id, data_ref):
-    """Calcula o saldo de horas e status do dia para o módulo de Ponto."""
-    from app.extensions import db
-    from app.models import User, PontoRegistro, PontoResumo
-    
-    user = User.query.get(user_id)
-    if not user: return
-
-    registros = PontoRegistro.query.filter_by(user_id=user_id, data_registro=data_ref).order_by(PontoRegistro.hora_registro).all()
-    
-    meta = user.carga_horaria if user.carga_horaria else 528
-    
-    if user.escala == '5x2' and data_ref.weekday() >= 5: meta = 0
-    elif user.escala == '12x36' and user.data_inicio_escala:
-        dias_diff = (data_ref - user.data_inicio_escala).days
-        if dias_diff % 2 != 0: meta = 0
-        else: meta = 720
-            
-    trab = 0
-    for i in range(0, len(registros), 2):
-        if i + 1 < len(registros):
-            entrada = time_to_minutes(registros[i].hora_registro)
-            saida = time_to_minutes(registros[i+1].hora_registro)
-            trab += (saida - entrada)
-            
-    saldo = trab - meta
-    
-    status = "OK"
-    if not registros:
-        status = "Falta" if meta > 0 else "Folga"
-    elif len(registros) % 2 != 0:
-        status = "Incompleto"
-    elif saldo > 10:
-        status = "Hora Extra"
-    elif saldo < -10:
-        status = "Débito" if meta > 0 else "Extra" 
-        
-    resumo = PontoResumo.query.filter_by(user_id=user_id, data_referencia=data_ref).first()
-    if not resumo:
-        resumo = PontoResumo(user_id=user_id, data_referencia=data_ref)
-        db.session.add(resumo)
-    
-    resumo.minutos_trabalhados = trab
-    resumo.minutos_esperados = meta
-    resumo.minutos_saldo = saldo
-    resumo.status_dia = status
-    
-    try: db.session.commit()
-    except: db.session.rollback()
 
 # --- SISTEMA DE AUDITORIA E PERMISSÕES ---
 
