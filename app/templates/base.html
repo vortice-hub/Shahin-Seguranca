@@ -247,8 +247,59 @@
         </div>
     </div>
 
+    <div id="modal-confirmacao" class="hidden fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm transition-opacity">
+        <div class="bg-white rounded-3xl shadow-2xl max-w-sm w-full mx-4 overflow-hidden transform scale-95 transition-transform duration-200 ease-out" id="modal-content">
+            <div class="p-8 text-center">
+                <div class="w-20 h-20 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-5">
+                    <i class="fas fa-exclamation-triangle text-red-500 text-4xl"></i>
+                </div>
+                <h3 class="text-2xl font-black text-slate-800 mb-2">Atenção!</h3>
+                <p id="modal-mensagem" class="text-sm text-slate-500 mb-8 leading-relaxed">Tem certeza que deseja continuar com esta ação?</p>
+                
+                <div class="flex gap-4">
+                    <button onclick="fecharModalConfirmacao()" class="flex-1 py-3.5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-xl transition">
+                        Cancelar
+                    </button>
+                    <form id="form-confirmacao" method="POST" class="flex-1">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                        <button type="submit" class="w-full h-full py-3.5 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl shadow-lg shadow-red-200 transition transform active:scale-95 flex items-center justify-center gap-2">
+                            <i class="fas fa-trash-alt"></i> Excluir
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
     <script>
+        // Funções do Modal Global
+        function confirmarAcao(mensagem, actionUrl) {
+            document.getElementById('modal-mensagem').innerText = mensagem;
+            document.getElementById('form-confirmacao').action = actionUrl;
+            
+            const modal = document.getElementById('modal-confirmacao');
+            const content = document.getElementById('modal-content');
+            
+            modal.classList.remove('hidden');
+            setTimeout(() => {
+                content.classList.remove('scale-95');
+                content.classList.add('scale-100');
+            }, 10);
+        }
+
+        function fecharModalConfirmacao() {
+            const modal = document.getElementById('modal-confirmacao');
+            const content = document.getElementById('modal-content');
+            
+            content.classList.remove('scale-100');
+            content.classList.add('scale-95');
+            setTimeout(() => {
+                modal.classList.add('hidden');
+            }, 200);
+        }
+
+        // Funções Originais
         document.addEventListener('DOMContentLoaded', function() {
             document.querySelectorAll('[id^="flask-msg-"]').forEach(el => {
                 const msg = el.innerText;
@@ -332,21 +383,33 @@
         }
 
         async function limparNotificacoes() {
-            if(confirm("Tem certeza que deseja limpar o seu histórico de notificações? Esta ação não pode ser desfeita.")) {
-                try {
-                    const response = await fetch(`/api/notificacoes/limpar`, { 
-                        method: 'POST', 
-                        headers: { 'X-CSRFToken': '{{ csrf_token() }}' } 
-                    });
-                    const data = await response.json();
-                    if(data.success) {
-                        Toastify({ text: "Histórico de notificações limpo.", style: { background: "#10b981" } }).showToast();
-                        buscarNotificacoes();
+            // Em vez do confirm feio, agora chamamos o nosso modal para excluir o histórico
+            confirmarAcao("Tem certeza que deseja excluir todo o seu histórico de notificações? Esta ação não pode ser desfeita.", "/api/notificacoes/limpar");
+            // Nota: Para interceptar o submit e fazer via Ajax, teremos que modificar ligeiramente, 
+            // mas como é o único local onde é Ajax, vou deixar o script abaixo lidar com isso.
+            
+            // Subscreve o comportamento padrão do form do modal SOMENTE neste caso específico
+            document.getElementById('form-confirmacao').onsubmit = async function(e) {
+                if (this.action.includes('/api/notificacoes/limpar')) {
+                    e.preventDefault();
+                    try {
+                        const response = await fetch(`/api/notificacoes/limpar`, { 
+                            method: 'POST', 
+                            headers: { 'X-CSRFToken': '{{ csrf_token() }}' } 
+                        });
+                        const data = await response.json();
+                        if(data.success) {
+                            Toastify({ text: "Histórico de notificações limpo.", style: { background: "#10b981" } }).showToast();
+                            buscarNotificacoes();
+                            fecharModalConfirmacao();
+                        }
+                    } catch (err) {
+                        console.error(err);
                     }
-                } catch (e) {
-                    console.error(e);
+                    // Retira a subscrição para não afetar outros locais
+                    this.onsubmit = null; 
                 }
-            }
+            };
         }
     </script>
     

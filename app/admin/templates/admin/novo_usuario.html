@@ -69,7 +69,7 @@
                     <i class="fas fa-hand-holding-usd"></i> Dados Contratuais & Empresa
                 </h3>
             </div>
-            <div class="p-8 grid grid-cols-1 md:grid-cols-3 gap-x-6 gap-y-6">
+            <div class="p-8 grid grid-cols-1 md:grid-cols-2 gap-x-10 gap-y-6">
                 <div>
                     <label class="label-pro text-emerald-700 ml-1">Data de Admissão</label>
                     <input type="date" name="data_admissao" class="input-pro border-emerald-200 focus:border-emerald-500" required>
@@ -83,11 +83,14 @@
                     </div>
                 </div>
 
-                <div class="opacity-60">
-                    <label class="label-pro ml-1">Empresa Pagadora</label>
-                    <input type="text" class="input-pro cursor-not-allowed text-xs" value="LA SHAHIN SERVIÇOS DE SEGURANÇA LTDA" readonly>
-                    <input type="hidden" name="razao_social" value="LA SHAHIN SERVIÇOS DE SEGURANÇA LTDA">
-                    <input type="hidden" name="cnpj" value="50.537.235/0001-95">
+                <div>
+                    <label class="label-pro ml-1 text-slate-700">Empresa Pagadora (Razão Social)</label>
+                    <input type="text" name="razao_social" class="input-pro border-slate-300 focus:border-blue-500" value="LA SHAHIN SERVIÇOS DE SEGURANÇA LTDA" placeholder="Nome da Empresa" required>
+                </div>
+                
+                <div>
+                    <label class="label-pro ml-1 text-slate-700">CNPJ da Empresa</label>
+                    <input type="text" name="cnpj" class="input-pro border-slate-300 focus:border-blue-500 font-mono" value="50.537.235/0001-95" placeholder="00.000.000/0000-00" required>
                 </div>
             </div>
         </div>

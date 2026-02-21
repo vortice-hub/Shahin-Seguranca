@@ -309,7 +309,7 @@ def get_user_info_api(id):
     user = User.query.get_or_404(id)
     return jsonify({'razao_social': user.razao_social_empregadora, 'cnpj': user.cnpj_empregador})
 
-# PROBLEMA 7: Solução aplicada para evitar tela branca no download
+# PROBLEMA 7: RESOLVIDO - Renderizar o PDF inline no navegador para evitar tela branca de nova aba
 @documentos_bp.route('/admin/auditoria/certificado/<int:id>')
 @login_required
 @permission_required('AUDITORIA')
@@ -321,15 +321,14 @@ def baixar_certificado_auditoria(id):
 
     try:
         pdf_bytes = gerar_certificado_entrega(assinatura, usuario)
-        
-        # Garante que o arquivo é preparado na memória corretamente antes do envio
         buffer = io.BytesIO(pdf_bytes)
         buffer.seek(0)
         
+        # as_attachment=False instrui o navegador a desenhar o PDF na tela em vez de baixar às cegas
         return send_file(
             buffer, 
             mimetype='application/pdf', 
-            as_attachment=True, 
+            as_attachment=False, 
             download_name=f"Auditoria_{usuario.real_name}_{assinatura.id}.pdf"
         )
     except Exception as e:
@@ -358,7 +357,6 @@ def enviar_atestado():
             caminho_blob = salvar_no_storage(file_bytes, f"atestados/{mes_ref}")
             if not caminho_blob: return redirect(request.url)
 
-            # A IA analisa o atestado invisivelmente no backend
             dados_ia = analisar_atestado_vision(file_bytes, current_user.real_name)
             
             data_inicio_db = datetime.strptime(dados_ia['data_inicio'], '%Y-%m-%d').date() if dados_ia['data_inicio'] else None
@@ -477,29 +475,24 @@ def exportar_relatorio_folha():
         data_inicio = datetime.strptime(data_inicio_str, '%Y-%m-%d').date()
         data_fim = datetime.strptime(data_fim_str, '%Y-%m-%d').date()
         
-        # Puxa todos os funcionários (menos Master raiz e Terminal)
         usuarios = User.query.filter(User.username != '12345678900', User.username != 'terminal').order_by(User.real_name).all()
         
         dados_relatorio = []
         
         for u in usuarios:
-            # Puxa os espelhos de ponto do período exato selecionado
             pontos = PontoResumo.query.filter(
                 PontoResumo.user_id == u.id,
                 PontoResumo.data_referencia >= data_inicio,
                 PontoResumo.data_referencia <= data_fim
             ).all()
             
-            # Cálculo de Minutos
             total_esperado = sum(p.minutos_esperados for p in pontos)
             total_trabalhado = sum(p.minutos_trabalhados for p in pontos)
             saldo = total_trabalhado - total_esperado
             
-            # Contagem de Ocorrências
             faltas = sum(1 for p in pontos if p.status_dia == 'Falta')
             atestados = sum(1 for p in pontos if p.status_dia == 'Atestado')
             
-            # Formatação Elegante para o RH
             sinal = "+" if saldo >= 0 else "-"
             saldo_str = f"{sinal}{format_minutes_to_hm(abs(saldo))}"
             
@@ -519,21 +512,17 @@ def exportar_relatorio_folha():
             flash('Nenhum dado encontrado para o período selecionado.', 'warning')
             return redirect(url_for('documentos.relatorio_folha'))
             
-        # Gera o Arquivo Excel via Pandas na Memória
         df = pd.DataFrame(dados_relatorio)
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
             df.to_excel(writer, index=False, sheet_name='Fechamento Folha')
             
-            # Ajuste dinâmico da largura das colunas
             worksheet = writer.sheets['Fechamento Folha']
             for i, col in enumerate(df.columns):
                 max_len = max(df[col].astype(str).map(len).max(), len(col)) + 2
                 worksheet.column_dimensions[chr(65 + i)].width = max_len
 
         output.seek(0)
-        
-        # Formata o nome do arquivo final
         nome_arquivo = f"Fechamento_Folha_{data_inicio_str}_a_{data_fim_str}.xlsx"
         
         return send_file(output, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', as_attachment=True, download_name=nome_arquivo)
