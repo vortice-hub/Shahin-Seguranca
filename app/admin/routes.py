@@ -176,7 +176,7 @@ def editar_usuario(id):
                 return redirect(url_for('admin.gerenciar_usuarios'))
                 
             elif acao == 'resetar_senha':
-                # NOVO: RESET DE SENHA SEGURO (FRENTE 4)
+                # RESET DE SENHA SEGURO
                 senha_temporaria = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
                 user.set_password(senha_temporaria)
                 user.is_first_access = True
@@ -347,6 +347,10 @@ def importar_excel_usuarios():
             entrada_raw = row.get('entrada_ideal', '08:00')
             if isinstance(entrada_raw, time): entrada = entrada_raw.strftime('%H:%M')
             else: entrada = str(entrada_raw).strip() or '08:00'
+            
+            # PROBLEMA 3: Lendo Razão Social e CNPJ diretamente da planilha
+            razao_social_excel = str(row.get('razao_social', '')).strip()
+            cnpj_excel = str(row.get('cnpj', '')).strip()
 
             novo_pre = PreCadastro(
                 cpf=cpf,
@@ -361,8 +365,9 @@ def importar_excel_usuarios():
                 carga_horaria=carga_min,
                 tempo_intervalo=intervalo,
                 inicio_jornada_ideal=entrada,
-                razao_social="LA SHAHIN SERVIÇOS DE SEGURANÇA LTDA",
-                cnpj="50.537.235/0001-95"
+                # Se não vier na planilha, usa o padrão da LA SHAHIN
+                razao_social=razao_social_excel if razao_social_excel else "LA SHAHIN SERVIÇOS DE SEGURANÇA LTDA",
+                cnpj=cnpj_excel if cnpj_excel else "50.537.235/0001-95"
             )
             db.session.add(novo_pre)
             sucesso += 1
@@ -378,5 +383,4 @@ def importar_excel_usuarios():
         flash(f'Erro ao ler arquivo do Excel: {str(e)}', 'error')
 
     return redirect(url_for('admin.gerenciar_usuarios'))
-
 

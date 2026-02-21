@@ -15,7 +15,8 @@ class User(UserMixin, db.Model):
     password_hash = db.Column(db.String(200), nullable=False)
     real_name = db.Column(db.String(120), nullable=False)
     cpf = db.Column(db.String(14), unique=True, nullable=True)
-    role = db.Column(db.String(20), default='Funcionario')
+    # PROBLEMA 1: Limite aumentado de 20 para 100 caracteres
+    role = db.Column(db.String(100), default='Funcionario')
     
     departamento = db.Column(db.String(100), nullable=True)
     gestor_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
@@ -27,9 +28,12 @@ class User(UserMixin, db.Model):
     carga_horaria = db.Column(db.Integer, default=528)
     tempo_intervalo = db.Column(db.Integer, default=60)
     inicio_jornada_ideal = db.Column(db.String(5), default="08:00")
-    escala = db.Column(db.String(20), default="Livre")
+    # PROBLEMA 1: Limite aumentado de 20 para 50 caracteres
+    escala = db.Column(db.String(50), default="Livre")
     data_inicio_escala = db.Column(db.Date, nullable=True)
     salario = db.Column(db.Float, default=0.0)
+    
+    # PROBLEMA 3: Colunas para suportar os múltiplos CNPJs da Shahin
     razao_social_empregadora = db.Column(db.String(200))
     cnpj_empregador = db.Column(db.String(20))
 
@@ -43,17 +47,22 @@ class PreCadastro(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     cpf = db.Column(db.String(14), unique=True, nullable=False)
     nome_previsto = db.Column(db.String(120), nullable=False)
-    cargo = db.Column(db.String(80))
+    # PROBLEMA 1: Limite aumentado de 80 para 150 caracteres
+    cargo = db.Column(db.String(150))
     departamento = db.Column(db.String(100), nullable=True)
     cpf_gestor = db.Column(db.String(14), nullable=True)
     salario = db.Column(db.Float, default=0.0)
+    
+    # PROBLEMA 3: Colunas para suportar os múltiplos CNPJs no pré-cadastro
     razao_social = db.Column(db.String(200))
     cnpj = db.Column(db.String(20))
+    
     data_admissao = db.Column(db.Date, nullable=True)
     carga_horaria = db.Column(db.Integer, default=528)
     tempo_intervalo = db.Column(db.Integer, default=60)
     inicio_jornada_ideal = db.Column(db.String(5), default="08:00")
-    escala = db.Column(db.String(20), default="Livre")
+    # PROBLEMA 1: Limite aumentado de 20 para 50 caracteres
+    escala = db.Column(db.String(50), default="Livre")
     data_inicio_escala = db.Column(db.Date, nullable=True)
     created_at = db.Column(db.DateTime, default=get_brasil_time)
 
@@ -227,7 +236,7 @@ class Notificacao(db.Model):
     data_criacao = db.Column(db.DateTime, default=get_brasil_time)
     user = db.relationship('User', backref=db.backref('notificacoes', lazy=True))
 
-# --- NOVIDADE: INFRAESTRUTURA PARA NOTIFICAÇÕES PUSH NATIVAS ---
+# --- INFRAESTRUTURA PARA NOTIFICAÇÕES PUSH NATIVAS ---
 class PushSubscription(db.Model):
     __tablename__ = 'push_subscriptions'
     id = db.Column(db.Integer, primary_key=True)

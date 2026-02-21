@@ -74,7 +74,7 @@ def auto_cadastro():
             if User.query.filter_by(cpf=cpf).first():
                 flash('Este CPF já possui um cadastro ativo. Tente fazer login.', 'warning')
                 return redirect(url_for('auth.login'))
-            flash('CPF não autorizado para cadastro. Entre em contacto com o RH.', 'error')
+            flash('CPF não autorizado para cadastro. Entre em contato com o RH.', 'error')
             return redirect(url_for('auth.auto_cadastro'))
             
         password = request.form.get('password')
@@ -94,6 +94,7 @@ def auto_cadastro():
                 if gestor_encontrado:
                     gestor_id_final = gestor_encontrado.id
             
+            # O Limite da coluna 'role' foi aumentado no models para não truncar "CONTROLADOR DE ACESSO"
             novo_user = User(
                 username=username_login, 
                 password_hash=generate_password_hash(password), 
@@ -101,8 +102,8 @@ def auto_cadastro():
                 role=pre.cargo, 
                 cpf=cpf, 
                 salario=pre.salario, 
-                razao_social_empregadora=pre.razao_social,
-                cnpj_empregador=pre.cnpj,
+                razao_social_empregadora=pre.razao_social, # Suporte aos 5 CNPJs
+                cnpj_empregador=pre.cnpj, # Suporte aos 5 CNPJs
                 data_admissao=pre.data_admissao,
                 carga_horaria=pre.carga_horaria,
                 tempo_intervalo=pre.tempo_intervalo,
@@ -123,7 +124,7 @@ def auto_cadastro():
         else:
             return render_template('auth/auto_cadastro.html', step=2, cpf=cpf, nome=pre.nome_previsto)
 
-# --- NOVO: RECUPERAÇÃO SEGURA DE SENHA ---
+# --- RECUPERAÇÃO SEGURA DE SENHA ---
 @auth_bp.route('/esqueci-senha', methods=['GET', 'POST'])
 def esqueci_senha():
     if current_user.is_authenticated: 
