@@ -24,6 +24,11 @@ def login():
             user = User.query.filter_by(username=request.form.get('username')).first()
 
         if user and user.check_password(password):
+            # 🛡️ FASE 2: Validação de Segurança Multi-Tenant no Login
+            if not getattr(user, 'empresa_id', None):
+                flash('Acesso Bloqueado: O seu utilizador não possui vínculo com nenhum cliente da plataforma.', 'error')
+                return redirect(url_for('auth.login'))
+
             login_user(user)
             if user.is_first_access: 
                 return redirect(url_for('auth.primeiro_acesso'))
@@ -94,7 +99,6 @@ def auto_cadastro():
                 if gestor_encontrado:
                     gestor_id_final = gestor_encontrado.id
             
-            # O Limite da coluna 'role' foi aumentado no models para não truncar "CONTROLADOR DE ACESSO"
             novo_user = User(
                 username=username_login, 
                 password_hash=generate_password_hash(password), 
@@ -102,8 +106,8 @@ def auto_cadastro():
                 role=pre.cargo, 
                 cpf=cpf, 
                 salario=pre.salario, 
-                razao_social_empregadora=pre.razao_social, # Suporte aos 5 CNPJs
-                cnpj_empregador=pre.cnpj, # Suporte aos 5 CNPJs
+                razao_social_empregadora=pre.razao_social, 
+                cnpj_empregador=pre.cnpj, 
                 data_admissao=pre.data_admissao,
                 carga_horaria=pre.carga_horaria,
                 tempo_intervalo=pre.tempo_intervalo,
@@ -113,7 +117,8 @@ def auto_cadastro():
                 departamento=pre.departamento,
                 gestor_id=gestor_id_final,
                 is_first_access=False,
-                permissions="" 
+                permissions="",
+                empresa_id=pre.empresa_id  # 🛡️ FASE 2: Repasse obrigatório do ID da empresa!
             )
             
             db.session.add(novo_user)

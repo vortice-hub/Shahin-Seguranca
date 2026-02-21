@@ -1,6 +1,7 @@
 import os
 import logging
-from flask import Flask, render_template
+from flask import Flask, render_template, request, g, abort
+from flask_login import current_user, logout_user
 from app.extensions import db, login_manager, csrf, migrate
 from config import config_map
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -37,6 +38,27 @@ def create_app():
         from app.utils import has_permission
         return dict(has_permission=has_permission)
 
+    # ==============================================================================
+    # 🛡️ VORTICE SAAS: O PORTEIRO GLOBAL (MIDDLEWARE MULTI-TENANT)
+    # ==============================================================================
+    @app.before_request
+    def blindagem_multi_tenant():
+        """
+        Intercepta todas as requisições para garantir o isolamento da empresa.
+        """
+        # Ignora arquivos estáticos (CSS, JS, Imagens) para manter o sistema rápido
+        if request.endpoint and request.endpoint.startswith('static'):
+            return
+
+        if current_user.is_authenticated:
+            # Regra de Chumbo: Se está logado, TEM que pertencer a uma empresa
+            if getattr(current_user, 'empresa_id', None) is None:
+                logout_user() # Derruba a sessão
+                abort(403)    # Redireciona para a página de acesso negado
+            
+            # Injeta a empresa na variável global (g) para o resto do sistema usar!
+            g.empresa_id = current_user.empresa_id
+
     # --- INTERCETORES DE ERRO GLOBAIS ---
     @app.errorhandler(404)
     def page_not_found(e):
@@ -65,94 +87,9 @@ def create_app():
         app.register_blueprint(documentos_bp)
         app.register_blueprint(main_bp)
 
-    # ==============================================================================
-    # ⚙️ VORTICE SAAS: COMANDO DE MIGRAÇÃO MULTI-TENANT (FASE 1)
-    # ==============================================================================
     @app.cli.command("setup-db")
     def setup_db():
-        """Comando manual para inicializar o SaaS Vortice e cadastrar o 1º Cliente."""
-        with app.app_context():
-            try:
-                # 1. Atualiza as tabelas no Supabase (cria Empresa e colunas novas)
-                db.create_all()
-                
-                from app.models import (
-                    Empresa, User, PreCadastro, PontoRegistro, PontoResumo, 
-                    Holerite, Recibo, AssinaturaDigital, PontoAjuste, Atestado, 
-                    PeriodoAquisitivo, SolicitacaoAusencia, SolicitacaoUniforme, 
-                    Notificacao, PushSubscription, ItemEstoque, HistoricoEntrada, HistoricoSaida
-                )
-
-                # 2. VORTICE CRIA O SEU PRIMEIRO CLIENTE (SHAHIN)
-                cliente_shahin = Empresa.query.filter_by(slug='shahin').first()
-                if not cliente_shahin:
-                    cliente_shahin = Empresa(
-                        nome='LA SHAHIN SERVIÇOS DE SEGURANÇA',
-                        slug='shahin',
-                        plano='Enterprise',
-                        ativa=True,
-                        features_json={"ponto": True, "documentos": True, "estoque": True},
-                        config_json={"cor_primaria": "#2563eb"}
-                    )
-                    db.session.add(cliente_shahin)
-                    db.session.commit()
-                    print(f"✅ VORTICE SAAS: Cliente '{cliente_shahin.nome}' cadastrado com sucesso (ID: {cliente_shahin.id}).")
-                
-                # 3. MIGRAÇÃO EM MASSA: Movemos todos os dados antigos para dentro do cliente Shahin
-                modelos_tenant = [
-                    User, PreCadastro, ItemEstoque, HistoricoEntrada, HistoricoSaida,
-                    Holerite, Recibo, AssinaturaDigital, PontoRegistro, PontoResumo,
-                    PontoAjuste, Atestado, PeriodoAquisitivo, SolicitacaoAusencia,
-                    SolicitacaoUniforme, Notificacao, PushSubscription
-                ]
-                
-                total_migrados = 0
-                for modelo in modelos_tenant:
-                    registros_sem_dono = modelo.query.filter_by(empresa_id=None).all()
-                    if registros_sem_dono:
-                        for registro in registros_sem_dono:
-                            registro.empresa_id = cliente_shahin.id
-                        total_migrados += len(registros_sem_dono)
-                
-                if total_migrados > 0:
-                    db.session.commit()
-                    print(f"✅ VORTICE SAAS: Migração concluída! {total_migrados} registros foram movidos para a conta da Shahin.")
-
-                # 4. GESTÃO MASTER E TERMINAL (Agora vinculados à Empresa 1)
-                cpf_master = '50097952800'
-                master = User.query.filter_by(username=cpf_master).first()
-                if not master:
-                    m = User(
-                        username=cpf_master, cpf=cpf_master, real_name='Thaynara Master', 
-                        role='Master', is_first_access=False, permissions="ALL", salario=0.0,
-                        empresa_id=cliente_shahin.id
-                    )
-                    senha_master = os.environ.get('MASTER_PASSWORD', '1855')
-                    m.set_password(senha_master)
-                    db.session.add(m)
-                else:
-                    master.role = 'Master'
-                    master.permissions = "ALL"
-                    master.empresa_id = cliente_shahin.id
-
-                term = User.query.filter_by(username='12345678900').first()
-                if not term:
-                    t = User(
-                        username='12345678900', real_name='Terminal de Ponto', role='Terminal', 
-                        is_first_access=False, cpf='12345678900', salario=0.0,
-                        empresa_id=cliente_shahin.id
-                    )
-                    senha_terminal = os.environ.get('TERMINAL_PASSWORD', 'terminal1234')
-                    t.set_password(senha_terminal)
-                    db.session.add(t)
-                
-                db.session.commit()
-                print(">>> VORTICE SAAS: BOOT DO SISTEMA FINALIZADO COM SUCESSO <<<")
-                logger.info(">>> BOOT DO BANCO DE DADOS OK <<<")
-                
-            except Exception as e:
-                print(f"❌ Erro Crítico Vortice: {e}")
-                logger.error(f"Erro no boot do DB: {e}")
+        pass # Mantido vazio pois já usamos a rota /vortice-migrar para migração real.
 
     return app
 
