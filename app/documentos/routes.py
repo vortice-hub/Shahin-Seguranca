@@ -129,7 +129,8 @@ def admin_holerites():
             db.session.rollback(); flash(f"Erro: {e}", "error")
     return render_template('documentos/admin_upload_holerite.html')
 
-@documentos_bp.route('/baixar/holerite/<int:id>', methods=['POST'])
+# Adicionado o método GET para permitir a abertura em nova aba no painel Master
+@documentos_bp.route('/baixar/holerite/<int:id>', methods=['GET', 'POST'])
 @login_required
 def baixar_holerite(id):
     doc = Holerite.query.get_or_404(id)
@@ -173,7 +174,8 @@ def baixar_holerite(id):
     buffer.seek(0)
     return send_file(buffer, mimetype='application/pdf', as_attachment=True, download_name=nome_download)
 
-@documentos_bp.route('/baixar/recibo/<int:id>', methods=['POST'])
+# Adicionado o método GET para permitir a abertura em nova aba no painel Master
+@documentos_bp.route('/baixar/recibo/<int:id>', methods=['GET', 'POST'])
 @login_required
 def baixar_recibo(id):
     doc = Recibo.query.get_or_404(id)
