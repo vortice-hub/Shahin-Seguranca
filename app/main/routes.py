@@ -206,3 +206,75 @@ def subscribe_push():
         traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
 
+# ==============================================================================
+# ⚙️ GATILHO DE MIGRAÇÃO VORTICE SAAS (ACESSO VIA NAVEGADOR)
+# ==============================================================================
+@main_bp.route('/vortice-migrar')
+def vortice_migrar():
+    from app.extensions import db
+    from app.models import (
+        Empresa, User, PreCadastro, PontoRegistro, PontoResumo, 
+        Holerite, Recibo, AssinaturaDigital, PontoAjuste, Atestado, 
+        PeriodoAquisitivo, SolicitacaoAusencia, SolicitacaoUniforme, 
+        Notificacao, PushSubscription, ItemEstoque, HistoricoEntrada, HistoricoSaida
+    )
+    
+    try:
+        # 1. Atualiza as tabelas no Supabase
+        db.create_all()
+        
+        # 2. VORTICE CRIA O SEU PRIMEIRO CLIENTE (SHAHIN)
+        cliente_shahin = Empresa.query.filter_by(slug='shahin').first()
+        if not cliente_shahin:
+            cliente_shahin = Empresa(
+                nome='LA SHAHIN SERVIÇOS DE SEGURANÇA',
+                slug='shahin',
+                plano='Enterprise',
+                ativa=True,
+                features_json={"ponto": True, "documentos": True, "estoque": True},
+                config_json={"cor_primaria": "#2563eb"}
+            )
+            db.session.add(cliente_shahin)
+            db.session.commit()
+            
+        # 3. MIGRAÇÃO EM MASSA
+        modelos_tenant = [
+            User, PreCadastro, ItemEstoque, HistoricoEntrada, HistoricoSaida,
+            Holerite, Recibo, AssinaturaDigital, PontoRegistro, PontoResumo,
+            PontoAjuste, Atestado, PeriodoAquisitivo, SolicitacaoAusencia,
+            SolicitacaoUniforme, Notificacao, PushSubscription
+        ]
+        
+        total_migrados = 0
+        for modelo in modelos_tenant:
+            registros_sem_dono = modelo.query.filter_by(empresa_id=None).all()
+            for registro in registros_sem_dono:
+                registro.empresa_id = cliente_shahin.id
+            total_migrados += len(registros_sem_dono)
+        
+        if total_migrados > 0:
+            db.session.commit()
+
+        # 4. GARANTE QUE O MASTER E O TERMINAL SÃO DA SHAHIN
+        cpf_master = '50097952800'
+        master = User.query.filter_by(username=cpf_master).first()
+        if master: master.empresa_id = cliente_shahin.id
+            
+        term = User.query.filter_by(username='12345678900').first()
+        if term: term.empresa_id = cliente_shahin.id
+            
+        db.session.commit()
+        
+        return f"""
+        <div style="font-family: sans-serif; text-align: center; margin-top: 50px;">
+            <h1 style="color: #2563eb;">🚀 Vortice SaaS Inicializado!</h1>
+            <h2>Migração Concluída com Sucesso.</h2>
+            <p><strong>{total_migrados}</strong> registos antigos foram transferidos para a conta da Empresa Shahin.</p>
+            <a href="/" style="display: inline-block; padding: 10px 20px; background: #1e293b; color: white; text-decoration: none; border-radius: 8px; margin-top: 20px;">Ir para o Sistema</a>
+        </div>
+        """
+        
+    except Exception as e:
+        db.session.rollback()
+        return f"<h1 style='color: red;'>Erro na migração:</h1><p>{str(e)}</p>"
+

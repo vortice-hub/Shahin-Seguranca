@@ -27,7 +27,6 @@ def create_app():
     
     login_manager.login_view = 'auth.login'
 
-    # --- CORREÇÃO: USER LOADER ---
     @login_manager.user_loader
     def load_user(user_id):
         from app.models import User
@@ -66,41 +65,93 @@ def create_app():
         app.register_blueprint(documentos_bp)
         app.register_blueprint(main_bp)
 
-    # --- COMANDO DE SEEDING ISOLADO E LIMPO (FASE 3) ---
+    # ==============================================================================
+    # ⚙️ VORTICE SAAS: COMANDO DE MIGRAÇÃO MULTI-TENANT (FASE 1)
+    # ==============================================================================
     @app.cli.command("setup-db")
     def setup_db():
-        """Comando manual para criar tabelas e utilizadores padrão."""
+        """Comando manual para inicializar o SaaS Vortice e cadastrar o 1º Cliente."""
         with app.app_context():
             try:
+                # 1. Atualiza as tabelas no Supabase (cria Empresa e colunas novas)
                 db.create_all()
                 
-                from app.models import User
+                from app.models import (
+                    Empresa, User, PreCadastro, PontoRegistro, PontoResumo, 
+                    Holerite, Recibo, AssinaturaDigital, PontoAjuste, Atestado, 
+                    PeriodoAquisitivo, SolicitacaoAusencia, SolicitacaoUniforme, 
+                    Notificacao, PushSubscription, ItemEstoque, HistoricoEntrada, HistoricoSaida
+                )
+
+                # 2. VORTICE CRIA O SEU PRIMEIRO CLIENTE (SHAHIN)
+                cliente_shahin = Empresa.query.filter_by(slug='shahin').first()
+                if not cliente_shahin:
+                    cliente_shahin = Empresa(
+                        nome='LA SHAHIN SERVIÇOS DE SEGURANÇA',
+                        slug='shahin',
+                        plano='Enterprise',
+                        ativa=True,
+                        features_json={"ponto": True, "documentos": True, "estoque": True},
+                        config_json={"cor_primaria": "#2563eb"}
+                    )
+                    db.session.add(cliente_shahin)
+                    db.session.commit()
+                    print(f"✅ VORTICE SAAS: Cliente '{cliente_shahin.nome}' cadastrado com sucesso (ID: {cliente_shahin.id}).")
                 
-                # GESTÃO MASTER
+                # 3. MIGRAÇÃO EM MASSA: Movemos todos os dados antigos para dentro do cliente Shahin
+                modelos_tenant = [
+                    User, PreCadastro, ItemEstoque, HistoricoEntrada, HistoricoSaida,
+                    Holerite, Recibo, AssinaturaDigital, PontoRegistro, PontoResumo,
+                    PontoAjuste, Atestado, PeriodoAquisitivo, SolicitacaoAusencia,
+                    SolicitacaoUniforme, Notificacao, PushSubscription
+                ]
+                
+                total_migrados = 0
+                for modelo in modelos_tenant:
+                    registros_sem_dono = modelo.query.filter_by(empresa_id=None).all()
+                    if registros_sem_dono:
+                        for registro in registros_sem_dono:
+                            registro.empresa_id = cliente_shahin.id
+                        total_migrados += len(registros_sem_dono)
+                
+                if total_migrados > 0:
+                    db.session.commit()
+                    print(f"✅ VORTICE SAAS: Migração concluída! {total_migrados} registros foram movidos para a conta da Shahin.")
+
+                # 4. GESTÃO MASTER E TERMINAL (Agora vinculados à Empresa 1)
                 cpf_master = '50097952800'
                 master = User.query.filter_by(username=cpf_master).first()
                 if not master:
-                    m = User(username=cpf_master, cpf=cpf_master, real_name='Thaynara Master', role='Master', is_first_access=False, permissions="ALL", salario=0.0)
+                    m = User(
+                        username=cpf_master, cpf=cpf_master, real_name='Thaynara Master', 
+                        role='Master', is_first_access=False, permissions="ALL", salario=0.0,
+                        empresa_id=cliente_shahin.id
+                    )
                     senha_master = os.environ.get('MASTER_PASSWORD', '1855')
                     m.set_password(senha_master)
                     db.session.add(m)
                 else:
                     master.role = 'Master'
                     master.permissions = "ALL"
+                    master.empresa_id = cliente_shahin.id
 
-                # GESTÃO TERMINAL
                 term = User.query.filter_by(username='12345678900').first()
                 if not term:
-                    t = User(username='12345678900', real_name='Terminal de Ponto', role='Terminal', is_first_access=False, cpf='12345678900', salario=0.0)
+                    t = User(
+                        username='12345678900', real_name='Terminal de Ponto', role='Terminal', 
+                        is_first_access=False, cpf='12345678900', salario=0.0,
+                        empresa_id=cliente_shahin.id
+                    )
                     senha_terminal = os.environ.get('TERMINAL_PASSWORD', 'terminal1234')
                     t.set_password(senha_terminal)
                     db.session.add(t)
                 
                 db.session.commit()
-                print(">>> BANCO DE DADOS E UTILIZADORES CONFIGURADOS COM SUCESSO <<<")
+                print(">>> VORTICE SAAS: BOOT DO SISTEMA FINALIZADO COM SUCESSO <<<")
                 logger.info(">>> BOOT DO BANCO DE DADOS OK <<<")
+                
             except Exception as e:
-                print(f"Erro ao configurar DB: {e}")
+                print(f"❌ Erro Crítico Vortice: {e}")
                 logger.error(f"Erro no boot do DB: {e}")
 
     return app
