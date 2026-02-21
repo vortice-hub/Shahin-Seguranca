@@ -212,6 +212,7 @@ def subscribe_push():
 @main_bp.route('/vortice-migrar')
 def vortice_migrar():
     from app.extensions import db
+    from sqlalchemy import text
     from app.models import (
         Empresa, User, PreCadastro, PontoRegistro, PontoResumo, 
         Holerite, Recibo, AssinaturaDigital, PontoAjuste, Atestado, 
@@ -220,9 +221,30 @@ def vortice_migrar():
     )
     
     try:
-        # 1. Atualiza as tabelas no Supabase
+        # 1. Tenta criar tabelas novas (como a tabela 'empresas')
         db.create_all()
         
+        # 1.5. FORÇAR A CRIAÇÃO DAS COLUNAS NAS TABELAS EXISTENTES (SQL DIRETO)
+        tabelas_existentes = [
+            'users', 'pre_cadastros', 'itens_estoque', 'historico_entrada', 'historico_saida',
+            'holerites', 'recibos', 'assinaturas_digitais', 'ponto_registros', 'ponto_resumos',
+            'ponto_ajustes', 'atestados', 'periodos_aquisitivos', 'solicitacoes_ausencia',
+            'solicitacoes_uniforme', 'notificacoes', 'push_subscriptions'
+        ]
+        
+        for tabela in tabelas_existentes:
+            try:
+                # Injeta as colunas base da Vortice em cada tabela do seu sistema
+                db.session.execute(text(f"ALTER TABLE {tabela} ADD COLUMN IF NOT EXISTS empresa_id INTEGER REFERENCES empresas(id) ON DELETE CASCADE;"))
+                db.session.execute(text(f"ALTER TABLE {tabela} ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITHOUT TIME ZONE;"))
+                db.session.execute(text(f"ALTER TABLE {tabela} ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITHOUT TIME ZONE;"))
+                db.session.execute(text(f"ALTER TABLE {tabela} ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP WITHOUT TIME ZONE;"))
+            except Exception as inner_e:
+                print(f"Aviso ao alterar a tabela {tabela}: {inner_e}")
+                pass # Ignora se a tabela não existir
+        
+        db.session.commit()
+
         # 2. VORTICE CRIA O SEU PRIMEIRO CLIENTE (SHAHIN)
         cliente_shahin = Empresa.query.filter_by(slug='shahin').first()
         if not cliente_shahin:
