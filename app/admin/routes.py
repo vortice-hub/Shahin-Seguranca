@@ -55,7 +55,8 @@ def gerenciar_usuarios():
     
     return render_template('admin/admin_usuarios.html', users_pagination=users_pagination, pendentes=pendentes)
 
-@admin_bp.route('/liberar-acesso/excluir/<int:id>', methods=['GET'])
+# CORREÇÃO: Adicionado o método 'POST' para permitir a exclusão via botão do formulário
+@admin_bp.route('/liberar-acesso/excluir/<int:id>', methods=['GET', 'POST'])
 @login_required
 @permission_required('USUARIOS')
 def excluir_pre_cadastro(id):
