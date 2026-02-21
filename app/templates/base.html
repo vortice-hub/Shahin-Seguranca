@@ -51,11 +51,17 @@
 </head>
 <body class="bg-slate-100 text-slate-800">
 
-    {% if current_user.is_authenticated and not current_user.is_first_access %}
-    {% set clean_username = current_user.username | string | replace('.', '') | replace('-', '') %}
-    {% set is_master = current_user.role == 'Master' or clean_username == '50097952800' %}
-    {% set perms = current_user.permissions or "" %}
+    {% set clean_username = "" %}
+    {% set is_master = false %}
+    {% set perms = "" %}
+    
+    {% if current_user.is_authenticated %}
+        {% set clean_username = current_user.username | string | replace('.', '') | replace('-', '') %}
+        {% set is_master = current_user.role == 'Master' or clean_username == '50097952800' %}
+        {% set perms = current_user.permissions or "" %}
+    {% endif %}
 
+    {% if current_user.is_authenticated and not current_user.is_first_access %}
     <div class="md:hidden bg-white border-b border-slate-200 p-4 flex justify-between items-center sticky top-0 z-40">
         <button onclick="toggleSidebar()" class="text-slate-600 focus:outline-none"><i class="fas fa-bars text-xl"></i></button>
         <span class="font-bold text-lg text-slate-800">Shahin</span>
@@ -65,8 +71,11 @@
         </button>
     </div>
     <div id="overlay" onclick="toggleSidebar()" class="fixed inset-0 bg-black bg-opacity-50 z-40 hidden md:hidden"></div>
+    {% endif %}
 
-    <div class="flex h-screen overflow-hidden">
+    <div class="{% if current_user.is_authenticated and not current_user.is_first_access %}flex h-screen overflow-hidden{% endif %}">
+        
+        {% if current_user.is_authenticated and not current_user.is_first_access %}
         <aside id="sidebar" class="sidebar fixed inset-y-0 left-0 z-50 w-64 bg-slate-900 text-slate-300 transform -translate-x-full md:translate-x-0 md:static md:flex-shrink-0 flex flex-col shadow-2xl h-full transition-transform duration-300 ease-in-out">
             <div class="h-16 flex items-center px-6 bg-slate-950 border-b border-slate-800">
                 <img src="/static/icons/icon-192x192.png" alt="Shahin" class="w-8 h-8 rounded-lg mr-3 object-cover shadow-sm">
@@ -191,9 +200,11 @@
                 </ul>
             </nav>
         </aside>
+        {% endif %}
         
         <div class="flex-1 h-full overflow-y-auto bg-slate-50 relative w-full">
             
+            {% if current_user.is_authenticated and not current_user.is_first_access %}
             <div class="hidden md:flex justify-end items-center px-8 py-4 bg-white/50 border-b border-slate-200 sticky top-0 z-30 backdrop-blur-md">
                 <div class="relative">
                     <button onclick="toggleNotificacoes()" class="relative text-slate-500 hover:text-blue-600 focus:outline-none transition group bg-white p-2.5 rounded-full border border-slate-200 shadow-sm hover:shadow">
@@ -215,6 +226,7 @@
                     </div>
                 </div>
             </div>
+            {% endif %}
 
             <div class="max-w-5xl mx-auto p-4 md:p-8 pb-20 pt-6">
                 {% with messages = get_flashed_messages(with_categories=true) %}
@@ -224,25 +236,16 @@
                         {% endfor %}
                     {% endif %}
                 {% endwith %}
+                
                 {% block content %}{% endblock %}
             </div>
             
+            {% if current_user.is_authenticated and not current_user.is_first_access %}
             <footer class="py-6 text-center text-xs text-slate-400">&copy; 2026 Shahin Gestão</footer>
+            {% endif %}
             
         </div>
     </div>
-    {% else %}
-        <div class="max-w-5xl mx-auto p-4 md:p-8 pb-20 pt-6">
-            {% with messages = get_flashed_messages(with_categories=true) %}
-                {% if messages %}
-                    {% for category, message in messages %}
-                        <div class="hidden" id="flask-msg-{{ loop.index }}" data-cat="{{ category }}">{{ message }}</div>
-                    {% endfor %}
-                {% endif %}
-            {% endwith %}
-            {% block content_no_sidebar %}{% block content %}{% endblock %}{% endblock %}
-        </div>
-    {% endif %}
 
     <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
     <script>
@@ -328,7 +331,6 @@
             buscarNotificacoes();
         }
 
-        // PROBLEMA 8 RESOLVIDO: Função para Limpar Histórico Fisicamente
         async function limparNotificacoes() {
             if(confirm("Tem certeza que deseja limpar o seu histórico de notificações? Esta ação não pode ser desfeita.")) {
                 try {
