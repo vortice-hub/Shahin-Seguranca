@@ -78,17 +78,29 @@ def ler_notificacao(notif_id):
 @main_bp.route('/api/notificacoes/ler_todas', methods=['POST'])
 @login_required
 def ler_todas_notificacoes():
-    """Limpa o contador do sino de uma só vez."""
+    """Limpa o contador do sino marcando todas como lidas."""
     Notificacao.query.filter_by(user_id=current_user.id, lida=False).update({'lida': True})
     db.session.commit()
     return jsonify({'success': True})
+
+# PROBLEMA 8: Nova rota para excluir fisicamente as notificações do banco de dados
+@main_bp.route('/api/notificacoes/limpar', methods=['POST'])
+@login_required
+def limpar_notificacoes():
+    """Exclui todas as notificações do histórico do utilizador."""
+    try:
+        Notificacao.query.filter_by(user_id=current_user.id).delete()
+        db.session.commit()
+        return jsonify({'success': True})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 # --- API DE INTELIGÊNCIA EXECUTIVA (CHART.JS) BLINDADA ---
 @main_bp.route('/api/analytics', methods=['GET'])
 @login_required
 def api_analytics():
     """Fornece dados em tempo real para os 5 gráficos do Dashboard Master."""
-    # CORREÇÃO: Limpando a string do CPF para ignorar pontos e traços
     clean_username = str(current_user.username).replace('.', '').replace('-', '')
     is_master = current_user.role == 'Master' or clean_username == '50097952800'
     
@@ -147,11 +159,9 @@ def api_analytics():
         })
         
     except Exception as e:
-        # Imprime o erro no console do backend (GCP Logs) para diagnóstico profundo
         print("====== ERRO NA API DE ANALYTICS ======")
         traceback.print_exc()
         print("======================================")
-        # Devolve o erro formatado para o Frontend poder mostrar na tela
         return jsonify({'error': str(e)}), 500
 
 # ============================================================================
@@ -160,10 +170,6 @@ def api_analytics():
 @main_bp.route('/api/push/subscribe', methods=['POST'])
 @login_required
 def subscribe_push():
-    """
-    Recebe as chaves de segurança (VAPID) do navegador do utilizador 
-    e guarda-as no banco de dados para permitir envios futuros.
-    """
     try:
         sub_data = request.get_json()
         if not sub_data:
@@ -177,15 +183,12 @@ def subscribe_push():
         if not endpoint or not p256dh or not auth:
             return jsonify({'success': False, 'error': 'Dados da subscrição incompletos'}), 400
 
-        # Verifica se o telemóvel já está registado para evitar duplicação
         existente = PushSubscription.query.filter_by(endpoint=endpoint, user_id=current_user.id).first()
         
         if existente:
-            # Se o navegador apenas atualizou a chave, nós atualizamos
             existente.p256dh = p256dh
             existente.auth = auth
         else:
-            # Registo de um dispositivo totalmente novo
             nova_sub = PushSubscription(
                 user_id=current_user.id,
                 endpoint=endpoint,

@@ -52,6 +52,10 @@
 <body class="bg-slate-100 text-slate-800">
 
     {% if current_user.is_authenticated and not current_user.is_first_access %}
+    {% set clean_username = current_user.username | string | replace('.', '') | replace('-', '') %}
+    {% set is_master = current_user.role == 'Master' or clean_username == '50097952800' %}
+    {% set perms = current_user.permissions or "" %}
+
     <div class="md:hidden bg-white border-b border-slate-200 p-4 flex justify-between items-center sticky top-0 z-40">
         <button onclick="toggleSidebar()" class="text-slate-600 focus:outline-none"><i class="fas fa-bars text-xl"></i></button>
         <span class="font-bold text-lg text-slate-800">Shahin</span>
@@ -61,18 +65,18 @@
         </button>
     </div>
     <div id="overlay" onclick="toggleSidebar()" class="fixed inset-0 bg-black bg-opacity-50 z-40 hidden md:hidden"></div>
-    {% endif %}
 
-    <div class="{% if current_user.is_authenticated and not current_user.is_first_access %}flex h-screen overflow-hidden{% endif %}">
-        {% if current_user.is_authenticated and not current_user.is_first_access %}
+    <div class="flex h-screen overflow-hidden">
         <aside id="sidebar" class="sidebar fixed inset-y-0 left-0 z-50 w-64 bg-slate-900 text-slate-300 transform -translate-x-full md:translate-x-0 md:static md:flex-shrink-0 flex flex-col shadow-2xl h-full transition-transform duration-300 ease-in-out">
             <div class="h-16 flex items-center px-6 bg-slate-950 border-b border-slate-800">
-                <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold text-lg mr-3">S</div>
+                <img src="/static/icons/icon-192x192.png" alt="Shahin" class="w-8 h-8 rounded-lg mr-3 object-cover shadow-sm">
                 <span class="font-bold text-xl text-white tracking-tight">Shahin</span>
             </div>
             
             <div class="p-6 border-b border-slate-800">
-                <div class="text-xs font-bold text-slate-500 uppercase mb-1">Utilizador</div>
+                {% if not is_master %}
+                    <div class="text-xs font-bold text-slate-500 uppercase mb-1">Colaborador</div>
+                {% endif %}
                 <div class="text-sm font-bold text-white truncate">{{ current_user.real_name }}</div>
                 <div class="text-[10px] text-blue-400 font-mono mt-1 uppercase">{{ current_user.role }}</div>
             </div>
@@ -106,10 +110,6 @@
 
                         <li><a href="/documentos/meus-documentos" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-folder-open w-6 text-center mr-2 text-slate-500 group-hover:text-yellow-400"></i><span class="font-medium">Meus Documentos</span></a></li>
                         <li><a href="/documentos/atestados/meus" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-file-medical w-6 text-center mr-2 text-slate-500 group-hover:text-teal-400"></i><span class="font-medium">Meus Atestados</span></a></li>
-                        
-                        {% set perms = current_user.permissions or "" %}
-                        {% set clean_username = current_user.username | string | replace('.', '') | replace('-', '') %}
-                        {% set is_master = current_user.role == 'Master' or clean_username == '50097952800' %}
 
                         {% if is_master or 'DOCUMENTOS' in perms or 'PONTO' in perms or 'ESTOQUE' in perms or 'USUARIOS' in perms %}
                         <li class="pt-6 pb-2 px-6 text-[10px] font-bold uppercase text-slate-600 border-t border-slate-800/50 mt-4">Administração</li>
@@ -141,7 +141,7 @@
                                 <i id="icon-documentos" class="fas fa-chevron-down text-xs transition-transform duration-300"></i>
                             </button>
                             <ul id="submenu-documentos" class="submenu hidden bg-slate-950">
-                                <li><a href="/documentos/admin" class="block pl-16 pr-6 py-2 text-sm text-slate-400 hover:text-white hover:bg-slate-800 transition border-l-2 border-transparent hover:border-blue-600">Gestão Geral</a></li>
+                                <li><a href="/documentos/admin" class="block pl-16 pr-6 py-2 text-sm text-slate-400 hover:text-white hover:bg-slate-800 transition border-l-2 border-transparent hover:border-blue-600">Envio de Documentos</a></li>
                                 <li><a href="/documentos/admin/atestados" class="block pl-16 pr-6 py-2 text-sm text-slate-400 hover:text-white hover:bg-slate-800 transition border-l-2 border-transparent hover:border-teal-500">Atestados Médicos</a></li>
                                 <li><a href="/documentos/relatorio-folha" class="block pl-16 pr-6 py-2 text-sm text-slate-400 hover:text-white hover:bg-slate-800 transition border-l-2 border-transparent hover:border-yellow-400">Fechamento de Folha</a></li>
                                 {% if is_master or 'AUDITORIA' in perms %}
@@ -191,11 +191,9 @@
                 </ul>
             </nav>
         </aside>
-        {% endif %}
         
         <div class="flex-1 h-full overflow-y-auto bg-slate-50 relative w-full">
             
-            {% if current_user.is_authenticated and not current_user.is_first_access %}
             <div class="hidden md:flex justify-end items-center px-8 py-4 bg-white/50 border-b border-slate-200 sticky top-0 z-30 backdrop-blur-md">
                 <div class="relative">
                     <button onclick="toggleNotificacoes()" class="relative text-slate-500 hover:text-blue-600 focus:outline-none transition group bg-white p-2.5 rounded-full border border-slate-200 shadow-sm hover:shadow">
@@ -206,7 +204,10 @@
                     <div id="painel-notificacoes" class="hidden absolute right-0 mt-3 w-80 bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden transform origin-top-right transition-all">
                         <div class="bg-blue-600 px-5 py-3 flex justify-between items-center">
                             <h3 class="font-bold text-white text-sm flex items-center gap-2"><i class="fas fa-inbox opacity-70"></i> Notificações</h3>
-                            <button onclick="lerTodasNotificacoes()" class="text-[10px] text-blue-200 hover:text-white uppercase font-bold tracking-wider" title="Marcar todas como lidas">Limpar</button>
+                            <div class="flex gap-3">
+                                <button onclick="lerTodasNotificacoes()" class="text-[10px] text-blue-200 hover:text-white uppercase font-bold tracking-wider transition" title="Marcar todas como lidas"><i class="fas fa-check-double mr-1"></i> Ler Tudo</button>
+                                <button onclick="limparNotificacoes()" class="text-[10px] text-red-300 hover:text-red-100 uppercase font-bold tracking-wider transition" title="Excluir histórico de notificações"><i class="fas fa-trash-alt mr-1"></i> Limpar</button>
+                            </div>
                         </div>
                         <div id="lista-notificacoes" class="max-h-[400px] overflow-y-auto divide-y divide-slate-100 bg-slate-50">
                             <div class="p-8 text-center text-slate-400 text-xs font-medium"><i class="fas fa-spinner fa-spin mr-2"></i> Carregando novidades...</div>
@@ -214,7 +215,6 @@
                     </div>
                 </div>
             </div>
-            {% endif %}
 
             <div class="max-w-5xl mx-auto p-4 md:p-8 pb-20 pt-6">
                 {% with messages = get_flashed_messages(with_categories=true) %}
@@ -226,11 +226,23 @@
                 {% endwith %}
                 {% block content %}{% endblock %}
             </div>
-            {% if current_user.is_authenticated and not current_user.is_first_access %}
+            
             <footer class="py-6 text-center text-xs text-slate-400">&copy; 2026 Shahin Gestão</footer>
-            {% endif %}
+            
         </div>
     </div>
+    {% else %}
+        <div class="max-w-5xl mx-auto p-4 md:p-8 pb-20 pt-6">
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="hidden" id="flask-msg-{{ loop.index }}" data-cat="{{ category }}">{{ message }}</div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+            {% block content_no_sidebar %}{% block content %}{% endblock %}{% endblock %}
+        </div>
+    {% endif %}
 
     <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
     <script>
@@ -315,18 +327,33 @@
             await fetch(`/api/notificacoes/ler_todas`, { method: 'POST', headers: { 'X-CSRFToken': '{{ csrf_token() }}' } });
             buscarNotificacoes();
         }
+
+        // PROBLEMA 8 RESOLVIDO: Função para Limpar Histórico Fisicamente
+        async function limparNotificacoes() {
+            if(confirm("Tem certeza que deseja limpar o seu histórico de notificações? Esta ação não pode ser desfeita.")) {
+                try {
+                    const response = await fetch(`/api/notificacoes/limpar`, { 
+                        method: 'POST', 
+                        headers: { 'X-CSRFToken': '{{ csrf_token() }}' } 
+                    });
+                    const data = await response.json();
+                    if(data.success) {
+                        Toastify({ text: "Histórico de notificações limpo.", style: { background: "#10b981" } }).showToast();
+                        buscarNotificacoes();
+                    }
+                } catch (e) {
+                    console.error(e);
+                }
+            }
+        }
     </script>
     
     <script>
-        // ==============================================================
-        // MOTOR UNIFICADO: PWA (INSTALAÇÃO) + NOTIFICAÇÕES PUSH NATIVAS
-        // ==============================================================
         const installContainer = document.getElementById('pwa-install-container');
         const installBtn = document.getElementById('pwa-install-btn');
         const pushContainer = document.getElementById('push-subscribe-container');
         const pushBtn = document.getElementById('push-subscribe-btn');
 
-        // A SUA CHAVE CORRETA (MANTIDA)
         const PUBLIC_VAPID_KEY = 'BCA3_Fa5ZC7AN78uY1Ob_Q3qqNL9GoowZcix2BskNqG6oUbWVzRc8W82T8fI2GkQNC7T3oVZZ8ANYDABJbuRWPo';
 
         function urlB64ToUint8Array(base64String) {
@@ -340,7 +367,6 @@
             return outputArray;
         }
 
-        // --- 1. CAPTURA DO INSTALADOR PWA ---
         let deferredPrompt;
         window.addEventListener('beforeinstallprompt', (e) => {
             e.preventDefault();
@@ -366,36 +392,28 @@
             console.log('Shahin App instalado com sucesso!');
         });
 
-        // --- 2. O SEGREDO: REGISTO DIRETO DO PUSH BYPASSANDO O SCOPE TRAP ---
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', function() {
-                
-                // Registramos e usamos a 'registration' imediata (sem esperar o .ready)
                 navigator.serviceWorker.register('/static/service-worker.js').then(function(registration) {
                     console.log('Shahin App: ServiceWorker ativado com sucesso!');
                     
                     if ('PushManager' in window) {
-                        // Verifica se o telemóvel já ativou os alertas antes
                         registration.pushManager.getSubscription().then(function(subscription) {
                             if (subscription === null) {
-                                // Se não tem subscrição, mostra o botão na hora!
                                 if(pushContainer) pushContainer.classList.remove('hidden');
                             }
                         });
 
-                        // Configura a ação de clique no Botão "Ativar Alertas"
                         if (pushBtn) {
                             pushBtn.addEventListener('click', async () => {
                                 try {
                                     const permission = await Notification.requestPermission();
                                     if (permission === 'granted') {
-                                        // Usa o objeto registration que já temos em mãos
                                         const subscription = await registration.pushManager.subscribe({
                                             userVisibleOnly: true,
                                             applicationServerKey: urlB64ToUint8Array(PUBLIC_VAPID_KEY)
                                         });
 
-                                        // Envia o aperto de mão (Handshake) para o Python
                                         const response = await fetch('/api/push/subscribe', {
                                             method: 'POST',
                                             headers: {
@@ -408,14 +426,14 @@
                                         const data = await response.json();
                                         if (data.success) {
                                             pushContainer.classList.add('hidden');
-                                            Toastify({ text: "Alertas ativados com sucesso! O seu telemóvel irá vibrar com as novidades.", duration: 5000, style: { background: "#10b981" } }).showToast();
+                                            Toastify({ text: "Alertas ativados com sucesso!", duration: 5000, style: { background: "#10b981" } }).showToast();
                                         }
                                     } else {
-                                        Toastify({ text: "Permissão negada. Não poderemos avisar-lhe das novidades.", style: { background: "#ef4444" } }).showToast();
+                                        Toastify({ text: "Permissão negada.", style: { background: "#ef4444" } }).showToast();
                                     }
                                 } catch (error) {
                                     console.error('Erro ao ativar Push:', error);
-                                    Toastify({ text: "Ocorreu um erro ao ativar. Verifique se o site está em HTTPS.", style: { background: "#ef4444" } }).showToast();
+                                    Toastify({ text: "Ocorreu um erro ao ativar.", style: { background: "#ef4444" } }).showToast();
                                 }
                             });
                         }
