@@ -44,20 +44,31 @@ def create_app():
     @app.before_request
     def blindagem_multi_tenant():
         """
-        Intercepta todas as requisições para garantir o isolamento da empresa.
+        Intercepta todas as requisições para garantir o isolamento da empresa
+        e carregar as preferências visuais (White-Label).
         """
-        # Ignora arquivos estáticos (CSS, JS, Imagens) para manter o sistema rápido
+        # Ignora arquivos estáticos para manter o desempenho
         if request.endpoint and request.endpoint.startswith('static'):
             return
 
         if current_user.is_authenticated:
-            # Regra de Chumbo: Se está logado, TEM que pertencer a uma empresa
+            # Regra de Segurança: Se logado, deve ter empresa_id
             if getattr(current_user, 'empresa_id', None) is None:
-                logout_user() # Derruba a sessão
-                abort(403)    # Redireciona para a página de acesso negado
+                logout_user()
+                abort(403)
             
-            # Injeta a empresa na variável global (g) para o resto do sistema usar!
-            g.empresa_id = current_user.empresa_id
+            # 🎨 WHITE-LABEL: Carrega o objeto completo da Empresa para o g.empresa
+            # Isso permite acessar g.empresa.config_json em qualquer lugar (Python ou HTML)
+            from app.models import Empresa
+            empresa_atual = Empresa.query.get(current_user.empresa_id)
+            
+            if not empresa_atual or not empresa_atual.ativa:
+                logout_user()
+                flash("Esta conta de empresa está desativada. Entre em contato com o suporte.", "error")
+                return redirect(url_for('auth.login'))
+
+            g.empresa = empresa_atual
+            g.empresa_id = empresa_atual.id
 
     # --- INTERCETORES DE ERRO GLOBAIS ---
     @app.errorhandler(404)
@@ -76,7 +87,7 @@ def create_app():
         # Importação dos Blueprints
         from app.auth.routes import auth_bp
         from app.admin.routes import admin_bp
-        from app.admin.super_routes import super_admin_bp # 🔐 NOVO: Rotas Super Admin
+        from app.admin.super_routes import super_admin_bp
         from app.ponto.routes import ponto_bp
         from app.estoque.routes import estoque_bp
         from app.documentos.routes import documentos_bp
@@ -85,15 +96,11 @@ def create_app():
         # Registro dos Blueprints
         app.register_blueprint(auth_bp)
         app.register_blueprint(admin_bp)
-        app.register_blueprint(super_admin_bp) # 🔐 NOVO: Registro Super Admin
+        app.register_blueprint(super_admin_bp)
         app.register_blueprint(ponto_bp)
         app.register_blueprint(estoque_bp)
         app.register_blueprint(documentos_bp)
         app.register_blueprint(main_bp)
-
-    @app.cli.command("setup-db")
-    def setup_db():
-        pass # Mantido vazio pois já usamos a rota /vortice-migrar para migração real.
 
     return app
 

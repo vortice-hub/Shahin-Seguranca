@@ -4,7 +4,7 @@ from app.services.empresa_service import EmpresaService
 from app.repositories.empresa_repository import EmpresaRepository
 from app.utils import super_admin_required
 
-# Criamos um Blueprint separado para não misturar com o Admin de uma empresa específica
+# Blueprint exclusivo para a gestão global da plataforma Vortice
 super_admin_bp = Blueprint('super_admin', __name__, template_folder='templates', url_prefix='/admin/super')
 
 @super_admin_bp.route('/empresas', methods=['GET'])
@@ -21,13 +21,11 @@ def listar_empresas():
 def cadastrar_empresa():
     service = EmpresaService()
     
-    # Dados da Empresa
     dados_empresa = {
         'nome': request.form.get('nome_empresa'),
         'plano': request.form.get('plano', 'Standard')
     }
     
-    # Dados do Master (Dono da nova empresa)
     dados_master = {
         'nome_completo': request.form.get('nome_master'),
         'cpf': request.form.get('cpf_master'),
@@ -55,5 +53,28 @@ def alterar_status_empresa(id):
         repo.commit()
         status = "Ativada" if empresa.ativa else "Bloqueada"
         flash(f"Empresa {empresa.nome} foi {status} com sucesso!", "success")
+    return redirect(url_for('super_admin.listar_empresas'))
+
+# 🎨 NOVA ROTA: ATUALIZAR IDENTIDADE VISUAL (WHITE-LABEL)
+@super_admin_bp.route('/empresas/branding/<int:id>', methods=['POST'])
+@login_required
+@super_admin_required
+def configurar_branding(id):
+    """Rota para processar a mudança de cores e logo de uma empresa específica."""
+    service = EmpresaService()
+    
+    # Captura os dados visuais do formulário
+    config_visual = {
+        'cor_primaria': request.form.get('cor_primaria', '#2563eb'),
+        'cor_hover': request.form.get('cor_hover', '#1d4ed8'),
+        'logo_url': request.form.get('logo_url', '')
+    }
+    
+    try:
+        service.atualizar_branding(id, config_visual)
+        flash("Identidade visual atualizada com sucesso!", "success")
+    except Exception as e:
+        flash(f"Erro ao atualizar branding: {e}", "error")
+        
     return redirect(url_for('super_admin.listar_empresas'))
 

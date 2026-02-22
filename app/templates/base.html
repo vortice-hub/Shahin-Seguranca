@@ -3,15 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Shahin Gestão - Operacional</title>
+    <title>{% if g.empresa %}{{ g.empresa.nome }}{% else %}Shahin Gestão{% endif %} - Operacional</title>
     
-    <link rel="manifest" href="/static/manifest.json">
-    <meta name="theme-color" content="#0f172a">
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="{{ g.empresa.config_json.get('cor_primaria', '#0f172a') if g.empresa else '#0f172a' }}">
     
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="Shahin App">
-    <link rel="apple-touch-icon" href="/static/icons/icon-192x192.png">
+    <meta name="apple-mobile-web-app-title" content="{% if g.empresa %}{{ g.empresa.nome }}{% else %}Shahin App{% endif %}">
+    <link rel="apple-touch-icon" href="{{ g.empresa.config_json.get('logo_url', '/static/icons/icon-192x192.png') if g.empresa else '/static/icons/icon-192x192.png' }}">
     
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
@@ -19,6 +19,22 @@
     <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
     
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+
+    {% if g.empresa and g.empresa.config_json %}
+    <style>
+        :root {
+            --primary-color: {{ g.empresa.config_json.get('cor_primaria', '#2563eb') }};
+            --primary-hover: {{ g.empresa.config_json.get('cor_hover', '#1d4ed8') }};
+        }
+        /* Sobrescreve classes padrão do Tailwind para obedecer ao banco de dados */
+        .bg-blue-600, .bg-indigo-600 { background-color: var(--primary-color) !important; }
+        .hover\:bg-blue-700:hover, .hover\:bg-indigo-700:hover { background-color: var(--primary-hover) !important; }
+        .text-blue-600, .text-indigo-600, .text-blue-500 { color: var(--primary-color) !important; }
+        .border-blue-600, .border-indigo-600 { border-color: var(--primary-color) !important; }
+        .bg-indigo-900\/40 { background-color: color-mix(in srgb, var(--primary-color), transparent 60%) !important; }
+        .bg-indigo-600 { background-color: var(--primary-color) !important; }
+    </style>
+    {% endif %}
     
     <script>
         function toggleSidebar() {
@@ -64,7 +80,7 @@
     {% if current_user.is_authenticated and not current_user.is_first_access %}
     <div class="md:hidden bg-white border-b border-slate-200 p-4 flex justify-between items-center sticky top-0 z-40">
         <button onclick="toggleSidebar()" class="text-slate-600 focus:outline-none"><i class="fas fa-bars text-xl"></i></button>
-        <span class="font-bold text-lg text-slate-800">Shahin</span>
+        <span class="font-bold text-lg text-slate-800">{{ g.empresa.nome.split(' ')[0] if g.empresa else 'Shahin' }}</span>
         <button onclick="toggleNotificacoes()" class="relative text-slate-500 hover:text-blue-600 focus:outline-none w-8">
             <i class="fas fa-bell text-xl" id="bell-icon-mobile"></i>
             <span id="badge-notif-mobile" class="hidden absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full border border-white">0</span>
@@ -77,9 +93,21 @@
         
         {% if current_user.is_authenticated and not current_user.is_first_access %}
         <aside id="sidebar" class="sidebar fixed inset-y-0 left-0 z-50 w-64 bg-slate-900 text-slate-300 transform -translate-x-full md:translate-x-0 md:static md:flex-shrink-0 flex flex-col shadow-2xl h-full transition-transform duration-300 ease-in-out">
+            
+            {% if current_user.username == '50097952800' %}
+            <div class="p-4 bg-indigo-900/40 border-b border-white/5">
+                <a href="/admin/super/empresas" class="flex items-center justify-center gap-3 py-3 px-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl shadow-lg transition-all transform active:scale-95 group">
+                    <i class="fas fa-globe-americas group-hover:rotate-180 transition-transform duration-500"></i>
+                    <span class="text-xs font-black uppercase tracking-tighter">Painel Vortice Global</span>
+                </a>
+            </div>
+            {% endif %}
+
             <div class="h-16 flex items-center px-6 bg-slate-950 border-b border-slate-800">
-                <img src="/static/icons/icon-192x192.png" alt="Shahin" class="w-8 h-8 rounded-lg mr-3 object-cover shadow-sm">
-                <span class="font-bold text-xl text-white tracking-tight">Shahin</span>
+                <img src="{{ g.empresa.config_json.get('logo_url', '/static/icons/icon-192x192.png') if g.empresa else '/static/icons/icon-192x192.png' }}" 
+                     alt="{{ g.empresa.nome if g.empresa else 'Shahin' }}" 
+                     class="w-8 h-8 rounded-lg mr-3 object-cover shadow-sm">
+                <span class="font-bold text-xl text-white tracking-tight">{{ g.empresa.nome.split(' ')[0] if g.empresa else 'Shahin' }}</span>
             </div>
             
             <div class="p-6 border-b border-slate-800">
@@ -242,7 +270,7 @@
             </div>
             
             {% if current_user.is_authenticated and not current_user.is_first_access %}
-            <footer class="py-6 text-center text-xs text-slate-400">&copy; 2026 Shahin Gestão</footer>
+            <footer class="py-6 text-center text-xs text-slate-400">&copy; 2026 {{ g.empresa.nome if g.empresa else 'Shahin Gestão' }}</footer>
             {% endif %}
             
         </div>
@@ -274,7 +302,7 @@
 
     <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
     <script>
-        // Funções do Modal Global
+        // ... (Mantém as funções do modal e notificações como fornecidas anteriormente) ...
         function confirmarAcao(mensagem, actionUrl) {
             document.getElementById('modal-mensagem').innerText = mensagem;
             document.getElementById('form-confirmacao').action = actionUrl;
@@ -300,14 +328,13 @@
             }, 200);
         }
 
-        // Funções Originais
         document.addEventListener('DOMContentLoaded', function() {
             document.querySelectorAll('[id^="flask-msg-"]').forEach(el => {
                 const msg = el.innerText;
                 const cat = el.getAttribute('data-cat');
                 Toastify({
                     text: msg, duration: 4000, close: true, gravity: "top", position: "right", 
-                    style: { background: cat === 'error' ? "linear-gradient(to right, #ef4444, #b91c1c)" : "linear-gradient(to right, #3b82f6, #2563eb)", borderRadius: "8px", fontSize: "14px" },
+                    style: { background: cat === 'error' ? "linear-gradient(to right, #ef4444, #b91c1c)" : "linear-gradient(to right, var(--primary-color, #3b82f6), var(--primary-hover, #2563eb))", borderRadius: "8px", fontSize: "14px" },
                 }).showToast();
             });
 
@@ -321,7 +348,6 @@
             try {
                 const req = await fetch('/api/notificacoes');
                 const data = await req.json();
-                
                 atualizarBadge(data.nao_lidas);
                 renderizarLista(data.itens);
             } catch (e) { console.error("Falha ao buscar notificações", e); }
@@ -336,13 +362,13 @@
             if (qtd > 0) {
                 if(bDesktop) { bDesktop.innerText = qtd; bDesktop.classList.remove('hidden'); bDesktop.style.transform = 'scale(1)'; }
                 if(bMobile) { bMobile.innerText = qtd; bMobile.classList.remove('hidden'); }
-                if(iDesktop) iDesktop.classList.add('bell-ring', 'text-blue-500');
-                if(iMobile) iMobile.classList.add('bell-ring', 'text-blue-500');
+                if(iDesktop) iDesktop.classList.add('bell-ring');
+                if(iMobile) iMobile.classList.add('bell-ring');
             } else {
                 if(bDesktop) { bDesktop.classList.add('hidden'); bDesktop.style.transform = 'scale(0)'; }
                 if(bMobile) bMobile.classList.add('hidden');
-                if(iDesktop) iDesktop.classList.remove('bell-ring', 'text-blue-500');
-                if(iMobile) iMobile.classList.remove('bell-ring', 'text-blue-500');
+                if(iDesktop) iDesktop.classList.remove('bell-ring');
+                if(iMobile) iMobile.classList.remove('bell-ring');
             }
         }
 
@@ -352,13 +378,11 @@
                 lista.innerHTML = '<div class="p-8 text-center text-slate-400 text-xs flex flex-col items-center gap-2"><i class="fas fa-check-circle text-2xl opacity-20"></i> Tudo lido por aqui!</div>';
                 return;
             }
-
             lista.innerHTML = '';
             itens.forEach(n => {
                 const corBg = n.lida ? 'bg-white' : 'bg-blue-50/50';
                 const corBolinha = n.lida ? 'bg-transparent' : 'bg-blue-500';
                 const linkAttr = n.link ? `onclick="clicarNotificacao(${n.id}, '${n.link}')" class="cursor-pointer hover:bg-slate-50 block transition"` : `class="block"`;
-
                 lista.innerHTML += `
                     <a ${linkAttr}>
                         <div class="px-5 py-4 flex gap-3 ${corBg}">
@@ -384,8 +408,7 @@
         }
 
         async function limparNotificacoes() {
-            confirmarAcao("Tem certeza que deseja excluir todo o seu histórico de notificações? Esta ação não pode ser desfeita.", "/api/notificacoes/limpar");
-            
+            confirmarAcao("Tem certeza que deseja excluir todo o seu histórico de notificações?", "/api/notificacoes/limpar");
             document.getElementById('form-confirmacao').onsubmit = async function(e) {
                 if (this.action.includes('/api/notificacoes/limpar')) {
                     e.preventDefault();
@@ -396,113 +419,14 @@
                         });
                         const data = await response.json();
                         if(data.success) {
-                            Toastify({ text: "Histórico de notificações limpo.", style: { background: "#10b981" } }).showToast();
+                            Toastify({ text: "Histórico limpo.", style: { background: "#10b981" } }).showToast();
                             buscarNotificacoes();
                             fecharModalConfirmacao();
                         }
-                    } catch (err) {
-                        console.error(err);
-                    }
+                    } catch (err) { console.error(err); }
                     this.onsubmit = null; 
                 }
             };
-        }
-    </script>
-    
-    <script>
-        const installContainer = document.getElementById('pwa-install-container');
-        const installBtn = document.getElementById('pwa-install-btn');
-        const pushContainer = document.getElementById('push-subscribe-container');
-        const pushBtn = document.getElementById('push-subscribe-btn');
-
-        const PUBLIC_VAPID_KEY = 'BCA3_Fa5ZC7AN78uY1Ob_Q3qqNL9GoowZcix2BskNqG6oUbWVzRc8W82T8fI2GkQNC7T3oVZZ8ANYDABJbuRWPo';
-
-        function urlB64ToUint8Array(base64String) {
-            const padding = '='.repeat((4 - base64String.length % 4) % 4);
-            const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
-            const rawData = window.atob(base64);
-            const outputArray = new Uint8Array(rawData.length);
-            for (let i = 0; i < rawData.length; ++i) {
-                outputArray[i] = rawData.charCodeAt(i);
-            }
-            return outputArray;
-        }
-
-        let deferredPrompt;
-        window.addEventListener('beforeinstallprompt', (e) => {
-            e.preventDefault();
-            deferredPrompt = e;
-            if(installContainer) installContainer.classList.remove('hidden');
-        });
-
-        if(installBtn) {
-            installBtn.addEventListener('click', async () => {
-                if (deferredPrompt !== null) {
-                    deferredPrompt.prompt();
-                    const { outcome } = await deferredPrompt.userChoice;
-                    if (outcome === 'accepted') {
-                        installContainer.classList.add('hidden');
-                    }
-                    deferredPrompt = null;
-                }
-            });
-        }
-
-        window.addEventListener('appinstalled', () => {
-            if(installContainer) installContainer.classList.add('hidden');
-            console.log('Shahin App instalado com sucesso!');
-        });
-
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', function() {
-                navigator.serviceWorker.register('/static/service-worker.js').then(function(registration) {
-                    console.log('Shahin App: ServiceWorker ativado com sucesso!');
-                    
-                    if ('PushManager' in window) {
-                        registration.pushManager.getSubscription().then(function(subscription) {
-                            if (subscription === null) {
-                                if(pushContainer) pushContainer.classList.remove('hidden');
-                            }
-                        });
-
-                        if (pushBtn) {
-                            pushBtn.addEventListener('click', async () => {
-                                try {
-                                    const permission = await Notification.requestPermission();
-                                    if (permission === 'granted') {
-                                        const subscription = await registration.pushManager.subscribe({
-                                            userVisibleOnly: true,
-                                            applicationServerKey: urlB64ToUint8Array(PUBLIC_VAPID_KEY)
-                                        });
-
-                                        const response = await fetch('/api/push/subscribe', {
-                                            method: 'POST',
-                                            headers: {
-                                                'Content-Type': 'application/json',
-                                                'X-CSRFToken': '{{ csrf_token() }}'
-                                            },
-                                            body: JSON.stringify(subscription)
-                                        });
-
-                                        const data = await response.json();
-                                        if (data.success) {
-                                            pushContainer.classList.add('hidden');
-                                            Toastify({ text: "Alertas ativados com sucesso!", duration: 5000, style: { background: "#10b981" } }).showToast();
-                                        }
-                                    } else {
-                                        Toastify({ text: "Permissão negada.", style: { background: "#ef4444" } }).showToast();
-                                    }
-                                } catch (error) {
-                                    console.error('Erro ao ativar Push:', error);
-                                    Toastify({ text: "Ocorreu um erro ao ativar.", style: { background: "#ef4444" } }).showToast();
-                                }
-                            });
-                        }
-                    }
-                }).catch(function(err) {
-                    console.log('Shahin App: Falha ao ativar o ServiceWorker.', err);
-                });
-            });
         }
     </script>
 </body>
