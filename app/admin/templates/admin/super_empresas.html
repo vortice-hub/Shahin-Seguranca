@@ -38,9 +38,9 @@
                 <thead class="bg-slate-50 text-xs font-bold text-slate-400 uppercase tracking-wider">
                     <tr>
                         <th class="py-4 px-8">Identificação</th>
-                        <th class="py-4 px-6">Configuração Visual</th>
+                        <th class="py-4 px-6">Identidade Visual</th>
                         <th class="py-4 px-6">Status</th>
-                        <th class="py-4 px-8 text-center">Gestão</th>
+                        <th class="py-4 px-8 text-center">Ações de Gestão</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100">
@@ -69,10 +69,24 @@
                             {% endif %}
                         </td>
                         <td class="py-5 px-8 text-center">
-                            <button onclick="abrirBranding('{{ empresa.id }}', '{{ empresa.nome }}', '{{ (empresa.config_json or {}).get('cor_primaria', '#2563eb') }}', '{{ (empresa.config_json or {}).get('cor_hover', '#1d4ed8') }}', '{{ (empresa.config_json or {}).get('logo_url', '') }}')" 
-                                    class="px-4 py-2 bg-slate-100 hover:bg-indigo-600 hover:text-white rounded-xl text-xs font-bold transition">
-                                <i class="fas fa-palette mr-1"></i> Branding
-                            </button>
+                            <div class="flex items-center justify-center gap-3">
+                                <button onclick="abrirBranding('{{ empresa.id }}', '{{ empresa.nome }}', '{{ (empresa.config_json or {}).get('cor_primaria', '#2563eb') }}', '{{ (empresa.config_json or {}).get('cor_hover', '#1d4ed8') }}', '{{ (empresa.config_json or {}).get('logo_url', '') }}')" 
+                                        class="p-2.5 bg-slate-100 hover:bg-indigo-600 hover:text-white rounded-xl text-xs font-bold transition" title="Editar Branding">
+                                    <i class="fas fa-palette"></i>
+                                </button>
+
+                                <form action="{{ url_for('super_admin.alterar_status_empresa', id=empresa.id) }}" method="POST">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <button type="submit" class="p-2.5 bg-slate-100 hover:bg-slate-200 rounded-xl transition" title="Ativar/Bloquear">
+                                        <i class="fas {% if empresa.ativa %}fa-toggle-on text-emerald-500{% else %}fa-toggle-off text-slate-400{% endif %} text-lg"></i>
+                                    </button>
+                                </form>
+
+                                <button onclick="confirmarAcao('Tem certeza que deseja excluir permanentemente a empresa {{ empresa.nome }}? Esta ação apagará todos os usuários, pontos e registros vinculados e não pode ser desfeita.', '{{ url_for('super_admin.excluir_empresa', id=empresa.id) }}')" 
+                                        class="p-2.5 bg-red-50 hover:bg-red-600 text-red-500 hover:text-white rounded-xl text-xs font-bold transition" title="Excluir Empresa">
+                                    <i class="fas fa-trash-alt"></i>
+                                </button>
+                            </div>
                         </td>
                     </tr>
                     {% endfor %}
@@ -85,37 +99,47 @@
 <div id="modal-nova-empresa" class="hidden fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
     <div class="bg-white rounded-3xl shadow-2xl max-w-2xl w-full overflow-hidden border border-slate-200">
         <div class="bg-indigo-600 p-6 text-white flex justify-between items-center">
-            <h3 class="text-xl font-black tracking-tight"><i class="fas fa-plus-circle mr-2"></i> Novo Cliente</h3>
+            <h3 class="text-xl font-black tracking-tight"><i class="fas fa-plus-circle mr-2"></i> Cadastrar Novo Cliente</h3>
             <button onclick="toggleModal('modal-nova-empresa')" class="text-white/70 hover:text-white"><i class="fas fa-times text-xl"></i></button>
         </div>
-        <form action="{{ url_for('super_admin.cadastrar_empresa') }}" method="POST" class="p-8 grid grid-cols-1 md:grid-cols-2 gap-6">
+        <form action="{{ url_for('super_admin.cadastrar_empresa') }}" method="POST" enctype="multipart/form-data" class="p-8 grid grid-cols-1 md:grid-cols-2 gap-6">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <div class="col-span-2"><h4 class="text-xs font-black text-slate-400 uppercase border-b pb-2">Empresa</h4></div>
-            <div>
-                <label class="block text-xs font-bold text-slate-500 mb-2">Nome</label>
+            
+            <div class="col-span-2"><h4 class="text-xs font-black text-slate-400 uppercase border-b pb-2">Dados do Cliente</h4></div>
+            <div class="col-span-2 md:col-span-1">
+                <label class="block text-xs font-bold text-slate-500 mb-2">Nome da Empresa</label>
                 <input type="text" name="nome_empresa" required class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500">
             </div>
-            <div>
-                <label class="block text-xs font-bold text-slate-500 mb-2">Plano</label>
+            <div class="col-span-2 md:col-span-1">
+                <label class="block text-xs font-bold text-slate-500 mb-2">Plano Contratado</label>
                 <select name="plano" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none">
                     <option value="Standard">Standard</option>
                     <option value="Enterprise">Enterprise</option>
                 </select>
             </div>
-            <div class="col-span-2 mt-4"><h4 class="text-xs font-black text-slate-400 uppercase border-b pb-2">Administrador Master</h4></div>
+
             <div class="col-span-2">
-                <label class="block text-xs font-bold text-slate-500 mb-2">Nome Completo</label>
+                <label class="block text-xs font-bold text-slate-500 mb-2">Logotipo Inicial (Opcional - GCS)</label>
+                <div class="p-4 bg-slate-50 border border-dashed border-slate-300 rounded-xl">
+                    <input type="file" name="logo_arquivo" accept="image/*" class="text-xs w-full file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-bold file:bg-indigo-50 file:text-indigo-700">
+                </div>
+            </div>
+
+            <div class="col-span-2 mt-4"><h4 class="text-xs font-black text-slate-400 uppercase border-b pb-2">Acesso Master</h4></div>
+            <div class="col-span-2">
+                <label class="block text-xs font-bold text-slate-500 mb-2">Nome Completo do Responsável</label>
                 <input type="text" name="nome_master" required class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none">
             </div>
             <div>
-                <label class="block text-xs font-bold text-slate-500 mb-2">CPF (Login)</label>
+                <label class="block text-xs font-bold text-slate-500 mb-2">CPF (Login Inicial)</label>
                 <input type="text" name="cpf_master" required class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none">
             </div>
             <div>
                 <label class="block text-xs font-bold text-slate-500 mb-2">Senha Provisória</label>
                 <input type="password" name="senha_provisoria" value="123456" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none">
             </div>
-            <button type="submit" class="col-span-2 py-4 bg-indigo-600 text-white font-black rounded-2xl uppercase text-sm mt-4">Criar Conta</button>
+
+            <button type="submit" class="col-span-2 py-4 bg-indigo-600 text-white font-black rounded-2xl shadow-lg uppercase text-sm mt-4 transform transition active:scale-95">Finalizar Onboarding</button>
         </form>
     </div>
 </div>
@@ -123,19 +147,19 @@
 <div id="modal-branding" class="hidden fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
     <div class="bg-white rounded-3xl shadow-2xl max-w-lg w-full overflow-hidden border border-slate-200">
         <div class="bg-indigo-600 p-6 text-white flex justify-between items-center">
-            <h3 class="text-xl font-black tracking-tight" id="branding-nome-empresa">Branding</h3>
+            <h3 class="text-xl font-black tracking-tight" id="branding-nome-empresa">Ajustar Branding</h3>
             <button onclick="toggleModal('modal-branding')" class="text-white/70 hover:text-white"><i class="fas fa-times text-xl"></i></button>
         </div>
         <form id="form-branding" method="POST" enctype="multipart/form-data" class="p-8 space-y-6">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="bg-slate-50 p-4 rounded-2xl border border-dashed border-slate-300">
-                <label class="block text-xs font-black text-slate-500 uppercase mb-3">Logotipo</label>
+                <label class="block text-xs font-black text-slate-500 uppercase mb-3">Substituir Logotipo</label>
                 <input type="file" name="logo_arquivo" accept="image/*" class="text-xs mb-4 w-full">
                 <input type="url" name="logo_url" id="input-logo-url" placeholder="Ou link manual..." class="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm outline-none">
             </div>
             <div class="grid grid-cols-2 gap-4">
                 <div>
-                    <label class="text-[10px] uppercase font-bold text-slate-400">Cor Primária</label>
+                    <label class="text-[10px] uppercase font-bold text-slate-400">Cor Principal</label>
                     <input type="color" name="cor_primaria" id="input-cor-primaria" class="w-full h-12 rounded-lg cursor-pointer">
                 </div>
                 <div>
@@ -143,7 +167,7 @@
                     <input type="color" name="cor_hover" id="input-cor-hover" class="w-full h-12 rounded-lg cursor-pointer">
                 </div>
             </div>
-            <button type="submit" class="w-full py-4 bg-indigo-600 text-white font-black rounded-2xl uppercase tracking-widest text-sm">Gravar Branding</button>
+            <button type="submit" class="w-full py-4 bg-indigo-600 text-white font-black rounded-2xl uppercase tracking-widest text-sm">Salvar Alterações</button>
         </form>
     </div>
 </div>

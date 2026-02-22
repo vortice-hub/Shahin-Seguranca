@@ -9,7 +9,6 @@ from app.extensions import db
 class EmpresaService:
     def __init__(self):
         self.empresa_repo = EmpresaRepository()
-        # Nome do Bucket configurado no Google Cloud Console
         self.bucket_name = os.environ.get('VORTICE_BUCKET_NAME', 'vortice-assets')
 
     def _upload_logo_to_gcs(self, empresa_slug, file_obj):
@@ -18,15 +17,11 @@ class EmpresaService:
             client = storage.Client()
             bucket = client.bucket(self.bucket_name)
             
-            # Gera um nome de ficheiro limpo: logo_empresa_slug.extensao
             ext = file_obj.filename.rsplit('.', 1)[1].lower()
             blob_name = f"logos/logo_{empresa_slug}.{ext}"
             blob = bucket.blob(blob_name)
             
-            # Upload do ficheiro
             blob.upload_from_file(file_obj, content_type=file_obj.content_type)
-            
-            # Torna o ficheiro público para que possa ser exibido no login
             blob.make_public()
             
             return blob.public_url
@@ -34,13 +29,18 @@ class EmpresaService:
             print(f"Erro no upload GCS: {e}")
             return None
 
-    def criar_nova_conta_cliente(self, dados_empresa, dados_master):
-        """Lógica de Onboarding SaaS."""
+    def criar_nova_conta_cliente(self, dados_empresa, dados_master, file_logo=None):
+        """Lógica de Onboarding SaaS com upload de logo inicial."""
         nome_empresa = dados_empresa.get('nome')
         slug = re.sub(r'[^a-z0-9]', '', nome_empresa.lower())
         
         if self.empresa_repo.get_by_slug(slug):
             raise ValueError("Uma empresa com este nome (ou slug similar) já existe.")
+
+        # 🎨 Processa a logo no momento da criação se fornecida
+        logo_url = ""
+        if file_logo and file_logo.filename != '':
+            logo_url = self._upload_logo_to_gcs(slug, file_logo)
 
         nova_empresa = Empresa(
             nome=nome_empresa,
@@ -48,7 +48,11 @@ class EmpresaService:
             plano=dados_empresa.get('plano', 'Standard'),
             ativa=True,
             features_json={"ponto": True, "documentos": True, "estoque": True},
-            config_json={"cor_primaria": "#2563eb", "cor_hover": "#1d4ed8", "logo_url": ""}
+            config_json={
+                "cor_primaria": "#2563eb", 
+                "cor_hover": "#1d4ed8", 
+                "logo_url": logo_url
+            }
         )
         self.empresa_repo.add(nova_empresa)
         db.session.flush() 
@@ -80,20 +84,18 @@ class EmpresaService:
         return nova_empresa, novo_user
 
     def atualizar_branding(self, empresa_id, config_visual, file_logo=None):
-        """Atualiza o branding, processando upload de ficheiro se presente."""
+        """Atualiza o branding existente."""
         empresa = self.empresa_repo.get_by_id(empresa_id)
         if not empresa:
             raise ValueError("Empresa não encontrada.")
             
         config = dict(empresa.config_json) if empresa.config_json else {}
         
-        # 🎨 LOGO: Se houver um ficheiro novo, faz o upload. Caso contrário, mantém o link manual.
         if file_logo and file_logo.filename != '':
             url_gcs = self._upload_logo_to_gcs(empresa.slug, file_logo)
             if url_gcs:
                 config['logo_url'] = url_gcs
         else:
-            # Se não enviou ficheiro, tenta pegar o link manual do campo de texto
             config['logo_url'] = config_visual.get('logo_url', config.get('logo_url', ''))
         
         config['cor_primaria'] = config_visual.get('cor_primaria', '#2563eb')
@@ -104,4 +106,15 @@ class EmpresaService:
         
         db.session.commit()
         return empresa
+
+    def excluir_empresa_completo(self, empresa_id):
+        """Remove a empresa e todos os dados vinculados (Cascade)."""
+        empresa = self.empresa_repo.get_by_id(empresa_id)
+        if not empresa:
+            raise ValueError("Empresa não encontrada para exclusão.")
+        
+        # O banco de dados cuidará de apagar usuários e registros vinculados se as FKs estiverem com CASCADE
+        db.session.delete(empresa)
+        db.session.commit()
+        return True
 

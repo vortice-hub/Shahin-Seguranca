@@ -8,11 +8,11 @@ from app.utils import super_admin_required
 super_admin_bp = Blueprint('super_admin', __name__, template_folder='templates', url_prefix='/vortice')
 
 # ==============================================================================
-# 🔐 AUTENTICAÇÃO DEUS EX MACHINA (SESSÃO INDEPENDENTE DA INFRAESTRUTURA)
+# 🔐 AUTENTICAÇÃO DEUS EX MACHINA (SESSÃO INDEPENDENTE)
 # ==============================================================================
 @super_admin_bp.route('/login', methods=['GET', 'POST'])
 def login():
-    """Porta de entrada secreta e exclusiva, impenetrável via banco de dados."""
+    """Porta de entrada secreta e exclusiva para o administrador global."""
     if session.get('vortice_admin'):
         return redirect(url_for('super_admin.listar_empresas'))
         
@@ -34,7 +34,7 @@ def login():
 
 @super_admin_bp.route('/logout')
 def logout():
-    """Destrói a sessão independente da plataforma Vortice."""
+    """Destrói a sessão de infraestrutura."""
     session.pop('vortice_admin', None)
     flash("Sessão de infraestrutura encerrada com segurança.", "success")
     return redirect(url_for('super_admin.login'))
@@ -52,7 +52,11 @@ def listar_empresas():
 @super_admin_bp.route('/empresas/nova', methods=['POST'])
 @super_admin_required
 def cadastrar_empresa():
+    """Cria nova empresa já processando o logotipo inicial."""
     service = EmpresaService()
+    
+    # Captura ficheiro se houver
+    file_logo = request.files.get('logo_arquivo')
     
     dados_empresa = {
         'nome': request.form.get('nome_empresa'),
@@ -66,13 +70,26 @@ def cadastrar_empresa():
     }
     
     try:
-        empresa, master = service.criar_nova_conta_cliente(dados_empresa, dados_master)
-        flash(f"Sucesso! Empresa '{empresa.nome}' criada. Master: {master.real_name}", "success")
+        # Envia o ficheiro para o serviço salvar no GCS
+        empresa, master = service.criar_nova_conta_cliente(dados_empresa, dados_master, file_logo=file_logo)
+        flash(f"Sucesso! Empresa '{empresa.nome}' criada com identidade visual.", "success")
     except ValueError as ve:
         flash(str(ve), "error")
     except Exception as e:
         flash(f"Erro crítico ao criar conta: {e}", "error")
         
+    return redirect(url_for('super_admin.listar_empresas'))
+
+@super_admin_bp.route('/empresas/excluir/<int:id>', methods=['POST'])
+@super_admin_required
+def excluir_empresa(id):
+    """Remove permanentemente uma empresa."""
+    service = EmpresaService()
+    try:
+        service.excluir_empresa_completo(id)
+        flash("Empresa e todos os dados vinculados foram excluídos permanentemente.", "success")
+    except Exception as e:
+        flash(f"Erro ao excluir empresa: {e}", "error")
     return redirect(url_for('super_admin.listar_empresas'))
 
 @super_admin_bp.route('/empresas/status/<int:id>', methods=['POST'])
@@ -92,18 +109,15 @@ def alterar_status_empresa(id):
 def configurar_branding(id):
     """Processa o branding capturando ficheiros para o Cloud Storage."""
     service = EmpresaService()
-    
-    # 🎨 Captura o ficheiro enviado (se houver)
     file_logo = request.files.get('logo_arquivo')
     
     config_visual = {
         'cor_primaria': request.form.get('cor_primaria', '#2563eb'),
         'cor_hover': request.form.get('cor_hover', '#1d4ed8'),
-        'logo_url': request.form.get('logo_url', '') # Mantém suporte a link manual se não houver ficheiro
+        'logo_url': request.form.get('logo_url', '')
     }
     
     try:
-        # Passa o ficheiro para o serviço processar o upload GCS
         service.atualizar_branding(id, config_visual, file_logo=file_logo)
         flash("Identidade visual e logotipo atualizados com sucesso!", "success")
     except Exception as e:
