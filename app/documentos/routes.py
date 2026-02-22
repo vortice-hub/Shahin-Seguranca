@@ -3,17 +3,15 @@ from flask_login import login_required, current_user
 import io
 
 from app.extensions import db
-from app.models import User, Holerite, Recibo, Atestado
+from app.models import User, Holerite, Recibo, Atestado, AssinaturaDigital
 from app.utils import get_brasil_time, permission_required, has_permission, get_client_ip, enviar_notificacao
 from app.documentos.storage import baixar_bytes_storage, salvar_no_storage
-from app.documentos.utils import gerar_pdf_recibo, gerar_pdf_espelho_mensal, gerar_certificado_entrega
 from app.documentos.atestado_parser import analisar_atestado_vision
 
 # --- IMPORTAÇÃO DOS NOVOS SERVICES E REPOSITORIES ---
 from app.services.documento_service import DocumentoService
 from app.repositories.documento_repository import (HoleriteRepository, ReciboRepository, 
                                                    AtestadoRepository, AssinaturaDigitalRepository)
-from app.repositories.user_repository import UserRepository
 
 documentos_bp = Blueprint('documentos', __name__, template_folder='templates', url_prefix='/documentos')
 
@@ -49,7 +47,7 @@ def dashboard_documentos():
             historico.append({
                 'id': h.id, 'doc_type': 'holerite', 'tipo': "Espelho de Ponto" if is_ponto else "Holerite", 
                 'cor': 'purple' if is_ponto else 'blue', 'usuario': h.user.real_name if h.user else "N/A",
-                'info': h.mes_referencia, 'data': h.enviado_em, 'visualizado': h.visualizado, 'rota': 'baixar_holerite'
+                'info': h.mes_referencia, 'data': h.enviado_em, 'visualizado': h.visualizado, 'rota': 'documentos.baixar_holerite'
             })
 
     if not f_tipo or f_tipo == 'Recibo':
@@ -57,7 +55,7 @@ def dashboard_documentos():
             historico.append({
                 'id': r.id, 'doc_type': 'recibo', 'tipo': 'Recibo', 'cor': 'emerald',
                 'usuario': r.user.real_name, 'info': f"R$ {r.valor:,.2f}",
-                'data': r.created_at, 'visualizado': r.visualizado, 'rota': 'baixar_recibo'
+                'data': r.created_at, 'visualizado': r.visualizado, 'rota': 'documentos.baixar_recibo'
             })
 
     historico.sort(key=lambda x: x['data'] if x['data'] else get_brasil_time(), reverse=True)
@@ -102,7 +100,8 @@ def baixar_holerite(id):
         doc_service.registrar_assinatura(current_user.id, doc.id, tipo_doc, arquivo_bytes, get_client_ip(), request.headers.get('User-Agent', '')[:250])
 
     nome = f"ponto_{doc.mes_referencia}.pdf" if 'espelhos' in doc.url_arquivo else f"holerite_{doc.mes_referencia}.pdf"
-    buffer = io.BytesIO(arquivo_bytes); buffer.seek(0)
+    buffer = io.BytesIO(arquivo_bytes)
+    buffer.seek(0)
     return send_file(buffer, mimetype='application/pdf', as_attachment=True, download_name=nome)
 
 @documentos_bp.route('/baixar/recibo/<int:id>', methods=['GET', 'POST'])
@@ -124,7 +123,8 @@ def baixar_recibo(id):
         doc_service = DocumentoService()
         doc_service.registrar_assinatura(current_user.id, doc.id, f"Recibo - R$ {doc.valor}", arquivo_bytes, get_client_ip(), request.headers.get('User-Agent', '')[:250])
 
-    buffer = io.BytesIO(arquivo_bytes); buffer.seek(0)
+    buffer = io.BytesIO(arquivo_bytes)
+    buffer.seek(0)
     return send_file(buffer, mimetype='application/pdf', as_attachment=True, download_name=f"recibo_{id}.pdf")
 
 @documentos_bp.route('/meus-documentos')
@@ -137,9 +137,9 @@ def meus_documentos():
     docs = []
     for h in holerites:
         e_ponto = True if h.url_arquivo and 'espelhos' in h.url_arquivo else False
-        docs.append({'id': h.id, 'tipo': 'Espelho' if e_ponto else 'Holerite', 'titulo': f"{'Ponto' if e_ponto else 'Holerite'} - {h.mes_referencia}", 'cor': 'purple' if e_ponto else 'blue', 'icone': 'fa-calendar' if e_ponto else 'fa-file', 'data': h.enviado_em, 'visto': h.visualizado, 'rota': 'baixar_holerite'})
+        docs.append({'id': h.id, 'tipo': 'Espelho' if e_ponto else 'Holerite', 'titulo': f"{'Ponto' if e_ponto else 'Holerite'} - {h.mes_referencia}", 'cor': 'purple' if e_ponto else 'blue', 'icone': 'fa-calendar' if e_ponto else 'fa-file', 'data': h.enviado_em, 'visto': h.visualizado, 'rota': 'documentos.baixar_holerite'})
     for r in recibos:
-        docs.append({'id': r.id, 'tipo': 'Recibo', 'titulo': 'Recibo', 'cor': 'emerald', 'icone': 'fa-receipt', 'data': r.created_at, 'visto': r.visualizado, 'rota': 'baixar_recibo'})
+        docs.append({'id': r.id, 'tipo': 'Recibo', 'titulo': 'Recibo', 'cor': 'emerald', 'icone': 'fa-receipt', 'data': r.created_at, 'visto': r.visualizado, 'rota': 'documentos.baixar_recibo'})
     return render_template('documentos/meus_documentos.html', docs=docs)
 
 @documentos_bp.route('/atestado/novo', methods=['GET', 'POST'])
@@ -162,7 +162,8 @@ def enviar_atestado():
                 data_inicio_afastamento=dados_ia.get('data_inicio'), quantidade_dias=dados_ia.get('dias_afastamento'),
                 texto_extraido=dados_ia.get('texto_bruto'), status='Revisao'
             )
-            atestado_repo.add(novo_atestado); atestado_repo.commit()
+            atestado_repo.add(novo_atestado)
+            atestado_repo.commit()
             
             master = User.query.filter_by(username='50097952800').first()
             if master: enviar_notificacao(master.id, f"Novo Atestado de {current_user.real_name}.", "/documentos/admin/atestados")
@@ -214,8 +215,80 @@ def exportar_relatorio_folha():
         flash(f'Erro Crítico: {str(e)}', 'error')
         return redirect(url_for('documentos.relatorio_folha'))
 
-# MANTIDAS: /atestados/meus, /admin/atestados, /atestado/baixar/<id>, /admin/revisao, /admin/auditoria, etc.
-# (As demais rotas menores mantêm-se como estavam na sua estrutura, apenas usando os repositories para busca)
+# ==============================================================================
+# ROTAS QUE ESTAVAM EM FALTA (RESTAURADAS E PROTEGIDAS)
+# ==============================================================================
+
+@documentos_bp.route('/admin/auditoria')
+@login_required
+@permission_required('DOCUMENTOS')
+def auditoria_assinaturas():
+    assinaturas = AssinaturaDigital.query.order_by(AssinaturaDigital.data_assinatura.desc()).all()
+    return render_template('documentos/auditoria.html', assinaturas=assinaturas)
+
+@documentos_bp.route('/admin/revisao', methods=['GET', 'POST'])
+@login_required
+@permission_required('DOCUMENTOS')
+def revisao_holerites():
+    holerite_repo = HoleriteRepository()
+    if request.method == 'POST':
+        h_id = request.form.get('holerite_id')
+        user_id = request.form.get('user_id')
+        h = holerite_repo.get_by_id(h_id)
+        if h and user_id:
+            h.user_id = user_id
+            h.status = 'Enviado'
+            holerite_repo.commit()
+            enviar_notificacao(user_id, "O seu documento revisado já está disponível para assinatura.", "/documentos/meus-documentos")
+            flash('Documento associado ao colaborador com sucesso!', 'success')
+        return redirect(url_for('documentos.revisao_holerites'))
+        
+    pendentes = holerite_repo.get_pendentes_revisao()
+    usuarios = User.query.filter(User.username != '12345678900', User.username != 'terminal').order_by(User.real_name).all()
+    return render_template('documentos/revisao.html', pendentes=pendentes, usuarios=usuarios)
+
+@documentos_bp.route('/admin/recibo/novo', methods=['GET', 'POST'])
+@login_required
+@permission_required('DOCUMENTOS')
+def novo_recibo():
+    if request.method == 'POST':
+        user_id = request.form.get('user_id')
+        valor = request.form.get('valor')
+        data_pagamento = request.form.get('data_pagamento')
+        arquivo = request.files.get('arquivo_pdf')
+        
+        if arquivo and arquivo.filename:
+            file_bytes = arquivo.read()
+            caminho = salvar_no_storage(file_bytes, f"recibos/{data_pagamento[:7]}")
+            if caminho:
+                novo_r = Recibo(user_id=user_id, valor=float(valor), data_pagamento=data_pagamento, url_arquivo=caminho)
+                db.session.add(novo_r)
+                db.session.commit()
+                enviar_notificacao(user_id, f"Novo Recibo de Pagamento disponível (R$ {valor}).", "/documentos/meus-documentos")
+                flash("Recibo enviado com sucesso!", "success")
+                return redirect(url_for('documentos.dashboard_documentos'))
+        flash("Erro ao enviar o recibo. Verifique se o arquivo é válido.", "error")
+            
+    usuarios = User.query.filter(User.username != '12345678900', User.username != 'terminal').order_by(User.real_name).all()
+    return render_template('documentos/novo_recibo.html', usuarios=usuarios)
+
+@documentos_bp.route('/atestado/baixar/<int:id>')
+@login_required
+def baixar_atestado(id):
+    atestado_repo = AtestadoRepository()
+    doc = atestado_repo.get_by_id(id)
+    
+    if not doc or (not has_permission('DOCUMENTOS') and doc.user_id != current_user.id):
+        return redirect(url_for('main.dashboard'))
+        
+    arquivo_bytes = baixar_bytes_storage(doc.url_arquivo)
+    if not arquivo_bytes:
+        flash("Arquivo não encontrado na nuvem.", "error")
+        return redirect(url_for('documentos.gestao_atestados'))
+        
+    buffer = io.BytesIO(arquivo_bytes)
+    buffer.seek(0)
+    return send_file(buffer, mimetype='application/pdf', as_attachment=True, download_name=f"atestado_{id}.pdf")
 
 @documentos_bp.route('/atestados/meus')
 @login_required
