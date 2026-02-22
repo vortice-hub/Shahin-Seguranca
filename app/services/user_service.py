@@ -47,12 +47,10 @@ class UserService:
             raise ValueError('Impossível excluir Master da empresa.')
             
         try:
-            # 1. Liberta subordinados
             subordinados = self.user_repo.get_subordinados(user.id)
             for sub in subordinados:
                 sub.gestor_id = None
                 
-            # 2. Limpeza Profunda (Garantindo que apagamos tudo relacionado a ele)
             AssinaturaDigital.query.filter_by(user_id=user.id).delete()
             Atestado.query.filter_by(user_id=user.id).delete()
             Notificacao.query.filter_by(user_id=user.id).delete()
@@ -66,7 +64,6 @@ class UserService:
             Holerite.query.filter_by(user_id=user.id).delete()
             Recibo.query.filter_by(user_id=user.id).delete()
             
-            # 3. Exclui o utilizador e faz o commit
             self.user_repo.delete(user)
             self.user_repo.commit()
         except Exception as e:
@@ -80,6 +77,10 @@ class UserService:
         
         gestor_req = form_data.get('gestor_id')
         user.gestor_id = int(gestor_req) if gestor_req else None
+        
+        # 🔐 FASE 4: VINCULAÇÃO DE CARGO RBAC
+        cargo_id = form_data.get('cargo_id')
+        user.cargo_id = int(cargo_id) if cargo_id else None
         
         user.salario = float(form_data.get('salario') or 0)
         user.razao_social_empregadora = form_data.get('razao_social')
@@ -96,10 +97,6 @@ class UserService:
         if form_data.get('dt_escala'): 
             user.data_inicio_escala = form_data.get('dt_escala')
 
-        if user.username != '50097952800' and user.username != 'Thaynara':
-            lista_perms = form_data.getlist('perm_keys')
-            user.permissions = ",".join(lista_perms)
-        
         self.user_repo.commit()
 
     def resetar_senha(self, user):

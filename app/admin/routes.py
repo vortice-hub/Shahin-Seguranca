@@ -92,6 +92,9 @@ def editar_usuario(id):
     user_carga_hm = format_minutes_to_hm(user.carga_horaria or 528)
     gestores = user_repo.get_gestores(exclude_id=user.id)
     
+    # Busca os cargos para preencher o Menu Suspenso (Dropdown)
+    cargos = Role.query.filter_by(empresa_id=g.empresa_id).all()
+    
     if request.method == 'POST':
         user_service = UserService()
         acao = request.form.get('acao')
@@ -116,7 +119,7 @@ def editar_usuario(id):
         except Exception as e:
             flash(f'Erro: {str(e)}', 'error')
 
-    return render_template('admin/editar_usuario.html', user=user, carga_hm=user_carga_hm, gestores=gestores)
+    return render_template('admin/editar_usuario.html', user=user, carga_hm=user_carga_hm, gestores=gestores, cargos=cargos)
 
 
 # ==============================================================================
@@ -195,7 +198,6 @@ def admin_limpeza():
 @login_required
 @permission_required('USUARIOS')
 def importar_excel_usuarios():
-    # Código de importação mantido idêntico...
     if 'arquivo_excel' not in request.files:
         flash('Nenhum arquivo enviado.', 'error')
         return redirect(url_for('admin.gerenciar_usuarios'))
@@ -206,13 +208,14 @@ def importar_excel_usuarios():
         return redirect(url_for('admin.gerenciar_usuarios'))
         
     if not file.filename.endswith(('.xlsx', '.xls')):
-        flash('Formato inválido.', 'error')
+        flash('Formato inválido. Por favor, envie uma planilha real do Excel (.xlsx ou .xls)', 'error')
         return redirect(url_for('admin.gerenciar_usuarios'))
 
     try:
         df = pd.read_excel(file)
         df = df.fillna('') 
         df.columns = [str(c).strip().lower() for c in df.columns] 
+        
         records = df.to_dict('records') 
         sucesso, falhas = 0, 0
         from app.utils import time_to_minutes
@@ -222,24 +225,89 @@ def importar_excel_usuarios():
             cpf_raw = str(row.get('cpf', '')).replace('.', '').replace('-', '').strip()
             if cpf_raw.endswith('.0'): cpf_raw = cpf_raw[:-2]
             cpf = cpf_raw
+            
+            cargo = str(row.get('cargo', '')).strip()
+            departamento = str(row.get('departamento', '')).strip()
+            cpf_gestor_raw = str(row.get('cpf_gestor', '')).replace('.', '').replace('-', '').strip()
+            if cpf_gestor_raw.endswith('.0'): cpf_gestor_raw = cpf_gestor_raw[:-2]
+            
             if not nome or not cpf:
                 falhas += 1
                 continue
+                
             if User.query.filter_by(cpf=cpf).first() or PreCadastro.query.filter_by(cpf=cpf).first():
                 falhas += 1
                 continue
+
+            dt_admissao = None
+            dt_adm_raw = row.get('data_admissao', '')
+            if dt_adm_raw:
+                if isinstance(dt_adm_raw, (datetime, date)):
+                    dt_admissao = dt_adm_raw if isinstance(dt_adm_raw, date) else dt_adm_raw.date()
+                elif isinstance(dt_adm_raw, pd.Timestamp):
+                    dt_admissao = dt_adm_raw.date()
+                else:
+                    dt_adm_str = str(dt_adm_raw).strip()
+                    if ' ' in dt_adm_str: dt_adm_str = dt_adm_str.split(' ')[0]
+                    try:
+                        if '/' in dt_adm_str: dt_admissao = datetime.strptime(dt_adm_str, '%d/%m/%Y').date()
+                        else: dt_admissao = datetime.strptime(dt_adm_str, '%Y-%m-%d').date()
+                    except ValueError: pass
+
+            try: salario = float(row.get('salario', 0))
+            except: salario = 0.0
+
+            escala = str(row.get('escala', 'Livre')).strip()
+            dt_escala = None
+            if escala == '12x36':
+                dt_esc_raw = row.get('data_escala', '')
+                if dt_esc_raw:
+                    if isinstance(dt_esc_raw, (datetime, date)):
+                        dt_escala = dt_esc_raw if isinstance(dt_esc_raw, date) else dt_esc_raw.date()
+                    elif isinstance(dt_esc_raw, pd.Timestamp):
+                        dt_escala = dt_esc_raw.date()
+                    else:
+                        dt_esc_str = str(dt_esc_raw).strip()
+                        if ' ' in dt_esc_str: dt_esc_str = dt_esc_str.split(' ')[0]
+                        try:
+                            if '/' in dt_esc_str: dt_escala = datetime.strptime(dt_esc_str, '%d/%m/%Y').date()
+                            else: dt_escala = datetime.strptime(dt_esc_str, '%Y-%m-%d').date()
+                        except ValueError: pass
+
+            carga_raw = row.get('carga_horaria', '08:48')
+            if isinstance(carga_raw, time): carga_hm = carga_raw.strftime('%H:%M')
+            else: carga_hm = str(carga_raw).strip() or '08:48'
+            carga_min = time_to_minutes(carga_hm)
             
-            # (Lógica omitida para brevidade nesta exibição, mas mantida no ficheiro real)
-            novo_pre = PreCadastro(cpf=cpf, nome_previsto=nome)
+            try: intervalo = int(float(row.get('intervalo', 60)))
+            except: intervalo = 60
+            
+            entrada_raw = row.get('entrada_ideal', '08:00')
+            if isinstance(entrada_raw, time): entrada = entrada_raw.strftime('%H:%M')
+            else: entrada = str(entrada_raw).strip() or '08:00'
+            
+            razao_social_excel = str(row.get('razao_social', '')).strip()
+            cnpj_excel = str(row.get('cnpj', '')).strip()
+
+            novo_pre = PreCadastro(
+                cpf=cpf, nome_previsto=nome, cargo=cargo, departamento=departamento if departamento else None,
+                cpf_gestor=cpf_gestor_raw if cpf_gestor_raw else None, salario=salario, data_admissao=dt_admissao,
+                escala=escala, data_inicio_escala=dt_escala, carga_horaria=carga_min, tempo_intervalo=intervalo,
+                inicio_jornada_ideal=entrada, razao_social=razao_social_excel if razao_social_excel else "LA SHAHIN SERVIÇOS DE SEGURANÇA LTDA",
+                cnpj=cnpj_excel if cnpj_excel else "50.537.235/0001-95"
+            )
             db.session.add(novo_pre)
             sucesso += 1
 
         db.session.commit()
-        if sucesso > 0: flash(f'Importado com sucesso: {sucesso} registros lidos.', 'success')
-        else: flash('Nenhum registro válido encontrado.', 'error')
+        if sucesso > 0:
+            flash(f'Importação concluída com sucesso: {sucesso} registos lidos do Excel. {falhas} ignorados.', 'success')
+        else:
+            flash('Nenhum registro válido encontrado.', 'error')
+            
     except Exception as e:
         db.session.rollback()
-        flash(f'Erro: {str(e)}', 'error')
+        flash(f'Erro ao ler arquivo: {str(e)}', 'error')
 
     return redirect(url_for('admin.gerenciar_usuarios'))
 
@@ -261,7 +329,7 @@ def listar_cargos():
 def criar_cargo():
     nome = request.form.get('nome')
     descricao = request.form.get('descricao')
-    perm_ids = request.form.getlist('permissoes') # Lista de IDs das permissões marcadas no checkbox
+    perm_ids = request.form.getlist('permissoes')
     
     if not nome:
         flash("O nome do Cargo é obrigatório.", "error")
@@ -269,8 +337,6 @@ def criar_cargo():
         
     try:
         novo_cargo = Role(nome=nome, descricao=descricao, empresa_id=g.empresa_id)
-        
-        # Atribui as permissões escolhidas ao cargo
         if perm_ids:
             permissoes_obj = Permission.query.filter(Permission.id.in_(perm_ids)).all()
             novo_cargo.permissions.extend(permissoes_obj)

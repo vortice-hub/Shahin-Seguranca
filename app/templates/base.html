@@ -177,7 +177,8 @@
                         {% endif %}
 
                         {% if is_master or 'USUARIOS' in perms %}
-                        <li><a href="/admin/usuarios" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-users-cog w-6 text-center mr-2 text-slate-500"></i><span class="font-medium">Funcionários</span></a></li>
+                        <li><a href="/admin/usuarios" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-users-cog w-6 text-center mr-2 text-slate-500 group-hover:text-blue-400"></i><span class="font-medium">Funcionários</span></a></li>
+                        <li><a href="/admin/cargos" class="flex items-center px-6 py-3 hover:bg-slate-800 hover:text-white transition group"><i class="fas fa-user-shield w-6 text-center mr-2 text-slate-500 group-hover:text-purple-400"></i><span class="font-medium">Cargos (RBAC)</span></a></li>
                         {% endif %}
                         {% endif %}
                     {% endif %}
@@ -383,12 +384,8 @@
         }
 
         async function limparNotificacoes() {
-            // Em vez do confirm feio, agora chamamos o nosso modal para excluir o histórico
             confirmarAcao("Tem certeza que deseja excluir todo o seu histórico de notificações? Esta ação não pode ser desfeita.", "/api/notificacoes/limpar");
-            // Nota: Para interceptar o submit e fazer via Ajax, teremos que modificar ligeiramente, 
-            // mas como é o único local onde é Ajax, vou deixar o script abaixo lidar com isso.
             
-            // Subscreve o comportamento padrão do form do modal SOMENTE neste caso específico
             document.getElementById('form-confirmacao').onsubmit = async function(e) {
                 if (this.action.includes('/api/notificacoes/limpar')) {
                     e.preventDefault();
@@ -406,7 +403,6 @@
                     } catch (err) {
                         console.error(err);
                     }
-                    // Retira a subscrição para não afetar outros locais
                     this.onsubmit = null; 
                 }
             };

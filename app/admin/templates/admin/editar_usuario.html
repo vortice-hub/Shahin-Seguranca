@@ -38,38 +38,25 @@
                 
                 {% if user.username != '50097952800' %}
                 <div class="bg-blue-50 p-5 rounded-xl border border-blue-100">
-                    <div class="flex items-center gap-2 mb-4 text-blue-700">
+                    <div class="flex items-center gap-2 mb-2 text-blue-700">
                         <i class="fas fa-shield-halved"></i>
-                        <span class="text-xs font-bold uppercase tracking-wider">Atribuições Administrativas</span>
+                        <span class="text-xs font-bold uppercase tracking-wider">Acesso ao Sistema (RBAC)</span>
                     </div>
+                    <p class="text-xs text-blue-600 mb-4">Determine o que este funcionário pode ver no sistema.</p>
                     
-                    <div class="grid grid-cols-1 gap-3">
-                        {% set user_perms = user.permissions.split(',') if user.permissions else [] %}
-                        
-                        <label class="flex items-center justify-between p-3 bg-white rounded-lg border border-blue-100 cursor-pointer hover:bg-blue-50 transition">
-                            <div class="flex items-center gap-3"><i class="fas fa-users-cog text-blue-500 w-5"></i><span class="text-sm font-semibold text-slate-700">Utilizadores</span></div>
-                            <input type="checkbox" name="perm_keys" value="USUARIOS" class="w-5 h-5 rounded text-blue-600" {% if 'USUARIOS' in user_perms %}checked{% endif %}>
-                        </label>
-                        <label class="flex items-center justify-between p-3 bg-white rounded-lg border border-blue-100 cursor-pointer hover:bg-blue-50 transition">
-                            <div class="flex items-center gap-3"><i class="fas fa-fingerprint text-emerald-500 w-5"></i><span class="text-sm font-semibold text-slate-700">Ponto (Aprovação)</span></div>
-                            <input type="checkbox" name="perm_keys" value="PONTO" class="w-5 h-5 rounded text-blue-600" {% if 'PONTO' in user_perms %}checked{% endif %}>
-                        </label>
-                        <label class="flex items-center justify-between p-3 bg-white rounded-lg border border-blue-100 cursor-pointer hover:bg-blue-50 transition">
-                            <div class="flex items-center gap-3"><i class="fas fa-file-invoice-dollar text-orange-500 w-5"></i><span class="text-sm font-semibold text-slate-700">Documentos (RH)</span></div>
-                            <input type="checkbox" name="perm_keys" value="DOCUMENTOS" class="w-5 h-5 rounded text-blue-600" {% if 'DOCUMENTOS' in user_perms %}checked{% endif %}>
-                        </label>
-                        <label class="flex items-center justify-between p-3 bg-white rounded-lg border border-blue-100 cursor-pointer hover:bg-blue-50 transition">
-                            <div class="flex items-center gap-3"><i class="fas fa-box-open text-purple-500 w-5"></i><span class="text-sm font-semibold text-slate-700">Estoque (Uniforme)</span></div>
-                            <input type="checkbox" name="perm_keys" value="ESTOQUE" class="w-5 h-5 rounded text-blue-600" {% if 'ESTOQUE' in user_perms %}checked{% endif %}>
-                        </label>
-                        <label class="flex items-center justify-between p-3 bg-white rounded-lg border border-blue-100 cursor-pointer hover:bg-blue-50 transition">
-                            <div class="flex items-center gap-3"><i class="fas fa-shield-alt text-slate-600 w-5"></i><span class="text-sm font-semibold text-slate-700">Auditoria Forense</span></div>
-                            <input type="checkbox" name="perm_keys" value="AUDITORIA" class="w-5 h-5 rounded text-blue-600" {% if 'AUDITORIA' in user_perms %}checked{% endif %}>
-                        </label>
+                    <div>
+                        <label class="label-pro text-blue-800">Perfil de Acesso (Cargo)</label>
+                        <select name="cargo_id" class="input-pro border-blue-200 focus:border-blue-500 cursor-pointer font-semibold text-slate-700">
+                            <option value="">-- Funcionário Padrão (Sem acessos extra) --</option>
+                            {% for cargo in cargos %}
+                                <option value="{{ cargo.id }}" {% if user.cargo_id == cargo.id %}selected{% endif %}>🛡️ {{ cargo.nome }}</option>
+                            {% endfor %}
+                        </select>
+                        <p class="text-[10px] text-slate-500 mt-2 text-right"><a href="/admin/cargos" class="text-blue-500 hover:underline">Gerenciar Cargos</a></p>
                     </div>
                 </div>
                 {% else %}
-                <div class="bg-slate-100 p-4 rounded-lg text-center">
+                <div class="bg-slate-100 p-4 rounded-lg text-center border border-slate-200">
                     <p class="text-[10px] font-bold text-slate-500 uppercase"><i class="fas fa-lock mr-1"></i> Acesso Master Absoluto</p>
                 </div>
                 {% endif %}
@@ -98,8 +85,8 @@
                         <input type="text" name="username" value="{{ user.username }}" class="input-pro" {% if user.username == '50097952800' %}readonly{% endif %}>
                     </div>
                     <div>
-                        <label class="label-pro">Cargo</label>
-                        <input type="text" name="role" value="{{ user.role }}" class="input-pro" {% if user.username == '50097952800' %}disabled{% endif %}>
+                        <label class="label-pro">Título do Contrato</label>
+                        <input type="text" name="role" value="{{ user.role }}" class="input-pro" placeholder="Ex: Vigia" {% if user.username == '50097952800' %}disabled{% endif %}>
                     </div>
                 </div>
             </div>
@@ -148,11 +135,8 @@
 </div>
 
 <script>
-    // Função específica para interceptar o Modal e fazer o submit deste formulário com a ação "excluir"
     function acionarModalExclusao() {
         confirmarAcao("ATENÇÃO: Isto apagará todos os dados, pontos e espelhos deste funcionário permanentemente. Confirmar?", "#");
-        
-        // Substitui o comportamento padrão do botão "Excluir" do Modal temporariamente
         document.getElementById('form-confirmacao').onsubmit = function(e) {
             e.preventDefault();
             document.getElementById('acao_input').value = 'excluir';
