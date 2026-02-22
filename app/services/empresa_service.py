@@ -1,6 +1,7 @@
 from app.models import Empresa, Role, Permission, User
 from app.repositories.empresa_repository import EmpresaRepository
 from app.extensions import db
+from sqlalchemy.orm.attributes import flag_modified
 import re
 
 class EmpresaService:
@@ -9,7 +10,7 @@ class EmpresaService:
 
     def criar_nova_conta_cliente(self, dados_empresa, dados_master):
         """
-        Lógica de Onboarding SaaS:
+        Lógica complexa de Onboarding SaaS:
         1. Cria a Empresa
         2. Cria o Cargo 'Master' para essa empresa
         3. Vincula todas as permissões existentes a esse cargo
@@ -21,17 +22,17 @@ class EmpresaService:
         if self.empresa_repo.get_by_slug(slug):
             raise ValueError("Uma empresa com este nome (ou slug similar) já existe.")
 
-        # 1. Criar Empresa com cores padrão iniciais
+        # 1. Criar Empresa com cores padrão garantidas na criação
         nova_empresa = Empresa(
             nome=nome_empresa,
             slug=slug,
             plano=dados_empresa.get('plano', 'Standard'),
             ativa=True,
             features_json={"ponto": True, "documentos": True, "estoque": True},
-            config_json={"cor_primaria": "#2563eb", "cor_hover": "#1d4ed8"}
+            config_json={"cor_primaria": "#2563eb", "cor_hover": "#1d4ed8", "logo_url": ""}
         )
         self.empresa_repo.add(nova_empresa)
-        db.session.flush() 
+        db.session.flush() # Gera o ID da empresa antes do commit final
 
         # 2. Criar Cargo Master da Nova Empresa
         cargo_master = Role(
@@ -62,23 +63,24 @@ class EmpresaService:
         self.empresa_repo.commit()
         return nova_empresa, novo_user
 
-    # 🎨 NOVO: ATUALIZAR IDENTIDADE VISUAL (WHITE-LABEL)
     def atualizar_branding(self, empresa_id, config_visual):
-        """Atualiza as cores e a logo no config_json da empresa."""
+        """Atualiza as cores e a logo no config_json da empresa de forma blindada."""
         empresa = self.empresa_repo.get_by_id(empresa_id)
         if not empresa:
             raise ValueError("Empresa não encontrada.")
             
-        # Recupera o JSON atual ou cria um novo se estiver vazio
-        config = empresa.config_json or {}
+        # BLINDAGEM: Garante que config_json seja um dicionário válido, mesmo se for nulo no banco
+        config = dict(empresa.config_json) if empresa.config_json else {}
         
-        # Atualiza os campos específicos de branding
+        # Atualiza apenas os campos visuais sem sobrescrever o resto do JSON
         config['cor_primaria'] = config_visual.get('cor_primaria', '#2563eb')
         config['cor_hover'] = config_visual.get('cor_hover', '#1d4ed8')
         config['logo_url'] = config_visual.get('logo_url', '')
         
-        # Grava de volta no banco de dados
+        # Atribui o novo dicionário e avisa explicitamente ao banco para gravar a mudança no JSON
         empresa.config_json = config
+        flag_modified(empresa, "config_json")
+        
         db.session.commit()
         return empresa
 

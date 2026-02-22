@@ -6,12 +6,12 @@
     <title>{% if g.empresa %}{{ g.empresa.nome }}{% else %}Shahin Gestão{% endif %} - Operacional</title>
     
     <link rel="manifest" href="/manifest.json">
-    <meta name="theme-color" content="{{ g.empresa.config_json.get('cor_primaria', '#0f172a') if (g.empresa and g.empresa.config_json) else '#0f172a' }}">
+    <meta name="theme-color" content="{{ (g.empresa.config_json or {}).get('cor_primaria', '#0f172a') if g.empresa else '#0f172a' }}">
     
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="{% if g.empresa %}{{ g.empresa.nome }}{% else %}Shahin App{% endif %}">
-    <link rel="apple-touch-icon" href="{{ g.empresa.config_json.get('logo_url', '/static/icons/icon-192x192.png') if (g.empresa and g.empresa.config_json) else '/static/icons/icon-192x192.png' }}">
+    <link rel="apple-touch-icon" href="{{ (g.empresa.config_json or {}).get('logo_url', '/static/icons/icon-192x192.png') if g.empresa else '/static/icons/icon-192x192.png' }}">
     
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
@@ -20,11 +20,11 @@
     
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 
-    {% if g.empresa and g.empresa.config_json %}
+    {% if g.empresa %}
     <style>
         :root {
-            --primary-color: {{ g.empresa.config_json.get('cor_primaria', '#2563eb') }};
-            --primary-hover: {{ g.empresa.config_json.get('cor_hover', '#1d4ed8') }};
+            --primary-color: {{ (g.empresa.config_json or {}).get('cor_primaria', '#2563eb') }};
+            --primary-hover: {{ (g.empresa.config_json or {}).get('cor_hover', '#1d4ed8') }};
         }
         .bg-blue-600, .bg-indigo-600 { background-color: var(--primary-color) !important; }
         .hover\:bg-blue-700:hover, .hover\:bg-indigo-700:hover { background-color: var(--primary-hover) !important; }
@@ -93,19 +93,10 @@
         {% if current_user.is_authenticated and not current_user.is_first_access %}
         <aside id="sidebar" class="sidebar fixed inset-y-0 left-0 z-50 w-64 bg-slate-900 text-slate-300 transform -translate-x-full md:translate-x-0 md:static md:flex-shrink-0 flex flex-col shadow-2xl h-full transition-transform duration-300 ease-in-out">
             
-            {% if current_user.username == '50097952800' %}
-            <div class="p-4 bg-indigo-900/40 border-b border-white/5">
-                <a href="/admin/super/empresas" class="flex items-center justify-center gap-3 py-3 px-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl shadow-lg transition-all transform active:scale-95 group">
-                    <i class="fas fa-globe-americas group-hover:rotate-180 transition-transform duration-500"></i>
-                    <span class="text-xs font-black uppercase tracking-tighter">Painel Vortice Global</span>
-                </a>
-            </div>
-            {% endif %}
-
             <div class="h-16 flex items-center px-6 bg-slate-950 border-b border-slate-800">
-                <img src="{{ g.empresa.config_json.get('logo_url', '/static/icons/icon-192x192.png') if (g.empresa and g.empresa.config_json) else '/static/icons/icon-192x192.png' }}" 
+                <img src="{{ (g.empresa.config_json or {}).get('logo_url', '/static/icons/icon-192x192.png') if g.empresa else '/static/icons/icon-192x192.png' }}" 
                      alt="{{ g.empresa.nome if g.empresa else 'Shahin' }}" 
-                     class="w-8 h-8 rounded-lg mr-3 object-cover shadow-sm">
+                     class="w-8 h-8 rounded-lg mr-3 object-cover shadow-sm bg-white">
                 <span class="font-bold text-xl text-white tracking-tight">{{ g.empresa.nome.split(' ')[0] if g.empresa else 'Shahin' }}</span>
             </div>
             

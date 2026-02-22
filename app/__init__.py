@@ -47,6 +47,15 @@ def create_app():
             return
 
         if current_user.is_authenticated:
+            # 🚀 EXCEÇÃO VIP VORTICE: O dono da plataforma não é barrado no Control Plane
+            if str(current_user.username) == '50097952800' and request.path.startswith('/vortice'):
+                # Tenta carregar a empresa só para o layout base funcionar, mas não o bloqueia se não tiver
+                if getattr(current_user, 'empresa_id', None):
+                    from app.models import Empresa
+                    g.empresa = Empresa.query.get(current_user.empresa_id)
+                return # Deixa passar livremente para as rotas da Vortice
+
+            # 🏢 Regras Normais para Inquilinos (Tenants)
             # Garante que o usuário tem um vínculo de empresa
             if getattr(current_user, 'empresa_id', None) is None:
                 logout_user()

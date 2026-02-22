@@ -35,7 +35,7 @@
                 <tr class="hover:bg-slate-50/50 transition">
                     <td class="py-5 px-6">
                         <div class="flex items-center gap-3">
-                            <img src="{{ empresa.config_json.get('logo_url', '/static/icons/icon-192x192.png') }}" class="w-10 h-10 rounded-lg object-cover border border-slate-100">
+                            <img src="{{ (empresa.config_json or {}).get('logo_url', '/static/icons/icon-192x192.png') }}" class="w-10 h-10 rounded-lg object-cover border border-slate-100">
                             <div>
                                 <p class="text-sm font-bold text-slate-800">{{ empresa.nome }}</p>
                                 <p class="text-[10px] text-slate-400">Slug: /{{ empresa.slug }}</p>
@@ -44,8 +44,8 @@
                     </td>
                     <td class="py-5 px-6">
                         <div class="flex items-center gap-2">
-                            <div class="w-6 h-6 rounded border border-slate-200" style="background-color: {{ empresa.config_json.get('cor_primaria', '#2563eb') }};"></div>
-                            <span class="text-xs font-mono text-slate-500">{{ empresa.config_json.get('cor_primaria', '#2563eb') }}</span>
+                            <div class="w-6 h-6 rounded border border-slate-200" style="background-color: {{ (empresa.config_json or {}).get('cor_primaria', '#2563eb') }};"></div>
+                            <span class="text-xs font-mono text-slate-500">{{ (empresa.config_json or {}).get('cor_primaria', '#2563eb') }}</span>
                         </div>
                     </td>
                     <td class="py-5 px-6">
@@ -57,7 +57,7 @@
                     </td>
                     <td class="py-5 px-6">
                         <div class="flex items-center justify-center gap-2">
-                            <button onclick="abrirBranding('{{ empresa.id }}', '{{ empresa.nome }}', '{{ empresa.config_json.get('cor_primaria', '#2563eb') }}', '{{ empresa.config_json.get('cor_hover', '#1d4ed8') }}', '{{ empresa.config_json.get('logo_url', '') }}')" 
+                            <button onclick="abrirBranding('{{ empresa.id }}', '{{ empresa.nome }}', '{{ (empresa.config_json or {}).get('cor_primaria', '#2563eb') }}', '{{ (empresa.config_json or {}).get('cor_hover', '#1d4ed8') }}', '{{ (empresa.config_json or {}).get('logo_url', '') }}')" 
                                     class="p-2 text-slate-400 hover:text-indigo-600 transition" title="Personalizar Marca">
                                 <i class="fas fa-palette"></i>
                             </button>
@@ -160,7 +160,8 @@
 
     function abrirBranding(id, nome, cor, hover, logo) {
         document.getElementById('branding-nome-empresa').innerText = nome;
-        document.getElementById('form-branding').action = `/admin/super/empresas/branding/${id}`;
+        // Ajuste da rota para a nova URL exclusiva Vortice
+        document.getElementById('form-branding').action = `/vortice/empresas/branding/${id}`;
         document.getElementById('input-logo-url').value = logo;
         document.getElementById('input-cor-primaria').value = cor;
         document.getElementById('input-cor-hover').value = hover;
