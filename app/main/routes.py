@@ -1,7 +1,7 @@
 from flask import render_template, redirect, url_for, jsonify, request, g
 from flask_login import login_required, current_user
 from app.extensions import db
-from app.models import User, PontoAjuste, Recibo, Holerite, PreCadastro, Notificacao, PontoResumo, PontoRegistro, HistoricoSaida, PushSubscription
+from app.models import User, PontoAjuste, Recibo, Holerite, PreCadastro, Notificacao, PontoResumo, PontoRegistro, HistoricoSaida, PushSubscription, Empresa
 from app.utils import get_brasil_time, has_permission
 from datetime import timedelta
 from sqlalchemy import func
@@ -20,19 +20,19 @@ def dashboard():
     if current_user.role == 'Terminal':
         return redirect(url_for('ponto.terminal_scanner'))
 
-    # Dados Básicos (Usando g.empresa carregado no middleware)
+    # [span_3](start_span)Dados Básicos (Usando g.empresa carregado no middleware)[span_3](end_span)
     dados = {
         'hoje': get_brasil_time().strftime('%d/%m/%Y'),
         'doc_pendentes': 0,
-        'nome_empresa': g.empresa.nome if hasattr(g, 'empresa') else "Shahin Gestão"
+        'nome_empresa': g.empresa.nome if hasattr(g, 'empresa') else "Vortice SaaS"
     }
 
-    # Contagem de documentos não lidos pelo utilizador
+    # [span_4](start_span)Contagem de documentos não lidos pelo utilizador[span_4](end_span)
     docs_h = Holerite.query.filter_by(user_id=current_user.id, visualizado=False).count()
     docs_r = Recibo.query.filter_by(user_id=current_user.id, visualizado=False).count()
     dados['doc_pendentes'] = docs_h + docs_r
 
-    # Dados Administrativos
+    # [span_5](start_span)Dados Administrativos[span_5](end_span)
     admin_stats = {}
     
     if has_permission('USUARIOS'):
@@ -44,27 +44,52 @@ def dashboard():
 
     return render_template('main/dashboard.html', dados=dados, admin=admin_stats)
 
+# ==============================================================================
+# [span_6](start_span)📱 PWA WHITE-LABEL: Manifesto Dinâmico[span_6](end_span)
+# ==============================================================================
 @main_bp.route('/manifest.json')
 def dynamic_manifest():
-    """Gera o manifesto do PWA dinamicamente com a marca da empresa logada."""
-    # Valores padrão (Shahin)
-    app_name = "Shahin Gestão"
-    icon_url = "/static/icons/icon-192x192.png"
+    [span_7](start_span)"""Gera o manifesto do PWA dinamicamente com a marca da empresa logada[span_7](end_span)."""
+    # [span_8](start_span)Tenta identificar a empresa via Query String (slug) ou contexto global[span_8](end_span)
+    slug = request.args.get('slug')
+    empresa_contexto = None
+
+    if slug:
+        empresa_contexto = Empresa.query.filter_by(slug=slug).first()
+    elif hasattr(g, 'empresa') and g.empresa:
+        empresa_contexto = g.empresa
+
+    # [span_9](start_span)Valores padrão (Neutralizados para Vortice)[span_9](end_span)
+    app_name = "Vortice App"
+    short_name = "Vortice"
+    icon_url = "/static/icons/vortice-icon.png"
     theme_color = "#0f172a"
     
-    # Se houver uma empresa carregada, personaliza o PWA
-    if hasattr(g, 'empresa') and g.empresa:
-        app_name = g.empresa.nome
-        config = g.empresa.config_json or {}
+    # [span_10](start_span)Se houver uma empresa carregada, personaliza o PWA em tempo real[span_10](end_span)
+    if empresa_contexto:
+        app_name = empresa_contexto.nome
+        short_name = empresa_contexto.nome.split()[0]
+        config = empresa_contexto.config_json or {}
+        # [span_11](start_span)Prioriza a logo configurada[span_11](end_span)
         icon_url = config.get('logo_url', icon_url)
         theme_color = config.get('cor_primaria', theme_color)
 
     manifest = {
-        "short_name": app_name.split()[0],
+        "short_name": short_name,
         "name": app_name,
         "icons": [
-            { "src": icon_url, "sizes": "192x192", "type": "image/png" },
-            { "src": icon_url, "sizes": "512x512", "type": "image/png" }
+            { 
+                "src": icon_url, 
+                "sizes": "192x192", 
+                "type": "image/png",
+                "purpose": "any maskable" 
+            },
+            { 
+                "src": icon_url, 
+                "sizes": "512x512", 
+                "type": "image/png",
+                "purpose": "any maskable"
+            }
         ],
         "start_url": "/",
         "display": "standalone",
@@ -210,7 +235,7 @@ def subscribe_push():
         db.session.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500
 
-# --- MIGRAÇÕES ---
+# --- MIGRAÇÕES E UTILITÁRIOS ---
 @main_bp.route('/vortice-migrar')
 def vortice_migrar():
     from sqlalchemy import text
