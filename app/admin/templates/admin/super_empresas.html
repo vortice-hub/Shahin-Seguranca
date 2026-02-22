@@ -1,0 +1,159 @@
+{% extends 'base.html' %}
+{% block title %}Vortice - Gestão de Clientes SaaS{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto pb-20 px-4 sm:px-6 lg:px-8 mt-6">
+    
+    <div class="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+            <h2 class="text-2xl font-bold text-slate-800 flex items-center gap-3">
+                <div class="p-2 bg-indigo-600 text-white rounded-lg shadow-lg shadow-indigo-200">
+                    <i class="fas fa-globe"></i>
+                </div>
+                Vortice: Controle Global de Clientes
+            </h2>
+            <p class="text-slate-500 mt-2 text-sm">Gerencie o ecossistema SaaS, ative novas empresas e monitore acessos.</p>
+        </div>
+        
+        <button onclick="toggleModalNovaEmpresa()" class="inline-flex items-center px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-lg shadow-indigo-100 transition transform active:scale-95">
+            <i class="fas fa-plus-circle mr-2"></i> Adicionar Novo Cliente
+        </button>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8 text-center">
+        <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+            <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Total de Empresas</p>
+            <p class="text-3xl font-black text-slate-800">{{ empresas|length }}</p>
+        </div>
+        <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+            <p class="text-xs font-bold text-emerald-500 uppercase tracking-widest mb-1">Contas Ativas</p>
+            {% set ativas = empresas|selectattr('ativa', 'equalto', true)|list %}
+            <p class="text-3xl font-black text-emerald-600">{{ ativas|length }}</p>
+        </div>
+        <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+            <p class="text-xs font-bold text-red-400 uppercase tracking-widest mb-1">Contas Bloqueadas</p>
+            {% set bloqueadas = empresas|selectattr('ativa', 'equalto', false)|list %}
+            <p class="text-3xl font-black text-red-500">{{ bloqueadas|length }}</p>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <table class="w-full text-left border-collapse">
+            <thead class="bg-slate-50 border-b border-slate-100 text-xs font-bold text-slate-400 uppercase tracking-wider">
+                <tr>
+                    <th class="py-4 px-6">Empresa / Cliente</th>
+                    <th class="py-4 px-6">Identificador (Slug)</th>
+                    <th class="py-4 px-6">Plano</th>
+                    <th class="py-4 px-6">Status</th>
+                    <th class="py-4 px-6 text-center">Ações de Controle</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+                {% for empresa in empresas %}
+                <tr class="hover:bg-slate-50/50 transition">
+                    <td class="py-5 px-6">
+                        <div class="flex items-center gap-3">
+                            <div class="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold">
+                                {{ empresa.nome[0]|upper }}
+                            </div>
+                            <div>
+                                <p class="text-sm font-bold text-slate-800">{{ empresa.nome }}</p>
+                                <p class="text-[10px] text-slate-400">Criada em: {{ empresa.created_at.strftime('%d/%m/%Y') }}</p>
+                            </div>
+                        </div>
+                    </td>
+                    <td class="py-5 px-6">
+                        <span class="px-2 py-1 bg-slate-100 text-slate-600 rounded text-xs font-mono">/{{ empresa.slug }}</span>
+                    </td>
+                    <td class="py-5 px-6">
+                        <span class="text-xs font-bold {% if empresa.plano == 'Enterprise' %}text-purple-600{% else %}text-slate-600{% endif %}">
+                            <i class="fas fa-crown mr-1"></i> {{ empresa.plano }}
+                        </span>
+                    </td>
+                    <td class="py-5 px-6">
+                        {% if empresa.ativa %}
+                            <span class="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-700 uppercase">Ativo</span>
+                        {% else %}
+                            <span class="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-black bg-red-100 text-red-700 uppercase">Bloqueado</span>
+                        {% endif %}
+                    </td>
+                    <td class="py-5 px-6 text-center">
+                        <form action="{{ url_for('super_admin.alterar_status_empresa', id=empresa.id) }}" method="POST">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="text-xs font-bold py-2 px-4 rounded-lg border transition 
+                                {% if empresa.ativa %} border-red-200 text-red-500 hover:bg-red-50 {% else %} border-emerald-200 text-emerald-600 hover:bg-emerald-50 {% endif %}">
+                                {% if empresa.ativa %}<i class="fas fa-ban mr-1"></i> Bloquear{% else %}<i class="fas fa-check mr-1"></i> Ativar{% endif %}
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div id="modal-nova-empresa" class="hidden fixed inset-0 z-50 overflow-y-auto bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden transform transition-all">
+        <div class="bg-indigo-600 px-8 py-6 text-white flex justify-between items-center">
+            <h3 class="text-xl font-bold flex items-center gap-2">
+                <i class="fas fa-rocket"></i> Onboarding de Novo Cliente
+            </h3>
+            <button onclick="toggleModalNovaEmpresa()" class="text-white/70 hover:text-white transition text-2xl">&times;</button>
+        </div>
+        
+        <form action="{{ url_for('super_admin.cadastrar_empresa') }}" method="POST" class="p-8">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="space-y-4">
+                    <p class="text-xs font-black text-indigo-500 uppercase border-b pb-2">Informações da Empresa</p>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Nome Fantasia</label>
+                        <input type="text" name="nome_empresa" class="w-full border-slate-200 rounded-xl bg-slate-50 p-3 focus:ring-indigo-500" placeholder="Ex: Cliente Novo Ltda" required>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Plano SaaS</label>
+                        <select name="plano" class="w-full border-slate-200 rounded-xl bg-slate-50 p-3">
+                            <option value="Standard">Standard</option>
+                            <option value="Premium">Premium</option>
+                            <option value="Enterprise" selected>Enterprise</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="space-y-4">
+                    <p class="text-xs font-black text-indigo-500 uppercase border-b pb-2">Gestor da Conta (Master)</p>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Nome do Responsável</label>
+                        <input type="text" name="nome_master" class="w-full border-slate-200 rounded-xl bg-slate-50 p-3" placeholder="Nome Completo" required>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">CPF (Login)</label>
+                        <input type="text" name="cpf_master" class="w-full border-slate-200 rounded-xl bg-slate-50 p-3" placeholder="000.000.000-00" required>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Senha de Primeiro Acesso</label>
+                        <input type="text" name="senha_provisoria" class="w-full border-slate-200 rounded-xl bg-slate-50 p-3 font-mono" value="vortice123">
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-8 pt-6 border-t border-slate-100 flex gap-4">
+                <button type="button" onclick="toggleModalNovaEmpresa()" class="flex-1 py-4 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-2xl transition">Cancelar</button>
+                <button type="submit" class="flex-1 py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-2xl shadow-lg shadow-indigo-100 transition transform active:scale-95">
+                    Criar Conta e Ativar Sistema
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    function toggleModalNovaEmpresa() {
+        const modal = document.getElementById('modal-nova-empresa');
+        modal.classList.toggle('hidden');
+    }
+</script>
+{% endblock %}
+

@@ -16,6 +16,7 @@ except ImportError:
     webpush = None
 
 def get_brasil_time():
+    """Retorna o horário atual no fuso de Brasília de forma exata."""
     fuso_br = pytz.timezone('America/Sao_Paulo')
     return datetime.now(fuso_br).replace(tzinfo=None)
 
@@ -68,7 +69,9 @@ def get_client_ip():
 # ==============================================================================
 # 🔐 MOTOR DE PERMISSÕES INTELIGENTE (RBAC)
 # ==============================================================================
+
 def has_permission(permission_name):
+    """Verifica se o utilizador possui uma permissão específica via Cargo ou Legado."""
     if not current_user.is_authenticated: 
         return False
     
@@ -90,6 +93,7 @@ def has_permission(permission_name):
     return False
 
 def permission_required(permission_name):
+    """Decorador para proteger rotas baseadas em permissões granulares."""
     def decorator(f):
         @wraps(f)
         def decorated_function(*args, **kwargs):
@@ -101,11 +105,23 @@ def permission_required(permission_name):
     return decorator
 
 def master_required(f):
+    """Proteção para o Master da Empresa (Admin Local)."""
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if not current_user.is_authenticated or (current_user.role != 'Master' and current_user.username != '50097952800'):
             flash('Acesso não autorizado.', 'error')
             return redirect(url_for('main.dashboard'))
+        return f(*args, **kwargs)
+    return decorated_function
+
+def super_admin_required(f):
+    """Proteção Máxima: Apenas o dono da plataforma Vortice (Super Admin)."""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        # Username único do dono da plataforma para gestão global
+        PLATFORM_OWNER = '50097952800' 
+        if not current_user.is_authenticated or current_user.username != PLATFORM_OWNER:
+            abort(403)
         return f(*args, **kwargs)
     return decorated_function
 

@@ -73,15 +73,19 @@ def create_app():
         return render_template('errors/500.html'), 500
 
     with app.app_context():
+        # Importação dos Blueprints
         from app.auth.routes import auth_bp
         from app.admin.routes import admin_bp
+        from app.admin.super_routes import super_admin_bp # 🔐 NOVO: Rotas Super Admin
         from app.ponto.routes import ponto_bp
         from app.estoque.routes import estoque_bp
         from app.documentos.routes import documentos_bp
         from app.main.routes import main_bp
 
+        # Registro dos Blueprints
         app.register_blueprint(auth_bp)
         app.register_blueprint(admin_bp)
+        app.register_blueprint(super_admin_bp) # 🔐 NOVO: Registro Super Admin
         app.register_blueprint(ponto_bp)
         app.register_blueprint(estoque_bp)
         app.register_blueprint(documentos_bp)
