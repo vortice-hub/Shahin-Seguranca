@@ -9,29 +9,21 @@ from functools import wraps
 from flask import abort, redirect, url_for, flash, request
 from flask_login import current_user
 
-# Tenta importar o motor Push (se não estiver instalado, o sistema não quebra, apenas guarda no sininho)
+# Tenta importar o motor Push
 try:
     from pywebpush import webpush, WebPushException
 except ImportError:
     webpush = None
 
-# --- FUNÇÃO CENTRALIZADA DE TEMPO (BLINDADA) ---
 def get_brasil_time():
-    """Retorna o horário atual no fuso de Brasília de forma exata e blindada."""
     fuso_br = pytz.timezone('America/Sao_Paulo')
     return datetime.now(fuso_br).replace(tzinfo=None)
-
-# --- UTILITÁRIOS DE TEXTO E DATA ---
 
 def remove_accents(txt):
     if not txt: return ""
     return "".join(c for c in unicodedata.normalize('NFD', txt) if unicodedata.category(c) != 'Mn')
 
 def limpar_nome(txt):
-    """
-    Normalização Agressiva para IA.
-    Remove acentos, preposições e espaços extras.
-    """
     if not txt: return ""
     txt = remove_accents(txt).upper().strip()
     stopwords = [" DE ", " DA ", " DO ", " DOS ", " DAS ", " E "]
@@ -40,7 +32,6 @@ def limpar_nome(txt):
     return " ".join(txt.split())
 
 def gerar_login_automatico(nome_completo):
-    """Gera login base (primeiro nome) para novos usuários."""
     if not nome_completo: return "user"
     partes = nome_completo.split()
     primeiro_nome = remove_accents(partes[0]).lower()
@@ -50,8 +41,6 @@ def data_por_extenso(data_obj):
     meses = {1:'Janeiro', 2:'Fevereiro', 3:'Março', 4:'Abril', 5:'Maio', 6:'Junho', 
              7:'Julho', 8:'Agosto', 9:'Setembro', 10:'Outubro', 11:'Novembro', 12:'Dezembro'}
     return f"{data_obj.day} de {meses[data_obj.month]} de {data_obj.year}"
-
-# --- CÁLCULOS DE TEMPO (GENÉRICOS) ---
 
 def time_to_minutes(t):
     if not t: return 0
@@ -67,8 +56,6 @@ def format_minutes_to_hm(total_minutes):
     m = total_minutes % 60
     return f"{sinal}{h:02d}:{m:02d}"
 
-# --- SISTEMA DE AUDITORIA E PERMISSÕES ---
-
 def calcular_hash_arquivo(conteudo_bytes):
     if not conteudo_bytes: return None
     return hashlib.sha256(conteudo_bytes).hexdigest()
@@ -78,12 +65,29 @@ def get_client_ip():
         return request.headers.getlist("X-Forwarded-For")[0]
     return request.remote_addr
 
+# ==============================================================================
+# 🔐 MOTOR DE PERMISSÕES INTELIGENTE (RBAC)
+# ==============================================================================
 def has_permission(permission_name):
-    if not current_user.is_authenticated: return False
-    if current_user.username == '50097952800': return True
-    if not current_user.permissions: return False
-    user_perms = [p.strip().upper() for p in current_user.permissions.split(',')]
-    return permission_name.upper() in user_perms
+    if not current_user.is_authenticated: 
+        return False
+    
+    # O Master pode ver absolutamente tudo
+    if current_user.username == '50097952800' or current_user.role == 'Master': 
+        return True
+
+    # 1. Verifica no novo sistema RBAC (Se o utilizador tem um Cargo associado)
+    if hasattr(current_user, 'cargo') and current_user.cargo:
+        for perm in current_user.cargo.permissions:
+            if perm.codigo.upper() == permission_name.upper():
+                return True
+
+    # 2. Modo de Compatibilidade (Fallback para o sistema antigo em texto)
+    if current_user.permissions:
+        user_perms = [p.strip().upper() for p in current_user.permissions.split(',')]
+        return permission_name.upper() in user_perms
+
+    return False
 
 def permission_required(permission_name):
     def decorator(f):
@@ -105,73 +109,36 @@ def master_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
-# ============================================================================
-# FASE 4: O MOTOR DE NOTIFICAÇÕES (SININHO + PUSH NATIVO NO ECRÃ)
-# ============================================================================
 def enviar_notificacao(user_id, mensagem, link=None):
-    """Envia um alerta interno para o Sininho do utilizador e um Push para o telemóvel."""
     from app.extensions import db
     from app.models import Notificacao, PushSubscription
     
-    # 1. Guarda a notificação na Caixa de Entrada (Sininho) do sistema
     try:
-        nova_notif = Notificacao(
-            user_id=user_id,
-            mensagem=mensagem,
-            link=link,
-            lida=False,
-            data_criacao=get_brasil_time()
-        )
+        nova_notif = Notificacao(user_id=user_id, mensagem=mensagem, link=link, lida=False, data_criacao=get_brasil_time())
         db.session.add(nova_notif)
         db.session.commit()
     except Exception as e:
         db.session.rollback()
-        print(f"[Shahin Push] Erro ao salvar notificação no banco: {e}")
+        print(f"[Shahin Push] Erro ao salvar notificação: {e}")
         return False
 
-    # 2. Dispara o Push Nativo para acordar o telemóvel do funcionário
-    if not webpush:
-        print("[Shahin Push] Aviso: Biblioteca 'pywebpush' não instalada. Apenas notificação web gerada.")
-        return True # Retorna True porque salvou no sininho com sucesso
+    if not webpush: return True
 
-    # Puxa a chave privada de segurança que vamos configurar no Cloud Run
     VAPID_PRIVATE_KEY = os.environ.get('VAPID_PRIVATE_KEY')
-    VAPID_CLAIM_EMAIL = 'mailto:contato@shahin.com.br' # Um email padrão obrigatório pelas regras da Web
+    VAPID_CLAIM_EMAIL = 'mailto:contato@shahin.com.br' 
 
-    if not VAPID_PRIVATE_KEY:
-        print("[Shahin Push] Aviso: VAPID_PRIVATE_KEY não configurada no ambiente. Push não disparado.")
-        return True
+    if not VAPID_PRIVATE_KEY: return True
 
-    # Procura todos os telemóveis autorizados deste funcionário
     subs = PushSubscription.query.filter_by(user_id=user_id).all()
-    if not subs:
-        return True # O utilizador ainda não clicou em "Ativar Alertas"
+    if not subs: return True 
 
-    payload = json.dumps({
-        "title": "Shahin Gestão",
-        "body": mensagem,
-        "url": link or "/"
-    })
+    payload = json.dumps({"title": "Shahin Gestão", "body": mensagem, "url": link or "/"})
 
     for sub in subs:
         try:
-            sub_info = {
-                "endpoint": sub.endpoint,
-                "keys": {
-                    "p256dh": sub.p256dh,
-                    "auth": sub.auth
-                }
-            }
-            # A Magia Acontece Aqui: Disparo encriptado!
-            webpush(
-                subscription_info=sub_info,
-                data=payload,
-                vapid_private_key=VAPID_PRIVATE_KEY,
-                vapid_claims={"sub": VAPID_CLAIM_EMAIL}
-            )
+            sub_info = {"endpoint": sub.endpoint, "keys": {"p256dh": sub.p256dh, "auth": sub.auth}}
+            webpush(subscription_info=sub_info, data=payload, vapid_private_key=VAPID_PRIVATE_KEY, vapid_claims={"sub": VAPID_CLAIM_EMAIL})
         except WebPushException as e:
-            print(f"[Shahin Push] Falha ao enviar para telemóvel: {e}")
-            # Se a Google/Apple disserem que o telemóvel desinstalou o app (Erro 410), nós limpamos a morada
             if e.response is not None and e.response.status_code == 410:
                 db.session.delete(sub)
                 db.session.commit()

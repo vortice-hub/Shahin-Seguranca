@@ -14,40 +14,53 @@ def get_brasil_time():
 # ==============================================================================
 
 class Empresa(db.Model):
-    """Tabela principal da Vortice. Cada registo aqui é um cliente do seu SaaS."""
     __tablename__ = 'empresas'
     id = db.Column(db.Integer, primary_key=True)
     nome = db.Column(db.String(150), nullable=False)
     slug = db.Column(db.String(50), unique=True, nullable=False, index=True)
     plano = db.Column(db.String(50), default='Standard')
     ativa = db.Column(db.Boolean, default=True)
-    
-    # Feature Flags: O que este cliente pode acessar? {"ponto": true, "estoque": false}
     features_json = db.Column(db.JSON, nullable=True)
-    # Configurações dinâmicas do cliente: {"cor_primaria": "#1e3a8a", "tolerancia_atraso": 15}
     config_json = db.Column(db.JSON, nullable=True)
-    
     created_at = db.Column(db.DateTime, default=get_brasil_time)
     updated_at = db.Column(db.DateTime, default=get_brasil_time, onupdate=get_brasil_time)
     deleted_at = db.Column(db.DateTime, nullable=True)
 
 class TenantModel(db.Model):
-    """
-    Base Model da Vortice.
-    TODAS as tabelas do sistema herdam desta classe. Ela garante que nenhum 
-    dado fique sem dono (empresa_id) e padroniza as datas de auditoria.
-    """
     __abstract__ = True
-
     @declared_attr
     def empresa_id(cls):
-        # NOTA FASE 1: nullable=True provisoriamente para permitir a migração dos dados antigos
         return db.Column(db.Integer, db.ForeignKey('empresas.id', ondelete='CASCADE'), nullable=True, index=True)
-
     created_at = db.Column(db.DateTime, default=get_brasil_time)
     updated_at = db.Column(db.DateTime, default=get_brasil_time, onupdate=get_brasil_time)
     deleted_at = db.Column(db.DateTime, nullable=True)
 
+# ==============================================================================
+# 🔐 FASE 4: RBAC (CARGOS E PERMISSÕES)
+# ==============================================================================
+
+class Permission(db.Model):
+    """Permissões globais do sistema (Ex: 'PONTO', 'ESTOQUE', 'USUARIOS', 'DOCUMENTOS')"""
+    __tablename__ = 'permissions'
+    id = db.Column(db.Integer, primary_key=True)
+    codigo = db.Column(db.String(50), unique=True, nullable=False) 
+    nome = db.Column(db.String(100), nullable=False)
+    modulo = db.Column(db.String(50))
+
+# Tabela associativa (Muitos para Muitos) entre Cargos e Permissões
+role_permissions = db.Table('role_permissions',
+    db.Column('role_id', db.Integer, db.ForeignKey('roles.id', ondelete='CASCADE'), primary_key=True),
+    db.Column('permission_id', db.Integer, db.ForeignKey('permissions.id', ondelete='CASCADE'), primary_key=True)
+)
+
+class Role(TenantModel):
+    """Cargos customizados criados pela Empresa (Ex: 'Gestor de RH', 'Analista')"""
+    __tablename__ = 'roles'
+    id = db.Column(db.Integer, primary_key=True)
+    nome = db.Column(db.String(100), nullable=False)
+    descricao = db.Column(db.String(255))
+    # Relacionamento que traz todas as permissões deste cargo automaticamente
+    permissions = db.relationship('Permission', secondary=role_permissions, lazy='subquery', backref=db.backref('roles', lazy=True))
 
 # ==============================================================================
 # 👥 TABELAS DOS CLIENTES (Herdam de TenantModel)
@@ -60,13 +73,19 @@ class User(UserMixin, TenantModel):
     password_hash = db.Column(db.String(200), nullable=False)
     real_name = db.Column(db.String(120), nullable=False)
     cpf = db.Column(db.String(14), unique=True, nullable=True)
+    
+    # Campo legado (mantido provisoriamente como título textual)
     role = db.Column(db.String(100), default='Funcionario')
+    
+    # 🔐 NOVO CAMPO RBAC: O Cargo real do sistema
+    cargo_id = db.Column(db.Integer, db.ForeignKey('roles.id', ondelete='SET NULL'), nullable=True)
+    cargo = db.relationship('Role', backref=db.backref('usuarios', lazy=True))
     
     departamento = db.Column(db.String(100), nullable=True)
     gestor_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
     gestor = db.relationship('User', remote_side=[id], backref=db.backref('subordinados', lazy=True))
     
-    permissions = db.Column(db.String(500), nullable=True)
+    permissions = db.Column(db.String(500), nullable=True) # Legado, em breve será removido
     is_first_access = db.Column(db.Boolean, default=True)
     data_admissao = db.Column(db.Date, nullable=True)
     carga_horaria = db.Column(db.Integer, default=528)
@@ -75,7 +94,6 @@ class User(UserMixin, TenantModel):
     escala = db.Column(db.String(50), default="Livre")
     data_inicio_escala = db.Column(db.Date, nullable=True)
     salario = db.Column(db.Float, default=0.0)
-    
     razao_social_empregadora = db.Column(db.String(200))
     cnpj_empregador = db.Column(db.String(20))
 
@@ -84,6 +102,7 @@ class User(UserMixin, TenantModel):
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
 
+# ... (As classes PreCadastro, ItemEstoque, Holerite, etc. continuam iguais abaixo) ...
 class PreCadastro(TenantModel):
     __tablename__ = 'pre_cadastros'
     id = db.Column(db.Integer, primary_key=True)
@@ -93,10 +112,8 @@ class PreCadastro(TenantModel):
     departamento = db.Column(db.String(100), nullable=True)
     cpf_gestor = db.Column(db.String(14), nullable=True)
     salario = db.Column(db.Float, default=0.0)
-    
     razao_social = db.Column(db.String(200))
     cnpj = db.Column(db.String(20))
-    
     data_admissao = db.Column(db.Date, nullable=True)
     carga_horaria = db.Column(db.Integer, default=528)
     tempo_intervalo = db.Column(db.Integer, default=60)
