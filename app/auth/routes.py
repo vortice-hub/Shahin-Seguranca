@@ -1,18 +1,35 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash
+from flask import Blueprint, render_template, request, redirect, url_for, flash, g
 from flask_login import login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash
 from app.extensions import db
 from app.models import User, PreCadastro
+from app.repositories.empresa_repository import EmpresaRepository
 import re
 import random
 import string
 
 auth_bp = Blueprint('auth', __name__, template_folder='templates')
 
+# ==============================================================================
+# 🔐 PORTAL DE LOGIN CAMALEÃO (WHITE-LABEL)
+# ==============================================================================
 @auth_bp.route('/login', methods=['GET', 'POST'])
-def login():
+@auth_bp.route('/login/<slug>', methods=['GET', 'POST'])
+def login(slug=None):
     if current_user.is_authenticated: 
         return redirect(url_for('main.dashboard'))
+    
+    empresa_login = None
+    if slug:
+        repo = EmpresaRepository()
+        empresa_login = repo.get_by_slug(slug)
+        if not empresa_login or not empresa_login.ativa:
+            flash('Portal de cliente não encontrado ou desativado.', 'error')
+            return redirect(url_for('auth.login'))
+        
+        # 🎨 MÁGICA DA COR: Ao injetar a empresa no contexto global (g), 
+        # o base.html automaticamente pintará os botões do login com a cor dela!
+        g.empresa = empresa_login
     
     if request.method == 'POST':
         login_input = request.form.get('username', '').replace('.', '').replace('-', '').strip()
@@ -27,7 +44,12 @@ def login():
             # 🛡️ FASE 2: Validação de Segurança Multi-Tenant no Login
             if not getattr(user, 'empresa_id', None):
                 flash('Acesso Bloqueado: O seu utilizador não possui vínculo com nenhum cliente da plataforma.', 'error')
-                return redirect(url_for('auth.login'))
+                return redirect(url_for('auth.login', slug=slug))
+
+            # 🛡️ TRAVA ANTI-ESPIÃO: O funcionário deve pertencer à empresa da URL
+            if empresa_login and user.empresa_id != empresa_login.id:
+                flash(f'Acesso Negado: O seu utilizador não pertence ao cliente {empresa_login.nome}.', 'error')
+                return redirect(url_for('auth.login', slug=slug))
 
             login_user(user)
             if user.is_first_access: 
@@ -36,7 +58,7 @@ def login():
         
         flash('CPF ou senha inválidos.', 'error')
         
-    return render_template('auth/login.html')
+    return render_template('auth/login.html', empresa_login=empresa_login)
 
 @auth_bp.route('/logout')
 @login_required
@@ -92,7 +114,6 @@ def auto_cadastro():
                 
             username_login = cpf 
             
-            # Vínculo Hierárquico: Procura o gestor pelo CPF informado na planilha
             gestor_id_final = None
             if pre.cpf_gestor:
                 gestor_encontrado = User.query.filter_by(cpf=pre.cpf_gestor).first()
@@ -118,7 +139,7 @@ def auto_cadastro():
                 gestor_id=gestor_id_final,
                 is_first_access=False,
                 permissions="",
-                empresa_id=pre.empresa_id  # 🛡️ FASE 2: Repasse obrigatório do ID da empresa!
+                empresa_id=pre.empresa_id
             )
             
             db.session.add(novo_user)
@@ -141,7 +162,6 @@ def esqueci_senha():
         
         user = User.query.filter_by(cpf=cpf_input).first()
         
-        # Só permite reset se os dados baterem exatamente com o banco de dados
         if user and user.data_admissao and str(user.data_admissao) == data_admissao_input:
             senha_temporaria = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
             user.set_password(senha_temporaria)
