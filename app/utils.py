@@ -6,7 +6,8 @@ import hashlib
 import os
 import json
 from functools import wraps
-from flask import abort, redirect, url_for, flash, request
+# Importamos 'session' para a nova arquitetura Deus Ex Machina
+from flask import abort, redirect, url_for, flash, request, session
 from flask_login import current_user
 
 # Tenta importar o motor Push
@@ -73,7 +74,6 @@ def has_permission(permission_name):
     if not current_user.is_authenticated: 
         return False
     
-    # O Master da Vortice tem acesso total
     if str(current_user.username) == '50097952800' or current_user.role == 'Master': 
         return True
 
@@ -109,13 +109,15 @@ def master_required(f):
     return decorated_function
 
 def super_admin_required(f):
-    """Apenas para o Dono da Plataforma Vortice"""
+    """
+    🛡️ DEUS EX MACHINA: Apenas para o Dono da Plataforma Vortice.
+    Verifica a sessão independente, ignorando completamente o banco de dados.
+    """
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        PLATFORM_OWNER = '50097952800' 
-        if not current_user.is_authenticated or str(current_user.username) != PLATFORM_OWNER:
-            flash("Acesso restrito ao Administrador Vortice.", "error")
-            return redirect(url_for('main.dashboard'))
+        if not session.get('vortice_admin'):
+            flash("Acesso restrito. Identifique-se no portal Vortice.", "error")
+            return redirect(url_for('super_admin.login'))
         return f(*args, **kwargs)
     return decorated_function
 

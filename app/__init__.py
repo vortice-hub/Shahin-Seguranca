@@ -46,15 +46,13 @@ def create_app():
         if request.endpoint and request.endpoint.startswith('static'):
             return
 
-        if current_user.is_authenticated:
-            # 🚀 EXCEÇÃO VIP VORTICE: O dono da plataforma não é barrado no Control Plane
-            if str(current_user.username) == '50097952800' and request.path.startswith('/vortice'):
-                # Tenta carregar a empresa só para o layout base funcionar, mas não o bloqueia se não tiver
-                if getattr(current_user, 'empresa_id', None):
-                    from app.models import Empresa
-                    g.empresa = Empresa.query.get(current_user.empresa_id)
-                return # Deixa passar livremente para as rotas da Vortice
+        # 🚀 DEUS EX MACHINA: O porteiro ignora o dono da Vortice
+        # Se a rota pertencer ao Control Plane (/vortice), não exigimos vínculo com empresa nem banco de dados.
+        # A segurança dessas rotas é garantida exclusivamente pelo @super_admin_required (Sessão Independente).
+        if request.path.startswith('/vortice'):
+            return
 
+        if current_user.is_authenticated:
             # 🏢 Regras Normais para Inquilinos (Tenants)
             # Garante que o usuário tem um vínculo de empresa
             if getattr(current_user, 'empresa_id', None) is None:
