@@ -326,3 +326,38 @@ def migrar_rbac():
         db.session.rollback()
         return f"<h1 style='color: red;'>Erro na migração RBAC:</h1><p>{str(e)}</p>"
 
+# ==============================================================================
+# ⚙️ GATILHO PARA SEMEAR AS PERMISSÕES PADRÃO (RBAC)
+# ==============================================================================
+@main_bp.route('/semear-permissoes')
+def semear_permissoes():
+    from app.extensions import db
+    from app.models import Permission
+    
+    permissoes_padrao = [
+        {'codigo': 'PONTO', 'nome': 'Gestão de Ponto (Aprovar/Editar)', 'modulo': 'RH'},
+        {'codigo': 'DOCUMENTOS', 'nome': 'Gestão de Documentos (Atestados/Holerites)', 'modulo': 'RH'},
+        {'codigo': 'ESTOQUE', 'nome': 'Gestão de Uniformes e EPIs', 'modulo': 'Logística'},
+        {'codigo': 'USUARIOS', 'nome': 'Gerir Utilizadores e Acessos', 'modulo': 'Administração'}
+    ]
+    
+    adicionadas = 0
+    try:
+        for p in permissoes_padrao:
+            if not Permission.query.filter_by(codigo=p['codigo']).first():
+                nova_perm = Permission(codigo=p['codigo'], nome=p['nome'], modulo=p['modulo'])
+                db.session.add(nova_perm)
+                adicionadas += 1
+                
+        db.session.commit()
+        return f"""
+        <div style="font-family: sans-serif; text-align: center; margin-top: 50px;">
+            <h1 style="color: #10b981;">✅ Permissões Semeada com Sucesso!</h1>
+            <h2>{adicionadas} permissões base adicionadas.</h2>
+            <a href="/admin/cargos" style="display: inline-block; padding: 10px 20px; background: #1e293b; color: white; text-decoration: none; border-radius: 8px; margin-top: 20px;">Ir para Gestão de Cargos</a>
+        </div>
+        """
+    except Exception as e:
+        db.session.rollback()
+        return f"<h1 style='color: red;'>Erro:</h1><p>{str(e)}</p>"
+

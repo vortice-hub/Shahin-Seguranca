@@ -1,0 +1,100 @@
+{% extends 'base.html' %}
+{% block title %}Gestão de Cargos (RBAC){% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2><i class="fas fa-user-shield"></i> Gestão de Cargos e Permissões</h2>
+    <p class="text-muted">Crie perfis de acesso personalizados para a sua empresa. (Ex: "Líder de RH", "Segurança", etc.)</p>
+    
+    <div class="row mt-4">
+        <div class="col-md-4">
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="fas fa-plus"></i> Novo Cargo</h5>
+                </div>
+                <div class="card-body bg-light">
+                    <form action="{{ url_for('admin.criar_cargo') }}" method="POST">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Nome do Cargo</label>
+                            <input type="text" name="nome" class="form-control" placeholder="Ex: Analista de RH" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Descrição <small class="text-muted">(Opcional)</small></label>
+                            <input type="text" name="descricao" class="form-control" placeholder="O que este cargo faz?">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-bold border-bottom pb-2 w-100">Permissões de Acesso:</label>
+                            {% if permissoes %}
+                                <div class="bg-white p-3 rounded border">
+                                    {% for perm in permissoes %}
+                                    <div class="form-check mb-2">
+                                        <input class="form-check-input" type="checkbox" name="permissoes" value="{{ perm.id }}" id="perm_{{ perm.id }}">
+                                        <label class="form-check-label" for="perm_{{ perm.id }}">
+                                            <strong>{{ perm.nome }}</strong> <br>
+                                            <small class="text-muted"><i class="fas fa-tag"></i> Módulo: {{ perm.modulo }}</small>
+                                        </label>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                            {% else %}
+                                <div class="alert alert-warning py-2 mt-2"><i class="fas fa-exclamation-triangle"></i> Nenhuma permissão base cadastrada no sistema.</div>
+                            {% endif %}
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100 fw-bold"><i class="fas fa-save"></i> Gravar Cargo</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-8">
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-dark text-white">
+                    <h5 class="mb-0"><i class="fas fa-list"></i> Cargos Existentes</h5>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th class="ps-3">Cargo</th>
+                                    <th>Permissões Vinculadas</th>
+                                    <th class="text-end pe-3">Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for cargo in cargos %}
+                                <tr>
+                                    <td class="ps-3">
+                                        <strong>{{ cargo.nome }}</strong><br>
+                                        <small class="text-muted">{{ cargo.descricao }}</small>
+                                    </td>
+                                    <td>
+                                        {% for p in cargo.permissions %}
+                                            <span class="badge bg-info text-dark mb-1"><i class="fas fa-check-circle"></i> {{ p.nome }}</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">Sem acessos extra</span>
+                                        {% endfor %}
+                                    </td>
+                                    <td class="text-end pe-3">
+                                        <form action="{{ url_for('admin.excluir_cargo', id=cargo.id) }}" method="POST" onsubmit="return confirm('ATENÇÃO: Tem certeza que deseja excluir o cargo {{ cargo.nome }}? Funcionários com este cargo perderão os acessos.');">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                            <button type="submit" class="btn btn-sm btn-outline-danger" title="Excluir Cargo"><i class="fas fa-trash"></i></button>
+                                        </form>
+                                    </td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="3" class="text-center py-4 text-muted">Nenhum cargo personalizado criado até o momento.</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
