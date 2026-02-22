@@ -13,7 +13,6 @@ super_admin_bp = Blueprint('super_admin', __name__, template_folder='templates',
 @super_admin_bp.route('/login', methods=['GET', 'POST'])
 def login():
     """Porta de entrada secreta e exclusiva, impenetrável via banco de dados."""
-    # Se a sessão Vortice já existir no navegador, entra direto
     if session.get('vortice_admin'):
         return redirect(url_for('super_admin.listar_empresas'))
         
@@ -21,12 +20,9 @@ def login():
         cpf_tentativa = request.form.get('cpf')
         senha_tentativa = request.form.get('senha')
         
-        # Lê as credenciais mestre das Variáveis de Ambiente do Servidor.
-        # Caso não estejam configuradas no Cloud Run, usa o seu CPF e uma senha padrão de segurança.
         MASTER_USER = os.environ.get('VORTICE_ADMIN_USER', '50097952800')
         MASTER_PASS = os.environ.get('VORTICE_ADMIN_PASS', 'vortice2026') 
         
-        # A validação acontece diretamente na memória do Python (não toca no banco de dados)
         if cpf_tentativa == MASTER_USER and senha_tentativa == MASTER_PASS:
             session['vortice_admin'] = True
             flash("Bem-vindo de volta ao comando, Administrador Vortice.", "success")
@@ -44,7 +40,7 @@ def logout():
     return redirect(url_for('super_admin.login'))
 
 # ==============================================================================
-# 🌍 GESTÃO GLOBAL DE CLIENTES (SAAS) - BLINDADA APENAS PELO SUPER_ADMIN_REQUIRED
+# 🌍 GESTÃO GLOBAL DE CLIENTES (SAAS)
 # ==============================================================================
 @super_admin_bp.route('/empresas', methods=['GET'])
 @super_admin_required
@@ -94,18 +90,22 @@ def alterar_status_empresa(id):
 @super_admin_bp.route('/empresas/branding/<int:id>', methods=['POST'])
 @super_admin_required
 def configurar_branding(id):
-    """Rota para processar a mudança de cores e logo de uma empresa específica."""
+    """Processa o branding capturando ficheiros para o Cloud Storage."""
     service = EmpresaService()
+    
+    # 🎨 Captura o ficheiro enviado (se houver)
+    file_logo = request.files.get('logo_arquivo')
     
     config_visual = {
         'cor_primaria': request.form.get('cor_primaria', '#2563eb'),
         'cor_hover': request.form.get('cor_hover', '#1d4ed8'),
-        'logo_url': request.form.get('logo_url', '')
+        'logo_url': request.form.get('logo_url', '') # Mantém suporte a link manual se não houver ficheiro
     }
     
     try:
-        service.atualizar_branding(id, config_visual)
-        flash("Identidade visual atualizada com sucesso!", "success")
+        # Passa o ficheiro para o serviço processar o upload GCS
+        service.atualizar_branding(id, config_visual, file_logo=file_logo)
+        flash("Identidade visual e logotipo atualizados com sucesso!", "success")
     except Exception as e:
         flash(f"Erro ao atualizar branding: {e}", "error")
         

@@ -1,28 +1,47 @@
+import os
+import re
+from google.cloud import storage
+from sqlalchemy.orm.attributes import flag_modified
 from app.models import Empresa, Role, Permission, User
 from app.repositories.empresa_repository import EmpresaRepository
 from app.extensions import db
-from sqlalchemy.orm.attributes import flag_modified
-import re
 
 class EmpresaService:
     def __init__(self):
         self.empresa_repo = EmpresaRepository()
+        # Nome do Bucket configurado no Google Cloud Console
+        self.bucket_name = os.environ.get('VORTICE_BUCKET_NAME', 'vortice-assets')
+
+    def _upload_logo_to_gcs(self, empresa_slug, file_obj):
+        """Faz o upload do ficheiro para o Google Cloud Storage e retorna o link público."""
+        try:
+            client = storage.Client()
+            bucket = client.bucket(self.bucket_name)
+            
+            # Gera um nome de ficheiro limpo: logo_empresa_slug.extensao
+            ext = file_obj.filename.rsplit('.', 1)[1].lower()
+            blob_name = f"logos/logo_{empresa_slug}.{ext}"
+            blob = bucket.blob(blob_name)
+            
+            # Upload do ficheiro
+            blob.upload_from_file(file_obj, content_type=file_obj.content_type)
+            
+            # Torna o ficheiro público para que possa ser exibido no login
+            blob.make_public()
+            
+            return blob.public_url
+        except Exception as e:
+            print(f"Erro no upload GCS: {e}")
+            return None
 
     def criar_nova_conta_cliente(self, dados_empresa, dados_master):
-        """
-        Lógica complexa de Onboarding SaaS:
-        1. Cria a Empresa
-        2. Cria o Cargo 'Master' para essa empresa
-        3. Vincula todas as permissões existentes a esse cargo
-        4. Cria o utilizador dono (Master)
-        """
+        """Lógica de Onboarding SaaS."""
         nome_empresa = dados_empresa.get('nome')
         slug = re.sub(r'[^a-z0-9]', '', nome_empresa.lower())
         
         if self.empresa_repo.get_by_slug(slug):
             raise ValueError("Uma empresa com este nome (ou slug similar) já existe.")
 
-        # 1. Criar Empresa com cores padrão garantidas na criação
         nova_empresa = Empresa(
             nome=nome_empresa,
             slug=slug,
@@ -32,22 +51,19 @@ class EmpresaService:
             config_json={"cor_primaria": "#2563eb", "cor_hover": "#1d4ed8", "logo_url": ""}
         )
         self.empresa_repo.add(nova_empresa)
-        db.session.flush() # Gera o ID da empresa antes do commit final
+        db.session.flush() 
 
-        # 2. Criar Cargo Master da Nova Empresa
         cargo_master = Role(
             nome="Diretoria / Master",
             descricao="Acesso total às ferramentas da empresa",
             empresa_id=nova_empresa.id
         )
         
-        # 3. Dar todas as permissões do sistema para este novo cargo
         todas_perms = Permission.query.all()
         cargo_master.permissions.extend(todas_perms)
         db.session.add(cargo_master)
         db.session.flush()
 
-        # 4. Criar o Primeiro Utilizador (O dono do cliente)
         novo_user = User(
             username=dados_master.get('cpf').replace('.', '').replace('-', ''),
             real_name=dados_master.get('nome_completo'),
@@ -63,21 +79,26 @@ class EmpresaService:
         self.empresa_repo.commit()
         return nova_empresa, novo_user
 
-    def atualizar_branding(self, empresa_id, config_visual):
-        """Atualiza as cores e a logo no config_json da empresa de forma blindada."""
+    def atualizar_branding(self, empresa_id, config_visual, file_logo=None):
+        """Atualiza o branding, processando upload de ficheiro se presente."""
         empresa = self.empresa_repo.get_by_id(empresa_id)
         if not empresa:
             raise ValueError("Empresa não encontrada.")
             
-        # BLINDAGEM: Garante que config_json seja um dicionário válido, mesmo se for nulo no banco
         config = dict(empresa.config_json) if empresa.config_json else {}
         
-        # Atualiza apenas os campos visuais sem sobrescrever o resto do JSON
+        # 🎨 LOGO: Se houver um ficheiro novo, faz o upload. Caso contrário, mantém o link manual.
+        if file_logo and file_logo.filename != '':
+            url_gcs = self._upload_logo_to_gcs(empresa.slug, file_logo)
+            if url_gcs:
+                config['logo_url'] = url_gcs
+        else:
+            # Se não enviou ficheiro, tenta pegar o link manual do campo de texto
+            config['logo_url'] = config_visual.get('logo_url', config.get('logo_url', ''))
+        
         config['cor_primaria'] = config_visual.get('cor_primaria', '#2563eb')
         config['cor_hover'] = config_visual.get('cor_hover', '#1d4ed8')
-        config['logo_url'] = config_visual.get('logo_url', '')
         
-        # Atribui o novo dicionário e avisa explicitamente ao banco para gravar a mudança no JSON
         empresa.config_json = config
         flag_modified(empresa, "config_json")
         
