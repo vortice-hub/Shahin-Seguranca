@@ -9,11 +9,14 @@ import pandas as pd
 from app.extensions import db
 from app.models import (User, PreCadastro, PontoResumo, PontoAjuste, PontoRegistro, 
                         Holerite, Recibo)
-from app.utils import (calcular_dia, format_minutes_to_hm, master_required, permission_required)
+# 1. REMOVIDO: calcular_dia daqui
+from app.utils import (format_minutes_to_hm, master_required, permission_required)
 
 # --- IMPORTAÇÃO DOS NOVOS SERVICES E REPOSITORIES ---
 from app.services.user_service import UserService
 from app.repositories.user_repository import UserRepository, PreCadastroRepository
+# 2. ADICIONADO: PontoService para fazer a matemática do ponto
+from app.services.ponto_service import PontoService
 
 admin_bp = Blueprint('admin', __name__, template_folder='templates', url_prefix='/admin')
 logger = logging.getLogger(__name__)
@@ -55,7 +58,6 @@ def gerenciar_usuarios():
     
     return render_template('admin/admin_usuarios.html', users_pagination=users_pagination, pendentes=pendentes)
 
-# CORREÇÃO: Adicionado o método 'POST' para permitir a exclusão via botão do formulário
 @admin_bp.route('/liberar-acesso/excluir/<int:id>', methods=['GET', 'POST'])
 @login_required
 @permission_required('USUARIOS')
@@ -148,7 +150,10 @@ def admin_solicitacoes():
                         if reg: db.session.delete(reg)
 
                     db.session.flush()
-                    calcular_dia(solic.user_id, solic.data_referencia)
+                    # 3. CORREÇÃO AQUI: Usando o PontoService
+                    ponto_service = PontoService()
+                    ponto_service.calcular_dia(solic.user_id, solic.data_referencia)
+                    
                     flash('Aprovado e refletido no espelho.', 'success')
                 except Exception as e:
                     db.session.rollback()
@@ -193,6 +198,7 @@ def admin_limpeza():
 @login_required
 @permission_required('USUARIOS')
 def importar_excel_usuarios():
+    # ... A lógica de importação do Excel mantém-se igual ...
     if 'arquivo_excel' not in request.files:
         flash('Nenhum arquivo enviado.', 'error')
         return redirect(url_for('admin.gerenciar_usuarios'))
@@ -213,6 +219,7 @@ def importar_excel_usuarios():
         
         records = df.to_dict('records') 
         sucesso, falhas = 0, 0
+        from app.utils import time_to_minutes
         
         for row in records:
             nome = str(row.get('nome', '')).strip()
