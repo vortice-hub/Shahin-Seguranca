@@ -300,3 +300,29 @@ def vortice_migrar():
         db.session.rollback()
         return f"<h1 style='color: red;'>Erro na migração:</h1><p>{str(e)}</p>"
 
+# ==============================================================================
+# ⚙️ GATILHO DE MIGRAÇÃO FASE 4 (CRIAR TABELAS RBAC)
+# ==============================================================================
+@main_bp.route('/migrar-rbac')
+def migrar_rbac():
+    from app.extensions import db
+    from sqlalchemy import text
+    try:
+        # 1. Cria as tabelas novas (roles, permissions, role_permissions)
+        db.create_all()
+        
+        # 2. Injeta a nova coluna 'cargo_id' na tabela de utilizadores existente
+        db.session.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS cargo_id INTEGER REFERENCES roles(id) ON DELETE SET NULL;"))
+        db.session.commit()
+        
+        return """
+        <div style="font-family: sans-serif; text-align: center; margin-top: 50px;">
+            <h1 style="color: #10b981;">🚀 Motor RBAC Inicializado!</h1>
+            <h2>Banco de dados atualizado com as tabelas de Cargos e Permissões.</h2>
+            <a href="/login" style="display: inline-block; padding: 10px 20px; background: #1e293b; color: white; text-decoration: none; border-radius: 8px; margin-top: 20px;">Fazer Login</a>
+        </div>
+        """
+    except Exception as e:
+        db.session.rollback()
+        return f"<h1 style='color: red;'>Erro na migração RBAC:</h1><p>{str(e)}</p>"
+
