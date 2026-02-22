@@ -1,6 +1,6 @@
 import os
 import logging
-from flask import Flask, render_template, request, g, abort
+from flask import Flask, render_template, request, g, abort, redirect, url_for, flash
 from flask_login import current_user, logout_user
 from app.extensions import db, login_manager, csrf, migrate
 from config import config_map
@@ -43,30 +43,25 @@ def create_app():
     # ==============================================================================
     @app.before_request
     def blindagem_multi_tenant():
-        """
-        Intercepta todas as requisições para garantir o isolamento da empresa
-        e carregar as preferências visuais (White-Label).
-        """
-        # Ignora arquivos estáticos para manter o desempenho
         if request.endpoint and request.endpoint.startswith('static'):
             return
 
         if current_user.is_authenticated:
-            # Regra de Segurança: Se logado, deve ter empresa_id
+            # Garante que o usuário tem um vínculo de empresa
             if getattr(current_user, 'empresa_id', None) is None:
                 logout_user()
                 abort(403)
             
-            # 🎨 WHITE-LABEL: Carrega o objeto completo da Empresa para o g.empresa
-            # Isso permite acessar g.empresa.config_json em qualquer lugar (Python ou HTML)
             from app.models import Empresa
             empresa_atual = Empresa.query.get(current_user.empresa_id)
             
+            # Se a empresa não existir ou estiver desativada, desconecta
             if not empresa_atual or not empresa_atual.ativa:
                 logout_user()
-                flash("Esta conta de empresa está desativada. Entre em contato com o suporte.", "error")
+                flash("Acesso negado: Empresa não encontrada ou desativada.", "error")
                 return redirect(url_for('auth.login'))
 
+            # Injeta a empresa no contexto global
             g.empresa = empresa_atual
             g.empresa_id = empresa_atual.id
 
@@ -84,7 +79,7 @@ def create_app():
         return render_template('errors/500.html'), 500
 
     with app.app_context():
-        # Importação dos Blueprints
+        # Blueprints
         from app.auth.routes import auth_bp
         from app.admin.routes import admin_bp
         from app.admin.super_routes import super_admin_bp
@@ -93,7 +88,6 @@ def create_app():
         from app.documentos.routes import documentos_bp
         from app.main.routes import main_bp
 
-        # Registro dos Blueprints
         app.register_blueprint(auth_bp)
         app.register_blueprint(admin_bp)
         app.register_blueprint(super_admin_bp)

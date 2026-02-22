@@ -16,7 +16,6 @@ except ImportError:
     webpush = None
 
 def get_brasil_time():
-    """Retorna o horário atual no fuso de Brasília de forma exata."""
     fuso_br = pytz.timezone('America/Sao_Paulo')
     return datetime.now(fuso_br).replace(tzinfo=None)
 
@@ -71,21 +70,18 @@ def get_client_ip():
 # ==============================================================================
 
 def has_permission(permission_name):
-    """Verifica se o utilizador possui uma permissão específica via Cargo ou Legado."""
     if not current_user.is_authenticated: 
         return False
     
-    # O Master pode ver absolutamente tudo
-    if current_user.username == '50097952800' or current_user.role == 'Master': 
+    # O Master da Vortice tem acesso total
+    if str(current_user.username) == '50097952800' or current_user.role == 'Master': 
         return True
 
-    # 1. Verifica no novo sistema RBAC (Se o utilizador tem um Cargo associado)
     if hasattr(current_user, 'cargo') and current_user.cargo:
         for perm in current_user.cargo.permissions:
             if perm.codigo.upper() == permission_name.upper():
                 return True
 
-    # 2. Modo de Compatibilidade (Fallback para o sistema antigo em texto)
     if current_user.permissions:
         user_perms = [p.strip().upper() for p in current_user.permissions.split(',')]
         return permission_name.upper() in user_perms
@@ -93,63 +89,53 @@ def has_permission(permission_name):
     return False
 
 def permission_required(permission_name):
-    """Decorador para proteger rotas baseadas em permissões granulares."""
     def decorator(f):
         @wraps(f)
         def decorated_function(*args, **kwargs):
             if not has_permission(permission_name):
-                flash(f'Acesso Negado: Necessita da permissão {permission_name}.', 'error')
+                flash(f'Acesso Negado: Permissão {permission_name} necessária.', 'error')
                 return redirect(url_for('main.dashboard'))
             return f(*args, **kwargs)
         return decorated_function
     return decorator
 
 def master_required(f):
-    """Proteção para o Master da Empresa (Admin Local)."""
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if not current_user.is_authenticated or (current_user.role != 'Master' and current_user.username != '50097952800'):
+        if not current_user.is_authenticated or (current_user.role != 'Master' and str(current_user.username) != '50097952800'):
             flash('Acesso não autorizado.', 'error')
             return redirect(url_for('main.dashboard'))
         return f(*args, **kwargs)
     return decorated_function
 
 def super_admin_required(f):
-    """Proteção Máxima: Apenas o dono da plataforma Vortice (Super Admin)."""
+    """Apenas para o Dono da Plataforma Vortice"""
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        # Username único do dono da plataforma para gestão global
         PLATFORM_OWNER = '50097952800' 
-        if not current_user.is_authenticated or current_user.username != PLATFORM_OWNER:
-            abort(403)
+        if not current_user.is_authenticated or str(current_user.username) != PLATFORM_OWNER:
+            flash("Acesso restrito ao Administrador Vortice.", "error")
+            return redirect(url_for('main.dashboard'))
         return f(*args, **kwargs)
     return decorated_function
 
 def enviar_notificacao(user_id, mensagem, link=None):
     from app.extensions import db
     from app.models import Notificacao, PushSubscription
-    
     try:
         nova_notif = Notificacao(user_id=user_id, mensagem=mensagem, link=link, lida=False, data_criacao=get_brasil_time())
         db.session.add(nova_notif)
         db.session.commit()
     except Exception as e:
         db.session.rollback()
-        print(f"[Shahin Push] Erro ao salvar notificação: {e}")
         return False
-
     if not webpush: return True
-
     VAPID_PRIVATE_KEY = os.environ.get('VAPID_PRIVATE_KEY')
-    VAPID_CLAIM_EMAIL = 'mailto:contato@shahin.com.br' 
-
+    VAPID_CLAIM_EMAIL = 'mailto:contato@vortice.com.br' 
     if not VAPID_PRIVATE_KEY: return True
-
     subs = PushSubscription.query.filter_by(user_id=user_id).all()
     if not subs: return True 
-
-    payload = json.dumps({"title": "Shahin Gestão", "body": mensagem, "url": link or "/"})
-
+    payload = json.dumps({"title": "Vortice SaaS", "body": mensagem, "url": link or "/"})
     for sub in subs:
         try:
             sub_info = {"endpoint": sub.endpoint, "keys": {"p256dh": sub.p256dh, "auth": sub.auth}}
@@ -158,8 +144,5 @@ def enviar_notificacao(user_id, mensagem, link=None):
             if e.response is not None and e.response.status_code == 410:
                 db.session.delete(sub)
                 db.session.commit()
-        except Exception as e:
-            print(f"[Shahin Push] Erro inesperado no disparo: {e}")
-
     return True
 

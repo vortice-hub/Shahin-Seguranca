@@ -6,12 +6,12 @@
     <title>{% if g.empresa %}{{ g.empresa.nome }}{% else %}Shahin Gestão{% endif %} - Operacional</title>
     
     <link rel="manifest" href="/manifest.json">
-    <meta name="theme-color" content="{{ g.empresa.config_json.get('cor_primaria', '#0f172a') if g.empresa else '#0f172a' }}">
+    <meta name="theme-color" content="{{ g.empresa.config_json.get('cor_primaria', '#0f172a') if (g.empresa and g.empresa.config_json) else '#0f172a' }}">
     
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="{% if g.empresa %}{{ g.empresa.nome }}{% else %}Shahin App{% endif %}">
-    <link rel="apple-touch-icon" href="{{ g.empresa.config_json.get('logo_url', '/static/icons/icon-192x192.png') if g.empresa else '/static/icons/icon-192x192.png' }}">
+    <link rel="apple-touch-icon" href="{{ g.empresa.config_json.get('logo_url', '/static/icons/icon-192x192.png') if (g.empresa and g.empresa.config_json) else '/static/icons/icon-192x192.png' }}">
     
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
@@ -26,7 +26,6 @@
             --primary-color: {{ g.empresa.config_json.get('cor_primaria', '#2563eb') }};
             --primary-hover: {{ g.empresa.config_json.get('cor_hover', '#1d4ed8') }};
         }
-        /* Sobrescreve classes padrão do Tailwind para obedecer ao banco de dados */
         .bg-blue-600, .bg-indigo-600 { background-color: var(--primary-color) !important; }
         .hover\:bg-blue-700:hover, .hover\:bg-indigo-700:hover { background-color: var(--primary-hover) !important; }
         .text-blue-600, .text-indigo-600, .text-blue-500 { color: var(--primary-color) !important; }
@@ -104,7 +103,7 @@
             {% endif %}
 
             <div class="h-16 flex items-center px-6 bg-slate-950 border-b border-slate-800">
-                <img src="{{ g.empresa.config_json.get('logo_url', '/static/icons/icon-192x192.png') if g.empresa else '/static/icons/icon-192x192.png' }}" 
+                <img src="{{ g.empresa.config_json.get('logo_url', '/static/icons/icon-192x192.png') if (g.empresa and g.empresa.config_json) else '/static/icons/icon-192x192.png' }}" 
                      alt="{{ g.empresa.nome if g.empresa else 'Shahin' }}" 
                      class="w-8 h-8 rounded-lg mr-3 object-cover shadow-sm">
                 <span class="font-bold text-xl text-white tracking-tight">{{ g.empresa.nome.split(' ')[0] if g.empresa else 'Shahin' }}</span>
@@ -302,14 +301,11 @@
 
     <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
     <script>
-        // ... (Mantém as funções do modal e notificações como fornecidas anteriormente) ...
         function confirmarAcao(mensagem, actionUrl) {
             document.getElementById('modal-mensagem').innerText = mensagem;
             document.getElementById('form-confirmacao').action = actionUrl;
-            
             const modal = document.getElementById('modal-confirmacao');
             const content = document.getElementById('modal-content');
-            
             modal.classList.remove('hidden');
             setTimeout(() => {
                 content.classList.remove('scale-95');
@@ -320,12 +316,9 @@
         function fecharModalConfirmacao() {
             const modal = document.getElementById('modal-confirmacao');
             const content = document.getElementById('modal-content');
-            
             content.classList.remove('scale-100');
             content.classList.add('scale-95');
-            setTimeout(() => {
-                modal.classList.add('hidden');
-            }, 200);
+            setTimeout(() => { modal.classList.add('hidden'); }, 200);
         }
 
         document.addEventListener('DOMContentLoaded', function() {
@@ -358,7 +351,6 @@
             const iDesktop = document.getElementById('bell-icon-desktop');
             const bMobile = document.getElementById('badge-notif-mobile');
             const iMobile = document.getElementById('bell-icon-mobile');
-
             if (qtd > 0) {
                 if(bDesktop) { bDesktop.innerText = qtd; bDesktop.classList.remove('hidden'); bDesktop.style.transform = 'scale(1)'; }
                 if(bMobile) { bMobile.innerText = qtd; bMobile.classList.remove('hidden'); }
@@ -424,7 +416,6 @@
                             fecharModalConfirmacao();
                         }
                     } catch (err) { console.error(err); }
-                    this.onsubmit = null; 
                 }
             };
         }
