@@ -302,7 +302,7 @@
 
     <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
     <script>
-        // Lógica do Modal de Confirmação (necessário para o botão de excluir cliente no Vortice)
+        // Lógica do Modal de Confirmação 
         function confirmarAcao(mensagem, actionUrl) {
             document.getElementById('modal-mensagem').innerText = mensagem;
             document.getElementById('form-confirmacao').action = actionUrl;
@@ -425,61 +425,120 @@
         }
 
         // ==============================================================================
-        // ⚙️ LÓGICA DO PWA (SERVICE WORKER E INSTALAÇÃO DINÂMICA)
+        // ⚙️ LÓGICA DO PWA E NOTIFICAÇÕES PUSH
         // ==============================================================================
         
-        // 1. Registar o Service Worker para dar superpoderes ao App
+        // --- INSTALAÇÃO DO PWA ---
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', function() {
-                // Chama a nossa nova rota do Python /sw.js
                 navigator.serviceWorker.register('/sw.js').then(function(registration) {
-                    console.log('ServiceWorker White-Label registado com sucesso!', registration.scope);
+                    console.log('ServiceWorker White-Label registado com sucesso!');
+                    // Após registar, verifica se o Push está ativo
+                    verificarInscricaoPush();
                 }, function(err) {
                     console.log('Falha no registo do ServiceWorker:', err);
                 });
             });
         }
 
-        // 2. Controlar o Botão de Instalação Dinâmico
         let deferredPrompt;
         const installContainer = document.getElementById('pwa-install-container');
         const installBtn = document.getElementById('pwa-install-btn');
 
-        // Ouve o navegador a dizer "Este site pode ser instalado!"
         window.addEventListener('beforeinstallprompt', (e) => {
-            // Impede o pop-up nativo miniatura de aparecer sozinho no Android
             e.preventDefault();
-            // Guarda o evento para usarmos quando o utilizador clicar no botão
             deferredPrompt = e;
-            // Torna o botão visível na Sidebar
             if(installContainer) installContainer.classList.remove('hidden');
-            console.log("PWA: Botão de instalação revelado!");
         });
 
         if(installBtn) {
             installBtn.addEventListener('click', async () => {
                 if (deferredPrompt) {
-                    // Dispara a janela nativa do telemóvel para confirmar a instalação
                     deferredPrompt.prompt();
-                    
-                    // Aguarda a resposta do utilizador (Aceitou ou Cancelou)
                     const { outcome } = await deferredPrompt.userChoice;
-                    console.log(`Resultado da instalação do PWA: ${outcome}`);
-                    
-                    // Independentemente da escolha, limpa o evento
                     deferredPrompt = null;
-                    // Esconde o botão da Sidebar
                     installContainer.classList.add('hidden');
                 }
             });
         }
 
-        // 3. Limpeza depois de instalado
         window.addEventListener('appinstalled', () => {
             if(installContainer) installContainer.classList.add('hidden');
             deferredPrompt = null;
-            console.log('Sucesso! PWA instalado no dispositivo.');
         });
+
+        // --- ATIVAÇÃO DE ALERTAS PUSH ---
+        
+        // Cole aqui a sua VAPID PUBLIC KEY (que gerou junto com a privada)
+        const PUBLIC_VAPID_KEY = 'BLj7nNHVn8NIHL4lHkVOS03nYmMGdOQ4L4wO8_4H58oF0COavknccVgUUUfpClHhQegJjC9p6ZjFz3LH98Xupxo'; 
+
+        function urlBase64ToUint8Array(base64String) {
+            const padding = '='.repeat((4 - base64String.length % 4) % 4);
+            const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
+            const rawData = window.atob(base64);
+            const outputArray = new Uint8Array(rawData.length);
+            for (let i = 0; i < rawData.length; ++i) {
+                outputArray[i] = rawData.charCodeAt(i);
+            }
+            return outputArray;
+        }
+
+        async function verificarInscricaoPush() {
+            if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+            
+            try {
+                const registration = await navigator.serviceWorker.ready;
+                const subscription = await registration.pushManager.getSubscription();
+                const btnContainer = document.getElementById('push-subscribe-container');
+                
+                // Se NÃO tem inscrição e o utilizador NÃO bloqueou as notificações, mostra o botão
+                if (!subscription && Notification.permission !== 'denied') {
+                    if(btnContainer) btnContainer.classList.remove('hidden');
+                }
+            } catch (err) { console.error("Erro ao verificar Push:", err); }
+        }
+
+        async function ativarAlertas() {
+            try {
+                const registration = await navigator.serviceWorker.ready;
+                
+                // 1. Pede a inscrição encriptada usando a chave pública
+                const subscription = await registration.pushManager.subscribe({
+                    userVisibleOnly: true,
+                    applicationServerKey: urlBase64ToUint8Array(PUBLIC_VAPID_KEY)
+                });
+
+                // 2. Envia a assinatura para o nosso backend gravar (rota /api/push/subscribe)
+                const response = await fetch('/api/push/subscribe', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': '{{ csrf_token() }}'
+                    },
+                    body: JSON.stringify(subscription)
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    Toastify({ text: "Alertas ativados com sucesso! 🔔", style: { background: "#10b981" } }).showToast();
+                    document.getElementById('push-subscribe-container').classList.add('hidden');
+                } else {
+                    Toastify({ text: "Erro ao ativar alertas.", style: { background: "#ef4444" } }).showToast();
+                }
+            } catch (error) {
+                console.error('Erro na subscrição Push:', error);
+                if (Notification.permission === 'denied') {
+                    Toastify({ text: "Tem de permitir notificações nas definições do navegador.", style: { background: "#ef4444", fontSize: "12px" } }).showToast();
+                    document.getElementById('push-subscribe-container').classList.add('hidden');
+                }
+            }
+        }
+
+        // Liga a função ao clique do botão
+        const pushBtn = document.getElementById('push-subscribe-btn');
+        if(pushBtn) {
+            pushBtn.addEventListener('click', ativarAlertas);
+        }
     </script>
 </body>
 </html>

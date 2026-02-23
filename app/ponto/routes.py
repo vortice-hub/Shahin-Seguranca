@@ -177,10 +177,10 @@ def solicitar_ajuste():
                 )
                 ajuste_repo.add(solic); ajuste_repo.commit()
                 
-                # GATILHO NOTIFICAÇÃO MASTER (Será refatorado com RBAC futuramente)
-                master = User.query.filter_by(username='50097952800').first()
-                if master:
-                    enviar_notificacao(master.id, f"{current_user.real_name} solicitou um Ajuste de Ponto.", "/ponto/admin/ausencias") # Correção de Rota
+                # 🚀 CORREÇÃO WHITE-LABEL: Busca o Master da EMPRESA ATUAL (Isolamento de Dados)
+                master_empresa = User.query.filter_by(empresa_id=current_user.empresa_id, role='Master').first()
+                if master_empresa:
+                    enviar_notificacao(master_empresa.id, f"{current_user.real_name} solicitou um Ajuste de Ponto.", "/ponto/admin/solicitacoes")
                 
                 flash('Enviado!')
                 return redirect(url_for('ponto.solicitar_ajuste'))
@@ -256,10 +256,10 @@ def solicitar_ferias():
     if request.method == 'POST':
         try:
              tipo = ponto_service.processar_solicitacao_ferias(current_user, request.form, saldo)
-             # GATILHO NOTIFICAÇÃO MASTER
-             master = User.query.filter_by(username='50097952800').first()
-             if master:
-                 enviar_notificacao(master.id, f"{current_user.real_name} enviou uma solicitação de {tipo}.", "/ponto/admin/ausencias")
+             # 🚀 CORREÇÃO WHITE-LABEL: Busca o Master da EMPRESA ATUAL (Isolamento de Dados)
+             master_empresa = User.query.filter_by(empresa_id=current_user.empresa_id, role='Master').first()
+             if master_empresa:
+                 enviar_notificacao(master_empresa.id, f"{current_user.real_name} enviou uma solicitação de {tipo}.", "/ponto/admin/ausencias")
              flash("Solicitação validada e enviada com sucesso ao RH!", "success")
         except ValueError as ve:
              flash(str(ve), "error")
@@ -331,10 +331,9 @@ def gestao_ausencias():
             
         return redirect(url_for('ponto.gestao_ausencias'))
 
-    # ... (O resto da lógica de alertas de vencimento se mantém igual nas rotas por envolver muita exibição na view)
     alertas_vencimento = []
     hoje = get_brasil_time().date()
-    usuarios_clt = user_repo.get_all() # Poderíamos criar um método get_clt_users depois
+    usuarios_clt = user_repo.get_all() 
     usuarios_clt = [u for u in usuarios_clt if u.username != '12345678900' and u.data_admissao is not None]
     
     for u in usuarios_clt:
@@ -380,7 +379,7 @@ def controle_escala():
     ausencia_repo = SolicitacaoAusenciaRepository()
     reg_repo = PontoRegistroRepository()
     
-    usuarios = user_repo.get_gestores() # Reutilizando a lógica que ignora master/terminal e ordena
+    usuarios = user_repo.get_gestores() 
     trabalhando, folga = [], []
     
     for u in usuarios:

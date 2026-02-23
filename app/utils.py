@@ -6,15 +6,16 @@ import hashlib
 import os
 import json
 from functools import wraps
-# Importamos 'session' para a nova arquitetura Deus Ex Machina
-from flask import abort, redirect, url_for, flash, request, session
+from flask import abort, redirect, url_for, flash, request, session, current_app
 from flask_login import current_user
+import traceback
 
 # Tenta importar o motor Push
 try:
-    from pywebpush import webpush, WebPushException
+    import pywebpush
+    from pywebpush import WebPushException
 except ImportError:
-    webpush = None
+    pywebpush = None
 
 def get_brasil_time():
     fuso_br = pytz.timezone('America/Sao_Paulo')
@@ -121,30 +122,92 @@ def super_admin_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
+# ==============================================================================
+# 🚀 MOTOR DE NOTIFICAÇÕES (ISOLADO E BLINDADO PARA WHITE-LABEL)
+# ==============================================================================
+
 def enviar_notificacao(user_id, mensagem, link=None):
     from app.extensions import db
-    from app.models import Notificacao, PushSubscription
+    from app.models import Notificacao, PushSubscription, User, Empresa
+    
+    # 1. Guarda a notificação física na base de dados (Sininho)
     try:
-        nova_notif = Notificacao(user_id=user_id, mensagem=mensagem, link=link, lida=False, data_criacao=get_brasil_time())
+        nova_notif = Notificacao(
+            user_id=user_id, 
+            mensagem=mensagem, 
+            link=link, 
+            lida=False, 
+            data_criacao=get_brasil_time()
+        )
         db.session.add(nova_notif)
         db.session.commit()
     except Exception as e:
+        print(f"Erro ao salvar notificação no banco: {e}")
         db.session.rollback()
         return False
-    if not webpush: return True
+        
+    # 2. Prepara o envio do Push (Telemóvel)
+    if not pywebpush: 
+        print("Biblioteca pywebpush não está instalada. Apenas notificação web salva.")
+        return True
+        
     VAPID_PRIVATE_KEY = os.environ.get('VAPID_PRIVATE_KEY')
     VAPID_CLAIM_EMAIL = 'mailto:contato@vortice.com.br' 
-    if not VAPID_PRIVATE_KEY: return True
+    
+    if not VAPID_PRIVATE_KEY: 
+        print("VAPID_PRIVATE_KEY não configurada no ambiente.")
+        return True
+
+    # 3. Busca os telemóveis registados por este utilizador específico
     subs = PushSubscription.query.filter_by(user_id=user_id).all()
-    if not subs: return True 
-    payload = json.dumps({"title": "Vortice SaaS", "body": mensagem, "url": link or "/"})
+    if not subs: 
+        return True 
+
+    # 4. Magia White-Label: Descobre qual é a empresa do utilizador para usar o nome correto
+    nome_app = "Sistema de Gestão"
+    try:
+        user = User.query.get(user_id)
+        if user and user.empresa_id:
+            empresa = Empresa.query.get(user.empresa_id)
+            if empresa:
+                # Usa apenas o primeiro nome da empresa para ficar bonito na notificação (ex: "Shahin RH")
+                nome_app = f"{empresa.nome.split()[0]} RH"
+    except:
+        pass
+
+    # Constrói o "envelope" que o Service Worker vai receber
+    payload = json.dumps({
+        "title": nome_app, 
+        "body": mensagem, 
+        "url": link or "/"
+    })
+
+    # 5. Dispara para todos os telemóveis/PCs deste funcionário
     for sub in subs:
         try:
-            sub_info = {"endpoint": sub.endpoint, "keys": {"p256dh": sub.p256dh, "auth": sub.auth}}
-            webpush(subscription_info=sub_info, data=payload, vapid_private_key=VAPID_PRIVATE_KEY, vapid_claims={"sub": VAPID_CLAIM_EMAIL})
+            sub_info = {
+                "endpoint": sub.endpoint, 
+                "keys": {
+                    "p256dh": sub.p256dh, 
+                    "auth": sub.auth
+                }
+            }
+            pywebpush.webpush(
+                subscription_info=sub_info, 
+                data=payload, 
+                vapid_private_key=VAPID_PRIVATE_KEY, 
+                vapid_claims={"sub": VAPID_CLAIM_EMAIL}
+            )
         except WebPushException as e:
+            # 410 Gone = O utilizador desinstalou o App ou revogou a permissão. Limpamos a base de dados.
             if e.response is not None and e.response.status_code == 410:
+                print(f"Dispositivo inativo detetado. Removendo inscrição do utilizador {user_id}.")
                 db.session.delete(sub)
                 db.session.commit()
+            else:
+                print(f"Falha ao enviar Push: {e}")
+        except Exception as e:
+             print(f"Erro inesperado no pywebpush: {e}")
+             
     return True
 
