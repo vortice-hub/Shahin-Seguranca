@@ -82,7 +82,7 @@
                                     </button>
                                 </form>
 
-                                <button onclick="confirmarAcao('Tem certeza que deseja excluir permanentemente a empresa {{ empresa.nome }}? Esta ação apagará todos os usuários, pontos e registros vinculados e não pode ser desfeita.', '{{ url_for('super_admin.excluir_empresa', id=empresa.id) }}')" 
+                                <button onclick="abrirModalExclusao('{{ empresa.id }}', '{{ empresa.nome }}')" 
                                         class="p-2.5 bg-red-50 hover:bg-red-600 text-red-500 hover:text-white rounded-xl text-xs font-bold transition" title="Excluir Empresa">
                                     <i class="fas fa-trash-alt"></i>
                                 </button>
@@ -92,6 +92,32 @@
                     {% endfor %}
                 </tbody>
             </table>
+        </div>
+    </div>
+</div>
+
+<div id="modal-excluir-empresa" class="hidden fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 transition-opacity">
+    <div class="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden border border-slate-200 transform transition-all">
+        <div class="p-8 text-center">
+            <div class="w-20 h-20 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-5 border-4 border-red-100">
+                <i class="fas fa-trash-alt text-red-500 text-3xl"></i>
+            </div>
+            <h3 class="text-2xl font-black text-slate-800 mb-2">Excluir Cliente?</h3>
+            <p class="text-sm text-slate-500 mb-8 leading-relaxed">
+                Tem certeza que deseja excluir permanentemente a empresa <strong id="nome-empresa-excluir" class="text-slate-700"></strong>? Esta ação apagará todos os usuários, pontos e registros vinculados e <b>não pode ser desfeita</b>.
+            </p>
+            
+            <div class="flex gap-4">
+                <button onclick="fecharModalExclusao()" class="flex-1 py-3.5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-xl transition">
+                    Cancelar
+                </button>
+                <form id="form-excluir-empresa" method="POST" class="flex-1">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                    <button type="submit" class="w-full h-full py-3.5 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl shadow-lg shadow-red-200 transition transform active:scale-95 flex items-center justify-center gap-2">
+                        Excluir Agora
+                    </button>
+                </form>
+            </div>
         </div>
     </div>
 </div>
@@ -173,7 +199,10 @@
 </div>
 
 <script>
-    function toggleModal(id) { document.getElementById(id).classList.toggle('hidden'); }
+    function toggleModal(id) { 
+        document.getElementById(id).classList.toggle('hidden'); 
+    }
+
     function abrirBranding(id, nome, cor, hover, logo) {
         document.getElementById('branding-nome-empresa').innerText = nome;
         document.getElementById('form-branding').action = `/vortice/empresas/branding/${id}`;
@@ -181,6 +210,17 @@
         document.getElementById('input-cor-primaria').value = cor;
         document.getElementById('input-cor-hover').value = hover;
         toggleModal('modal-branding');
+    }
+
+    // NOVAS FUNÇÕES EXCLUSIVAS PARA EXCLUSÃO
+    function abrirModalExclusao(id, nome) {
+        document.getElementById('nome-empresa-excluir').innerText = nome;
+        document.getElementById('form-excluir-empresa').action = `/vortice/empresas/excluir/${id}`;
+        document.getElementById('modal-excluir-empresa').classList.remove('hidden');
+    }
+
+    function fecharModalExclusao() {
+        document.getElementById('modal-excluir-empresa').classList.add('hidden');
     }
 </script>
 {% endblock %}
