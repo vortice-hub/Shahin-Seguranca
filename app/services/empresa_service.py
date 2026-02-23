@@ -22,7 +22,10 @@ class EmpresaService:
             blob = bucket.blob(blob_name)
             
             blob.upload_from_file(file_obj, content_type=file_obj.content_type)
-            blob.make_public()
+            
+            # REMOVIDO: blob.make_public()
+            # Como o Bucket tem "Uniform Access" ativado, a permissão pública 
+            # deve ser dada ao Bucket inteiro via IAM no painel do GCP.
             
             return blob.public_url
         except Exception as e:
@@ -37,7 +40,7 @@ class EmpresaService:
         if self.empresa_repo.get_by_slug(slug):
             raise ValueError("Uma empresa com este nome (ou slug similar) já existe.")
 
-        # 🎨 Processa a logo no momento da criação se fornecida
+        # Processa a logo no momento da criação se fornecida
         logo_url = ""
         if file_logo and file_logo.filename != '':
             logo_url = self._upload_logo_to_gcs(slug, file_logo)
