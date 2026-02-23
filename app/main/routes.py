@@ -1,4 +1,4 @@
-from flask import render_template, redirect, url_for, jsonify, request, g
+from flask import render_template, redirect, url_for, jsonify, request, g, Response
 from flask_login import login_required, current_user
 from app.extensions import db
 from app.models import User, PontoAjuste, Recibo, Holerite, PreCadastro, Notificacao, PontoResumo, PontoRegistro, HistoricoSaida, PushSubscription, Empresa
@@ -7,6 +7,8 @@ from datetime import timedelta
 from sqlalchemy import func
 import traceback
 import json
+import os
+from google.cloud import storage
 
 from app.main import main_bp
 
@@ -42,6 +44,34 @@ def dashboard():
         admin_stats['ajustes_pendentes'] = PontoAjuste.query.filter_by(status='Pendente').count()
 
     return render_template('main/dashboard.html', dados=dados, admin=admin_stats)
+
+# ==============================================================================
+# 🚀 CDN INTERNA VORTICE (PLANO B: BURLA BLOQUEIOS DE DOMÍNIO)
+# ==============================================================================
+@main_bp.route('/cdn/logos/<slug>')
+def serve_logo(slug):
+    """Busca a logo privada no GCS e serve como se fosse estática."""
+    bucket_name = os.environ.get('VORTICE_BUCKET_NAME', 'vortice-assets')
+    icone_padrao = '/static/icons/vortice-icon.png'
+    
+    try:
+        client = storage.Client()
+        bucket = client.bucket(bucket_name)
+        
+        # Procura qualquer ficheiro que comece com logo_slug
+        blobs = list(bucket.list_blobs(prefix=f"logos/logo_{slug}."))
+        
+        if not blobs:
+            return redirect(icone_padrao)
+            
+        blob = blobs[0]
+        image_data = blob.download_as_bytes()
+        
+        # Entrega a imagem perfeitamente ao navegador
+        return Response(image_data, mimetype=blob.content_type)
+    except Exception as e:
+        print(f"Erro ao servir logo segura via CDN: {e}")
+        return redirect(icone_padrao)
 
 # ==============================================================================
 # PWA WHITE-LABEL: Manifesto Dinamico

@@ -14,7 +14,7 @@ class EmpresaService:
         self.bucket_name = os.environ.get('VORTICE_BUCKET_NAME', 'vortice-assets')
 
     def _upload_logo_to_gcs(self, empresa_slug, file_obj):
-        """Redimensiona e faz o upload do ficheiro para o Google Cloud Storage."""
+        """Redimensiona e faz o upload para o GCS. Retorna a rota do Proxy Interno (Plano B)."""
         try:
             client = storage.Client()
             bucket = client.bucket(self.bucket_name)
@@ -23,7 +23,7 @@ class EmpresaService:
             if ext not in ['jpg', 'jpeg', 'png', 'webp']:
                 ext = 'png'
 
-            # 🛠️ CORREÇÃO CRÍTICA: Ler o '.stream' do FileStorage do Flask
+            # Ler o '.stream' do FileStorage do Flask
             img = Image.open(file_obj.stream)
             
             if img.mode in ("RGBA", "P") and ext in ["jpg", "jpeg"]:
@@ -39,10 +39,11 @@ class EmpresaService:
             blob_name = f"logos/logo_{empresa_slug}.{ext}"
             blob = bucket.blob(blob_name)
             
-            # Faz o upload direto do buffer de bytes gerado pelo Pillow
             blob.upload_from_file(img_byte_arr, content_type=f'image/{ext}')
             
-            return blob.public_url
+            # 🚀 PLANO B: Em vez do link do Google (bloqueado pela política da organização), 
+            # retornamos a rota do nosso próprio servidor proxy!
+            return f"/cdn/logos/{empresa_slug}"
         except Exception as e:
             print(f"ERRO GRAVE NO UPLOAD/PILLOW: {e}")
             return None
@@ -57,7 +58,7 @@ class EmpresaService:
 
         logo_url = ""
         if file_logo and file_logo.filename != '':
-            # 🛡️ Garante que se o upload falhar, retorna string vazia em vez de 'None'
+            # Garante que se o upload falhar, retorna string vazia em vez de 'None'
             logo_url = self._upload_logo_to_gcs(slug, file_logo) or ""
 
         nova_empresa = Empresa(
