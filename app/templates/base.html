@@ -423,6 +423,63 @@
                 }
             };
         }
+
+        // ==============================================================================
+        // ⚙️ LÓGICA DO PWA (SERVICE WORKER E INSTALAÇÃO DINÂMICA)
+        // ==============================================================================
+        
+        // 1. Registar o Service Worker para dar superpoderes ao App
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', function() {
+                // Chama a nossa nova rota do Python /sw.js
+                navigator.serviceWorker.register('/sw.js').then(function(registration) {
+                    console.log('ServiceWorker White-Label registado com sucesso!', registration.scope);
+                }, function(err) {
+                    console.log('Falha no registo do ServiceWorker:', err);
+                });
+            });
+        }
+
+        // 2. Controlar o Botão de Instalação Dinâmico
+        let deferredPrompt;
+        const installContainer = document.getElementById('pwa-install-container');
+        const installBtn = document.getElementById('pwa-install-btn');
+
+        // Ouve o navegador a dizer "Este site pode ser instalado!"
+        window.addEventListener('beforeinstallprompt', (e) => {
+            // Impede o pop-up nativo miniatura de aparecer sozinho no Android
+            e.preventDefault();
+            // Guarda o evento para usarmos quando o utilizador clicar no botão
+            deferredPrompt = e;
+            // Torna o botão visível na Sidebar
+            if(installContainer) installContainer.classList.remove('hidden');
+            console.log("PWA: Botão de instalação revelado!");
+        });
+
+        if(installBtn) {
+            installBtn.addEventListener('click', async () => {
+                if (deferredPrompt) {
+                    // Dispara a janela nativa do telemóvel para confirmar a instalação
+                    deferredPrompt.prompt();
+                    
+                    // Aguarda a resposta do utilizador (Aceitou ou Cancelou)
+                    const { outcome } = await deferredPrompt.userChoice;
+                    console.log(`Resultado da instalação do PWA: ${outcome}`);
+                    
+                    // Independentemente da escolha, limpa o evento
+                    deferredPrompt = null;
+                    // Esconde o botão da Sidebar
+                    installContainer.classList.add('hidden');
+                }
+            });
+        }
+
+        // 3. Limpeza depois de instalado
+        window.addEventListener('appinstalled', () => {
+            if(installContainer) installContainer.classList.add('hidden');
+            deferredPrompt = null;
+            console.log('Sucesso! PWA instalado no dispositivo.');
+        });
     </script>
 </body>
 </html>

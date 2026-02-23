@@ -1,19 +1,21 @@
-const CACHE_NAME = 'shahin-app-v1';
+const CACHE_NAME = 'vortice-pwa-v2';
 
-// Recursos mínimos para o aplicativo iniciar mais rápido
+// Recursos mínimos para o aplicativo iniciar mais rápido e ser instalável
 const ASSETS_TO_CACHE = [
     '/',
-    '/static/manifest.json'
+    '/manifest.json' // Alterado para a nossa nova rota dinâmica!
 ];
 
 // Instalação do Motor no telemóvel
 self.addEventListener('install', (event) => {
     event.waitUntil(
         caches.open(CACHE_NAME).then((cache) => {
-            console.log('[Shahin App] Service Worker Instalado e Cache Criado.');
+            console.log('[Vortice PWA] Service Worker Instalado e Cache Criado.');
             return cache.addAll(ASSETS_TO_CACHE);
         })
     );
+    // Força o Service Worker a ativar imediatamente
+    self.skipWaiting();
 });
 
 // Ativação e limpeza de versões antigas do App
@@ -23,13 +25,15 @@ self.addEventListener('activate', (event) => {
             return Promise.all(
                 cacheNames.map((cacheName) => {
                     if (cacheName !== CACHE_NAME) {
-                        console.log('[Shahin App] Limpando versão antiga do cache:', cacheName);
+                        console.log('[Vortice PWA] Limpando versão antiga do cache:', cacheName);
                         return caches.delete(cacheName);
                     }
                 })
             );
         })
     );
+    // Assume o controlo de todas as abas abertas imediatamente para o botão de instalar funcionar rápido
+    event.waitUntil(clients.claim());
 });
 
 // Estratégia de Rede (Network First): Como é um sistema de gestão ao vivo, 
@@ -52,12 +56,12 @@ self.addEventListener('fetch', (event) => {
 
 // 1. À ESCUTA: Recebendo a notificação disparada pelo servidor Python
 self.addEventListener('push', function(event) {
-    console.log('[Shahin App] Push Message recebida!');
+    console.log('[Vortice PWA] Push Message recebida!');
     
     // Dados padrão caso algo falhe
     let data = { 
-        title: 'Shahin Gestão', 
-        body: 'Você tem uma nova notificação do RH.', 
+        title: 'Nova Notificação', 
+        body: 'Você tem uma nova mensagem do RH.', 
         url: '/' 
     };
     
@@ -73,24 +77,24 @@ self.addEventListener('push', function(event) {
     // Configuração do visual e comportamento do aviso no telemóvel
     const options = {
         body: data.body,
-        icon: '/static/icons/icon-192x192.png', // O ícone grande do app
-        badge: '/static/icons/icon-192x192.png', // O ícone pequenino da barra de notificações (status bar)
+        icon: '/static/icons/vortice-icon.png', // Ícone neutro
+        badge: '/static/icons/vortice-icon.png', 
         vibrate: [200, 100, 200, 100, 200, 100, 200], // Padrão de vibração chamativo
         data: {
-            url: data.url || '/' // Guarda o link (ex: /documentos/meus-documentos) para quando o utilizador clicar
+            url: data.url || '/' // Guarda o link para quando o utilizador clicar
         },
         requireInteraction: true // Força a notificação a ficar no ecrã até que o utilizador a veja e feche
     };
 
     // Diz ao telemóvel para mostrar o alerta final!
     event.waitUntil(
-        self.registration.showNotification(data.title || 'Shahin Gestão', options)
+        self.registration.showNotification(data.title || 'Sistema de Gestão', options)
     );
 });
 
 // 2. AÇÃO: O que acontece quando o funcionário clica na notificação
 self.addEventListener('notificationclick', function(event) {
-    console.log('[Shahin App] Utilizador clicou na notificação.');
+    console.log('[Vortice PWA] Utilizador clicou na notificação.');
     
     // Fecha a notificação do ecrã
     event.notification.close();
@@ -100,7 +104,7 @@ self.addEventListener('notificationclick', function(event) {
 
     // A magia de navegação:
     event.waitUntil(
-        // Verifica se o Shahin Gestão já está aberto em alguma aba ou em segundo plano
+        // Verifica se o App já está aberto em alguma aba ou em segundo plano
         clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function(clientList) {
             for (let i = 0; i < clientList.length; i++) {
                 let client = clientList[i];

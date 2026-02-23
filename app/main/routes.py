@@ -1,4 +1,4 @@
-from flask import render_template, redirect, url_for, jsonify, request, g, Response
+from flask import render_template, redirect, url_for, jsonify, request, g, Response, make_response, send_from_directory, current_app
 from flask_login import login_required, current_user
 from app.extensions import db
 from app.models import User, PontoAjuste, Recibo, Holerite, PreCadastro, Notificacao, PontoResumo, PontoRegistro, HistoricoSaida, PushSubscription, Empresa
@@ -46,6 +46,17 @@ def dashboard():
     return render_template('main/dashboard.html', dados=dados, admin=admin_stats)
 
 # ==============================================================================
+# ⚙️ SERVICE WORKER (ESCOPO GLOBAL PARA PWA)
+# ==============================================================================
+@main_bp.route('/sw.js')
+def service_worker():
+    """Serve o Service Worker na raiz para dar permissão global ao PWA."""
+    response = make_response(send_from_directory(os.path.join(current_app.root_path, 'static'), 'service-worker.js'))
+    response.headers['Content-Type'] = 'application/javascript'
+    response.headers['Service-Worker-Allowed'] = '/'
+    return response
+
+# ==============================================================================
 # 🚀 CDN INTERNA VORTICE (PLANO B: BURLA BLOQUEIOS DE DOMÍNIO)
 # ==============================================================================
 @main_bp.route('/cdn/logos/<slug>')
@@ -58,7 +69,6 @@ def serve_logo(slug):
         client = storage.Client()
         bucket = client.bucket(bucket_name)
         
-        # Procura qualquer ficheiro que comece com logo_slug
         blobs = list(bucket.list_blobs(prefix=f"logos/logo_{slug}."))
         
         if not blobs:
@@ -67,14 +77,13 @@ def serve_logo(slug):
         blob = blobs[0]
         image_data = blob.download_as_bytes()
         
-        # Entrega a imagem perfeitamente ao navegador
         return Response(image_data, mimetype=blob.content_type)
     except Exception as e:
         print(f"Erro ao servir logo segura via CDN: {e}")
         return redirect(icone_padrao)
 
 # ==============================================================================
-# PWA WHITE-LABEL: Manifesto Dinamico
+# 📱 PWA WHITE-LABEL: Manifesto Dinamico
 # ==============================================================================
 @main_bp.route('/manifest.json')
 def dynamic_manifest():
@@ -103,8 +112,8 @@ def dynamic_manifest():
         "short_name": short_name,
         "name": app_name,
         "icons": [
-            { "src": icon_url, "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
-            { "src": icon_url, "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+            { "src": icon_url, "sizes": "192x192", "purpose": "any maskable" },
+            { "src": icon_url, "sizes": "512x512", "purpose": "any maskable" }
         ],
         "start_url": "/",
         "display": "standalone",
