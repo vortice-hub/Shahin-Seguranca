@@ -19,36 +19,32 @@ class EmpresaService:
             client = storage.Client()
             bucket = client.bucket(self.bucket_name)
             
-            ext = file_obj.filename.rsplit('.', 1)[1].lower()
+            ext = file_obj.filename.rsplit('.', 1)[-1].lower()
             if ext not in ['jpg', 'jpeg', 'png', 'webp']:
-                ext = 'png' # Padroniza para png se for um formato desconhecido
+                ext = 'png'
 
-            # 1. Abre a imagem na memória com o Pillow
-            img = Image.open(file_obj)
+            # 🛠️ CORREÇÃO CRÍTICA: Ler o '.stream' do FileStorage do Flask
+            img = Image.open(file_obj.stream)
             
-            # 2. Converte para RGB se tiver fundo transparente e for salvar como JPEG
             if img.mode in ("RGBA", "P") and ext in ["jpg", "jpeg"]:
                 img = img.convert("RGB")
                 
-            # 3. Força o tamanho máximo (Ex: 256x256) mantendo a proporção
             img.thumbnail((256, 256), Image.Resampling.LANCZOS)
             
-            # 4. Guarda a imagem otimizada num "ficheiro virtual" (Buffer) na memória
             img_byte_arr = io.BytesIO()
             img_format = 'PNG' if ext == 'png' else ('WEBP' if ext == 'webp' else 'JPEG')
             img.save(img_byte_arr, format=img_format, optimize=True, quality=85)
-            img_byte_arr.seek(0) # Retorna o cursor para o início do buffer
+            img_byte_arr.seek(0)
 
-            # 5. Prepara o envio para o Google Cloud
             blob_name = f"logos/logo_{empresa_slug}.{ext}"
             blob = bucket.blob(blob_name)
             
-            # 6. Faz o upload da imagem processada (Buffer) e não do ficheiro cru
+            # Faz o upload direto do buffer de bytes gerado pelo Pillow
             blob.upload_from_file(img_byte_arr, content_type=f'image/{ext}')
             
             return blob.public_url
         except Exception as e:
-            print(f"Erro no upload GCS e Resizing: {e}")
+            print(f"ERRO GRAVE NO UPLOAD/PILLOW: {e}")
             return None
 
     def criar_nova_conta_cliente(self, dados_empresa, dados_master, file_logo=None):
@@ -61,7 +57,8 @@ class EmpresaService:
 
         logo_url = ""
         if file_logo and file_logo.filename != '':
-            logo_url = self._upload_logo_to_gcs(slug, file_logo)
+            # 🛡️ Garante que se o upload falhar, retorna string vazia em vez de 'None'
+            logo_url = self._upload_logo_to_gcs(slug, file_logo) or ""
 
         nova_empresa = Empresa(
             nome=nome_empresa,
