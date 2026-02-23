@@ -8,7 +8,6 @@ from sqlalchemy import func
 import traceback
 import json
 
-# Importamos o Blueprint definido no __init__.py do módulo
 from app.main import main_bp
 
 @main_bp.route('/')
@@ -20,19 +19,19 @@ def dashboard():
     if current_user.role == 'Terminal':
         return redirect(url_for('ponto.terminal_scanner'))
 
-    # [span_3](start_span)Dados Básicos (Usando g.empresa carregado no middleware)[span_3](end_span)
+    # Dados Basicos (Usando g.empresa carregado no middleware)
     dados = {
         'hoje': get_brasil_time().strftime('%d/%m/%Y'),
         'doc_pendentes': 0,
-        'nome_empresa': g.empresa.nome if hasattr(g, 'empresa') else "Vortice SaaS"
+        'nome_empresa': g.empresa.nome if hasattr(g, 'empresa') and g.empresa else "Vortice SaaS"
     }
 
-    # [span_4](start_span)Contagem de documentos não lidos pelo utilizador[span_4](end_span)
+    # Contagem de documentos nao lidos pelo utilizador
     docs_h = Holerite.query.filter_by(user_id=current_user.id, visualizado=False).count()
     docs_r = Recibo.query.filter_by(user_id=current_user.id, visualizado=False).count()
     dados['doc_pendentes'] = docs_h + docs_r
 
-    # [span_5](start_span)Dados Administrativos[span_5](end_span)
+    # Dados Administrativos
     admin_stats = {}
     
     if has_permission('USUARIOS'):
@@ -45,12 +44,11 @@ def dashboard():
     return render_template('main/dashboard.html', dados=dados, admin=admin_stats)
 
 # ==============================================================================
-# [span_6](start_span)📱 PWA WHITE-LABEL: Manifesto Dinâmico[span_6](end_span)
+# PWA WHITE-LABEL: Manifesto Dinamico
 # ==============================================================================
 @main_bp.route('/manifest.json')
 def dynamic_manifest():
-    [span_7](start_span)"""Gera o manifesto do PWA dinamicamente com a marca da empresa logada[span_7](end_span)."""
-    # [span_8](start_span)Tenta identificar a empresa via Query String (slug) ou contexto global[span_8](end_span)
+    """Gera o manifesto do PWA dinamicamente."""
     slug = request.args.get('slug')
     empresa_contexto = None
 
@@ -59,18 +57,15 @@ def dynamic_manifest():
     elif hasattr(g, 'empresa') and g.empresa:
         empresa_contexto = g.empresa
 
-    # [span_9](start_span)Valores padrão (Neutralizados para Vortice)[span_9](end_span)
     app_name = "Vortice App"
     short_name = "Vortice"
     icon_url = "/static/icons/vortice-icon.png"
     theme_color = "#0f172a"
     
-    # [span_10](start_span)Se houver uma empresa carregada, personaliza o PWA em tempo real[span_10](end_span)
     if empresa_contexto:
         app_name = empresa_contexto.nome
         short_name = empresa_contexto.nome.split()[0]
         config = empresa_contexto.config_json or {}
-        # [span_11](start_span)Prioriza a logo configurada[span_11](end_span)
         icon_url = config.get('logo_url', icon_url)
         theme_color = config.get('cor_primaria', theme_color)
 
@@ -78,18 +73,8 @@ def dynamic_manifest():
         "short_name": short_name,
         "name": app_name,
         "icons": [
-            { 
-                "src": icon_url, 
-                "sizes": "192x192", 
-                "type": "image/png",
-                "purpose": "any maskable" 
-            },
-            { 
-                "src": icon_url, 
-                "sizes": "512x512", 
-                "type": "image/png",
-                "purpose": "any maskable"
-            }
+            { "src": icon_url, "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+            { "src": icon_url, "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
         ],
         "start_url": "/",
         "display": "standalone",
@@ -98,7 +83,7 @@ def dynamic_manifest():
     }
     return jsonify(manifest)
 
-# --- ROTAS AJAX DO SININHO DE NOTIFICAÇÕES ---
+# --- ROTAS AJAX DO SININHO DE NOTIFICACOES ---
 @main_bp.route('/api/notificacoes', methods=['GET'])
 @login_required
 def buscar_notificacoes():
@@ -235,7 +220,7 @@ def subscribe_push():
         db.session.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500
 
-# --- MIGRAÇÕES E UTILITÁRIOS ---
+# --- MIGRACOES E UTILITARIOS ---
 @main_bp.route('/vortice-migrar')
 def vortice_migrar():
     from sqlalchemy import text
@@ -258,13 +243,13 @@ def vortice_migrar():
 
         cliente_shahin = Empresa.query.filter_by(slug='shahin').first()
         if not cliente_shahin:
-            cliente_shahin = Empresa(nome='LA SHAHIN SERVIÇOS DE SEGURANÇA', slug='shahin', plano='Enterprise', ativa=True,
+            cliente_shahin = Empresa(nome='LA SHAHIN SERVICOS DE SEGURANCA', slug='shahin', plano='Enterprise', ativa=True,
                                      features_json={"ponto": True, "documentos": True, "estoque": True},
                                      config_json={"cor_primaria": "#2563eb", "cor_hover": "#1d4ed8"})
             db.session.add(cliente_shahin)
             db.session.commit()
             
-        return "Migração SaaS concluída!"
+        return "Migracao SaaS concluida!"
     except Exception as e:
         db.session.rollback()
         return f"Erro: {str(e)}"
