@@ -59,9 +59,8 @@ def listar_empresas():
 @super_admin_bp.route('/empresas/nova', methods=['POST'])
 @super_admin_required
 def cadastrar_empresa():
-    """Cria nova empresa já processando o logotipo inicial."""
+    """Cria nova empresa processando o logotipo e as cores iniciais."""
     service = EmpresaService()
-    
     file_logo = request.files.get('logo_arquivo')
     
     dados_empresa = {
@@ -77,6 +76,19 @@ def cadastrar_empresa():
     
     try:
         empresa, master = service.criar_nova_conta_cliente(dados_empresa, dados_master, file_logo=file_logo)
+        
+        # Injeta as cores escolhidas no momento da criação, se fornecidas
+        cor_primaria = request.form.get('cor_primaria')
+        cor_hover = request.form.get('cor_hover')
+        
+        if cor_primaria or cor_hover:
+            config = dict(empresa.config_json) if empresa.config_json else {}
+            if cor_primaria: config['cor_primaria'] = cor_primaria
+            if cor_hover: config['cor_hover'] = cor_hover
+            empresa.config_json = config
+            flag_modified(empresa, "config_json")
+            db.session.commit()
+            
         flash(f"Sucesso! Empresa '{empresa.nome}' criada com identidade visual.", "success")
     except ValueError as ve:
         flash(str(ve), "error")
@@ -112,15 +124,19 @@ def alterar_status_empresa(id):
 @super_admin_bp.route('/empresas/branding/<int:id>', methods=['POST'])
 @super_admin_required
 def configurar_branding(id):
-    """Processa o branding capturando ficheiros para o Cloud Storage."""
+    """Atualiza cores e, opcionalmente, o logotipo."""
     service = EmpresaService()
     file_logo = request.files.get('logo_arquivo')
     
     config_visual = {
         'cor_primaria': request.form.get('cor_primaria', '#2563eb'),
-        'cor_hover': request.form.get('cor_hover', '#1d4ed8'),
-        'logo_url': request.form.get('logo_url', '')
+        'cor_hover': request.form.get('cor_hover', '#1d4ed8')
     }
+    
+    # Só adiciona o logo_url ao dicionário se o utilizador preencheu o campo
+    logo_url = request.form.get('logo_url')
+    if logo_url and logo_url.strip() != '':
+        config_visual['logo_url'] = logo_url.strip()
     
     try:
         service.atualizar_branding(id, config_visual, file_logo=file_logo)
@@ -130,7 +146,7 @@ def configurar_branding(id):
         
     return redirect(url_for('super_admin.listar_empresas'))
 
-# 🚀 NOVA ROTA: GESTÃO DE MÓDULOS (FEATURE TOGGLING)
+# 🚀 GESTÃO DE MÓDULOS (FEATURE TOGGLING)
 @super_admin_bp.route('/empresas/modulos/<int:id>', methods=['POST'])
 @super_admin_required
 def configurar_modulos(id):
@@ -142,7 +158,6 @@ def configurar_modulos(id):
         flash("Empresa não encontrada.", "error")
         return redirect(url_for('super_admin.listar_empresas'))
 
-    # Se o checkbox for enviado, o request.form terá o valor 'on'. Caso contrário, não existe.
     novos_modulos = {
         "ponto": request.form.get('mod_ponto') == 'on',
         "documentos": request.form.get('mod_documentos') == 'on',

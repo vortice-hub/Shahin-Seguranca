@@ -207,6 +207,17 @@
                 </div>
             </div>
 
+            <div class="col-span-2 grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-[10px] uppercase font-bold text-slate-500 mb-2">Cor Principal</label>
+                    <input type="color" name="cor_primaria" value="#2563eb" class="w-full h-12 rounded-lg cursor-pointer bg-transparent border-0 p-0">
+                </div>
+                <div>
+                    <label class="block text-[10px] uppercase font-bold text-slate-500 mb-2">Cor Hover (Foco)</label>
+                    <input type="color" name="cor_hover" value="#1d4ed8" class="w-full h-12 rounded-lg cursor-pointer bg-transparent border-0 p-0">
+                </div>
+            </div>
+
             <div class="col-span-2 mt-4"><h4 class="text-xs font-black text-slate-400 uppercase border-b pb-2">Acesso Master</h4></div>
             <div class="col-span-2">
                 <label class="block text-xs font-bold text-slate-500 mb-2">Nome Completo do Responsável</label>
@@ -237,7 +248,7 @@
             <div class="bg-slate-50 p-4 rounded-2xl border border-dashed border-slate-300">
                 <label class="block text-xs font-black text-slate-500 uppercase mb-3">Substituir Logotipo</label>
                 <input type="file" name="logo_arquivo" accept="image/*" class="text-xs mb-4 w-full">
-                <input type="url" name="logo_url" id="input-logo-url" placeholder="Ou link manual..." class="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm outline-none">
+                <input type="url" name="logo_url" id="input-logo-url" placeholder="Deixe em branco para manter o atual..." class="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm outline-none">
             </div>
             <div class="grid grid-cols-2 gap-4">
                 <div>
@@ -262,7 +273,7 @@
     function abrirBranding(id, nome, cor, hover, logo) {
         document.getElementById('branding-nome-empresa').innerText = nome;
         document.getElementById('form-branding').action = `/vortice/empresas/branding/${id}`;
-        document.getElementById('input-logo-url').value = logo;
+        document.getElementById('input-logo-url').value = ""; // Limpa para evitar confusões ao invés de forçar o link atual
         document.getElementById('input-cor-primaria').value = cor;
         document.getElementById('input-cor-hover').value = hover;
         toggleModal('modal-branding');
@@ -278,12 +289,10 @@
         document.getElementById('modal-excluir-empresa').classList.add('hidden');
     }
 
-    // NOVA FUNÇÃO: GESTÃO DE MÓDULOS
     function abrirModalModulos(id, nome, ponto_ativo, doc_ativo, est_ativo) {
         document.getElementById('modulos-nome-empresa').innerHTML = `<i class="fas fa-cubes mr-2"></i> ${nome}`;
         document.getElementById('form-modulos').action = `/vortice/empresas/modulos/${id}`;
         
-        // Marca ou desmarca os botões de acordo com o banco de dados
         document.getElementById('toggle-ponto').checked = ponto_ativo;
         document.getElementById('toggle-documentos').checked = doc_ativo;
         document.getElementById('toggle-estoque').checked = est_ativo;
