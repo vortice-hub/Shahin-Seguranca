@@ -70,6 +70,13 @@
                         </td>
                         <td class="py-5 px-8 text-center">
                             <div class="flex items-center justify-center gap-3">
+                                
+                                {% set feat = empresa.features_json or {} %}
+                                <button onclick="abrirModalModulos('{{ empresa.id }}', '{{ empresa.nome }}', {{ 'true' if feat.get('ponto', True) else 'false' }}, {{ 'true' if feat.get('documentos', True) else 'false' }}, {{ 'true' if feat.get('estoque', True) else 'false' }})" 
+                                        class="p-2.5 bg-slate-100 hover:bg-emerald-600 hover:text-white rounded-xl text-xs font-bold transition" title="Ligar/Desligar Módulos">
+                                    <i class="fas fa-cubes"></i>
+                                </button>
+
                                 <button onclick="abrirBranding('{{ empresa.id }}', '{{ empresa.nome }}', '{{ (empresa.config_json or {}).get('cor_primaria', '#2563eb') }}', '{{ (empresa.config_json or {}).get('cor_hover', '#1d4ed8') }}', '{{ (empresa.config_json or {}).get('logo_url', '') }}')" 
                                         class="p-2.5 bg-slate-100 hover:bg-indigo-600 hover:text-white rounded-xl text-xs font-bold transition" title="Editar Branding">
                                     <i class="fas fa-palette"></i>
@@ -93,6 +100,55 @@
                 </tbody>
             </table>
         </div>
+    </div>
+</div>
+
+<div id="modal-modulos" class="hidden fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 transition-opacity">
+    <div class="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden border border-slate-200">
+        <div class="bg-emerald-600 p-6 text-white flex justify-between items-center">
+            <h3 class="text-xl font-black tracking-tight" id="modulos-nome-empresa"><i class="fas fa-cubes mr-2"></i> Módulos</h3>
+            <button onclick="toggleModal('modal-modulos')" class="text-white/70 hover:text-white"><i class="fas fa-times text-xl"></i></button>
+        </div>
+        <form id="form-modulos" method="POST" class="p-8 space-y-4">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            
+            <p class="text-xs font-bold text-slate-500 mb-6 uppercase tracking-wider text-center">Ative ou desative ferramentas para este cliente</p>
+
+            <label class="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-200 cursor-pointer hover:border-emerald-400 transition">
+                <div class="flex items-center gap-4">
+                    <div class="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center"><i class="fas fa-clock"></i></div>
+                    <div>
+                        <h4 class="font-bold text-slate-700 text-sm">Controle de Ponto</h4>
+                        <p class="text-[10px] text-slate-500">Registro, espelho e férias</p>
+                    </div>
+                </div>
+                <input type="checkbox" name="mod_ponto" id="toggle-ponto" class="w-5 h-5 text-emerald-600 bg-white border-slate-300 rounded focus:ring-emerald-500">
+            </label>
+
+            <label class="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-200 cursor-pointer hover:border-emerald-400 transition">
+                <div class="flex items-center gap-4">
+                    <div class="w-10 h-10 rounded-full bg-yellow-100 text-yellow-600 flex items-center justify-center"><i class="fas fa-file-contract"></i></div>
+                    <div>
+                        <h4 class="font-bold text-slate-700 text-sm">Documentos</h4>
+                        <p class="text-[10px] text-slate-500">Holerites, Recibos e Atestados</p>
+                    </div>
+                </div>
+                <input type="checkbox" name="mod_documentos" id="toggle-documentos" class="w-5 h-5 text-emerald-600 bg-white border-slate-300 rounded focus:ring-emerald-500">
+            </label>
+
+            <label class="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-200 cursor-pointer hover:border-emerald-400 transition">
+                <div class="flex items-center gap-4">
+                    <div class="w-10 h-10 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center"><i class="fas fa-box"></i></div>
+                    <div>
+                        <h4 class="font-bold text-slate-700 text-sm">Estoque de EPIs</h4>
+                        <p class="text-[10px] text-slate-500">Uniformes e controle de saída</p>
+                    </div>
+                </div>
+                <input type="checkbox" name="mod_estoque" id="toggle-estoque" class="w-5 h-5 text-emerald-600 bg-white border-slate-300 rounded focus:ring-emerald-500">
+            </label>
+
+            <button type="submit" class="w-full py-4 mt-6 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-2xl uppercase tracking-widest text-sm transition transform active:scale-95 shadow-lg shadow-emerald-200">Atualizar Módulos</button>
+        </form>
     </div>
 </div>
 
@@ -212,7 +268,6 @@
         toggleModal('modal-branding');
     }
 
-    // NOVAS FUNÇÕES EXCLUSIVAS PARA EXCLUSÃO
     function abrirModalExclusao(id, nome) {
         document.getElementById('nome-empresa-excluir').innerText = nome;
         document.getElementById('form-excluir-empresa').action = `/vortice/empresas/excluir/${id}`;
@@ -221,6 +276,19 @@
 
     function fecharModalExclusao() {
         document.getElementById('modal-excluir-empresa').classList.add('hidden');
+    }
+
+    // NOVA FUNÇÃO: GESTÃO DE MÓDULOS
+    function abrirModalModulos(id, nome, ponto_ativo, doc_ativo, est_ativo) {
+        document.getElementById('modulos-nome-empresa').innerHTML = `<i class="fas fa-cubes mr-2"></i> ${nome}`;
+        document.getElementById('form-modulos').action = `/vortice/empresas/modulos/${id}`;
+        
+        // Marca ou desmarca os botões de acordo com o banco de dados
+        document.getElementById('toggle-ponto').checked = ponto_ativo;
+        document.getElementById('toggle-documentos').checked = doc_ativo;
+        document.getElementById('toggle-estoque').checked = est_ativo;
+        
+        toggleModal('modal-modulos');
     }
 </script>
 {% endblock %}

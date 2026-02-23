@@ -1,8 +1,11 @@
 import os
+import json
 from flask import Blueprint, render_template, request, redirect, url_for, flash, session
 from app.services.empresa_service import EmpresaService
 from app.repositories.empresa_repository import EmpresaRepository
 from app.utils import super_admin_required
+from sqlalchemy.orm.attributes import flag_modified
+from app.extensions import db
 
 # 🚀 PREFIXO EXCLUSIVO: Isolando a plataforma Vortice do resto do sistema
 super_admin_bp = Blueprint('super_admin', __name__, template_folder='templates', url_prefix='/vortice')
@@ -40,13 +43,17 @@ def logout():
     return redirect(url_for('super_admin.login'))
 
 # ==============================================================================
-# 🌍 GESTÃO GLOBAL DE CLIENTES (SAAS)
+# 🌍 GESTÃO GLOBAL DE CLIENTES E MÓDULOS (SAAS)
 # ==============================================================================
 @super_admin_bp.route('/empresas', methods=['GET'])
 @super_admin_required
 def listar_empresas():
     repo = EmpresaRepository()
     empresas = repo.get_all()
+    # Garante que features_json é um dicionário para a view
+    for emp in empresas:
+        if not emp.features_json:
+            emp.features_json = {"ponto": True, "documentos": True, "estoque": True}
     return render_template('admin/super_empresas.html', empresas=empresas)
 
 @super_admin_bp.route('/empresas/nova', methods=['POST'])
@@ -55,7 +62,6 @@ def cadastrar_empresa():
     """Cria nova empresa já processando o logotipo inicial."""
     service = EmpresaService()
     
-    # Captura ficheiro se houver
     file_logo = request.files.get('logo_arquivo')
     
     dados_empresa = {
@@ -70,7 +76,6 @@ def cadastrar_empresa():
     }
     
     try:
-        # Envia o ficheiro para o serviço salvar no GCS
         empresa, master = service.criar_nova_conta_cliente(dados_empresa, dados_master, file_logo=file_logo)
         flash(f"Sucesso! Empresa '{empresa.nome}' criada com identidade visual.", "success")
     except ValueError as ve:
@@ -123,5 +128,35 @@ def configurar_branding(id):
     except Exception as e:
         flash(f"Erro ao atualizar branding: {e}", "error")
         
+    return redirect(url_for('super_admin.listar_empresas'))
+
+# 🚀 NOVA ROTA: GESTÃO DE MÓDULOS (FEATURE TOGGLING)
+@super_admin_bp.route('/empresas/modulos/<int:id>', methods=['POST'])
+@super_admin_required
+def configurar_modulos(id):
+    """Ativa ou desativa módulos específicos para uma empresa."""
+    repo = EmpresaRepository()
+    empresa = repo.get_by_id(id)
+    
+    if not empresa:
+        flash("Empresa não encontrada.", "error")
+        return redirect(url_for('super_admin.listar_empresas'))
+
+    # Se o checkbox for enviado, o request.form terá o valor 'on'. Caso contrário, não existe.
+    novos_modulos = {
+        "ponto": request.form.get('mod_ponto') == 'on',
+        "documentos": request.form.get('mod_documentos') == 'on',
+        "estoque": request.form.get('mod_estoque') == 'on'
+    }
+
+    try:
+        empresa.features_json = novos_modulos
+        flag_modified(empresa, "features_json")
+        db.session.commit()
+        flash(f"Módulos da empresa '{empresa.nome}' atualizados com sucesso!", "success")
+    except Exception as e:
+        db.session.rollback()
+        flash(f"Erro ao atualizar módulos: {e}", "error")
+
     return redirect(url_for('super_admin.listar_empresas'))
 
