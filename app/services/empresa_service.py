@@ -1,5 +1,7 @@
 import os
 import re
+import io
+from PIL import Image
 from google.cloud import storage
 from sqlalchemy.orm.attributes import flag_modified
 from app.models import Empresa, Role, Permission, User
@@ -12,24 +14,41 @@ class EmpresaService:
         self.bucket_name = os.environ.get('VORTICE_BUCKET_NAME', 'vortice-assets')
 
     def _upload_logo_to_gcs(self, empresa_slug, file_obj):
-        """Faz o upload do ficheiro para o Google Cloud Storage e retorna o link público."""
+        """Redimensiona e faz o upload do ficheiro para o Google Cloud Storage."""
         try:
             client = storage.Client()
             bucket = client.bucket(self.bucket_name)
             
             ext = file_obj.filename.rsplit('.', 1)[1].lower()
+            if ext not in ['jpg', 'jpeg', 'png', 'webp']:
+                ext = 'png' # Padroniza para png se for um formato desconhecido
+
+            # 1. Abre a imagem na memória com o Pillow
+            img = Image.open(file_obj)
+            
+            # 2. Converte para RGB se tiver fundo transparente e for salvar como JPEG
+            if img.mode in ("RGBA", "P") and ext in ["jpg", "jpeg"]:
+                img = img.convert("RGB")
+                
+            # 3. Força o tamanho máximo (Ex: 256x256) mantendo a proporção
+            img.thumbnail((256, 256), Image.Resampling.LANCZOS)
+            
+            # 4. Guarda a imagem otimizada num "ficheiro virtual" (Buffer) na memória
+            img_byte_arr = io.BytesIO()
+            img_format = 'PNG' if ext == 'png' else ('WEBP' if ext == 'webp' else 'JPEG')
+            img.save(img_byte_arr, format=img_format, optimize=True, quality=85)
+            img_byte_arr.seek(0) # Retorna o cursor para o início do buffer
+
+            # 5. Prepara o envio para o Google Cloud
             blob_name = f"logos/logo_{empresa_slug}.{ext}"
             blob = bucket.blob(blob_name)
             
-            blob.upload_from_file(file_obj, content_type=file_obj.content_type)
-            
-            # REMOVIDO: blob.make_public()
-            # Como o Bucket tem "Uniform Access" ativado, a permissão pública 
-            # deve ser dada ao Bucket inteiro via IAM no painel do GCP.
+            # 6. Faz o upload da imagem processada (Buffer) e não do ficheiro cru
+            blob.upload_from_file(img_byte_arr, content_type=f'image/{ext}')
             
             return blob.public_url
         except Exception as e:
-            print(f"Erro no upload GCS: {e}")
+            print(f"Erro no upload GCS e Resizing: {e}")
             return None
 
     def criar_nova_conta_cliente(self, dados_empresa, dados_master, file_logo=None):
@@ -40,7 +59,6 @@ class EmpresaService:
         if self.empresa_repo.get_by_slug(slug):
             raise ValueError("Uma empresa com este nome (ou slug similar) já existe.")
 
-        # Processa a logo no momento da criação se fornecida
         logo_url = ""
         if file_logo and file_logo.filename != '':
             logo_url = self._upload_logo_to_gcs(slug, file_logo)
@@ -116,7 +134,6 @@ class EmpresaService:
         if not empresa:
             raise ValueError("Empresa não encontrada para exclusão.")
         
-        # O banco de dados cuidará de apagar usuários e registros vinculados se as FKs estiverem com CASCADE
         db.session.delete(empresa)
         db.session.commit()
         return True
