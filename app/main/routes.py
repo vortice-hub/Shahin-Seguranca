@@ -4,7 +4,7 @@ from app.extensions import db
 from app.models import User, PontoAjuste, Recibo, Holerite, PreCadastro, Notificacao, PontoResumo, PontoRegistro, HistoricoSaida, PushSubscription, Empresa
 from app.utils import get_brasil_time, has_permission
 from datetime import timedelta
-from sqlalchemy import func
+from sqlalchemy import func, text
 import traceback
 import json
 import os
@@ -62,7 +62,6 @@ def service_worker():
 @main_bp.route('/cdn/logos/<slug>')
 def serve_logo(slug):
     """Busca a logo privada no GCS e serve como se fosse estática."""
-    # Atualizado para a nova variável padronizada do projeto
     bucket_name = os.environ.get('VORTICE_BUCKET', 'vortice-assets')
     icone_padrao = '/static/icons/vortice-icon.png'
     
@@ -70,7 +69,7 @@ def serve_logo(slug):
         client = storage.Client()
         bucket = client.bucket(bucket_name)
         
-        # Atualizado para buscar na nova estrutura isolada por empresa
+        # Procura a logo na nova estrutura Multi-Tenant isolada
         blobs = list(bucket.list_blobs(prefix=f"{slug}/logo/logo_{slug}."))
         
         if not blobs:
@@ -264,8 +263,7 @@ def subscribe_push():
 # --- MIGRACOES E UTILITARIOS ---
 @main_bp.route('/vortice-migrar')
 def vortice_migrar():
-    from sqlalchemy import text
-    from app.models import Empresa
+    """Rota de infraestrutura para criar/ajustar tabelas e colunas SaaS."""
     try:
         db.create_all()
         tabelas = ['users', 'pre_cadastros', 'itens_estoque', 'historico_entrada', 'historico_saida',
@@ -275,29 +273,37 @@ def vortice_migrar():
         
         for tabela in tabelas:
             try:
+                # Adiciona coluna de Tenant se não existir
                 db.session.execute(text(f"ALTER TABLE {tabela} ADD COLUMN IF NOT EXISTS empresa_id INTEGER REFERENCES empresas(id) ON DELETE CASCADE;"))
+                # Adiciona colunas de auditoria
                 db.session.execute(text(f"ALTER TABLE {tabela} ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITHOUT TIME ZONE;"))
                 db.session.execute(text(f"ALTER TABLE {tabela} ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITHOUT TIME ZONE;"))
                 db.session.execute(text(f"ALTER TABLE {tabela} ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP WITHOUT TIME ZONE;"))
             except: pass
         db.session.commit()
 
+        # Garante a existência da empresa padrão após limpeza do banco
         cliente_shahin = Empresa.query.filter_by(slug='shahin').first()
         if not cliente_shahin:
-            cliente_shahin = Empresa(nome='LA SHAHIN SERVICOS DE SEGURANCA', slug='shahin', plano='Enterprise', ativa=True,
-                                     features_json={"ponto": True, "documentos": True, "estoque": True},
-                                     config_json={"cor_primaria": "#2563eb", "cor_hover": "#1d4ed8"})
+            cliente_shahin = Empresa(
+                nome='LA SHAHIN SERVICOS DE SEGURANCA', 
+                slug='shahin', 
+                plano='Enterprise', 
+                ativa=True,
+                features_json={"ponto": True, "documentos": True, "estoque": True},
+                config_json={"cor_primaria": "#2563eb", "cor_hover": "#1d4ed8"}
+            )
             db.session.add(cliente_shahin)
             db.session.commit()
             
-        return "Migracao SaaS concluida!"
+        return "Migracao SaaS concluida com sucesso!"
     except Exception as e:
         db.session.rollback()
-        return f"Erro: {str(e)}"
+        return f"Erro na migracao: {str(e)}"
 
 @main_bp.route('/migrar-rbac')
 def migrar_rbac():
-    from sqlalchemy import text
+    """Inicializa as ligações de cargos (RBAC) no banco de dados."""
     try:
         db.create_all()
         db.session.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS cargo_id INTEGER REFERENCES roles(id) ON DELETE SET NULL;"))
@@ -305,10 +311,11 @@ def migrar_rbac():
         return "Motor RBAC Inicializado!"
     except Exception as e:
         db.session.rollback()
-        return f"Erro: {str(e)}"
+        return f"Erro RBAC: {str(e)}"
 
 @main_bp.route('/semear-permissoes')
 def semear_permissoes():
+    """Preenche as permissões base para o sistema de cargos."""
     from app.models import Permission
     permissoes_padrao = [
         {'codigo': 'PONTO', 'nome': 'Gestão de Ponto (Aprovar/Editar)', 'modulo': 'RH'},
@@ -321,8 +328,8 @@ def semear_permissoes():
             if not Permission.query.filter_by(codigo=p['codigo']).first():
                 db.session.add(Permission(codigo=p['codigo'], nome=p['nome'], modulo=p['modulo']))
         db.session.commit()
-        return "Permissões Semeada!"
+        return "Permissões Semeadas com Sucesso!"
     except Exception as e:
         db.session.rollback()
-        return f"Erro: {str(e)}"
+        return f"Erro Permissões: {str(e)}"
 

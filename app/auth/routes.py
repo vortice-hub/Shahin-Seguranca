@@ -2,7 +2,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from flask_login import login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash
 from app.extensions import db
-from app.models import User, PreCadastro
+from app.models import User, PreCadastro, Empresa
 from app.repositories.empresa_repository import EmpresaRepository
 import re
 import random
@@ -27,8 +27,7 @@ def login(slug=None):
             flash('Portal de cliente não encontrado ou desativado.', 'error')
             return redirect(url_for('auth.login'))
         
-        # 🎨 MÁGICA DA COR: Ao injetar a empresa no contexto global (g), 
-        # o base.html automaticamente pintará os botões do login com a cor dela!
+        # Injeta a empresa no contexto global para cores dinâmicas no template
         g.empresa = empresa_login
     
     if request.method == 'POST':
@@ -41,12 +40,12 @@ def login(slug=None):
             user = User.query.filter_by(username=request.form.get('username')).first()
 
         if user and user.check_password(password):
-            # 🛡️ FASE 2: Validação de Segurança Multi-Tenant no Login
+            # Validação de Segurança Multi-Tenant no Login
             if not getattr(user, 'empresa_id', None):
-                flash('Acesso Bloqueado: O seu utilizador não possui vínculo com nenhum cliente da plataforma.', 'error')
+                flash('Acesso Bloqueado: O seu utilizador não possui vínculo com nenhum cliente.', 'error')
                 return redirect(url_for('auth.login', slug=slug))
 
-            # 🛡️ TRAVA ANTI-ESPIÃO: O funcionário deve pertencer à empresa da URL
+            # Trava para garantir que o funcionário acesse apenas o seu portal
             if empresa_login and user.empresa_id != empresa_login.id:
                 flash(f'Acesso Negado: O seu utilizador não pertence ao cliente {empresa_login.nome}.', 'error')
                 return redirect(url_for('auth.login', slug=slug))
@@ -63,7 +62,22 @@ def login(slug=None):
 @auth_bp.route('/logout')
 @login_required
 def logout():
+    """Encerra a sessão e redireciona para o login da empresa específica."""
+    # Capturamos o slug antes de destruir a sessão do usuário
+    empresa_slug = None
+    if hasattr(g, 'empresa') and g.empresa:
+        empresa_slug = g.empresa.slug
+    elif current_user.is_authenticated and current_user.empresa_id:
+        empresa = Empresa.query.get(current_user.empresa_id)
+        if empresa:
+            empresa_slug = empresa.slug
+
     logout_user()
+    flash("Sessão encerrada com sucesso.", "success")
+    
+    # Redirecionamento inteligente para manter o contexto white-label
+    if empresa_slug:
+        return redirect(url_for('auth.login', slug=empresa_slug))
     return redirect(url_for('auth.login'))
 
 @auth_bp.route('/primeiro-acesso', methods=['GET', 'POST'])
@@ -99,7 +113,7 @@ def auto_cadastro():
         
         if not pre:
             if User.query.filter_by(cpf=cpf).first():
-                flash('Este CPF já possui um cadastro ativo. Tente fazer login.', 'warning')
+                flash('Este CPF já possui um cadastro ativo.', 'warning')
                 return redirect(url_for('auth.login'))
             flash('CPF não autorizado para cadastro. Entre em contato com o RH.', 'error')
             return redirect(url_for('auth.auto_cadastro'))
@@ -112,16 +126,14 @@ def auto_cadastro():
                 flash('As senhas não coincidem. Tente novamente.', 'error')
                 return render_template('auth/auto_cadastro.html', step=2, cpf=cpf, nome=pre.nome_previsto)
                 
-            username_login = cpf 
-            
             gestor_id_final = None
             if pre.cpf_gestor:
-                gestor_encontrado = User.query.filter_by(cpf=pre.cpf_gestor).first()
+                gestor_encontrado = User.query.filter_by(cpf=pre.cpf_gestor, empresa_id=pre.empresa_id).first()
                 if gestor_encontrado:
                     gestor_id_final = gestor_encontrado.id
             
             novo_user = User(
-                username=username_login, 
+                username=cpf, 
                 password_hash=generate_password_hash(password), 
                 real_name=pre.nome_previsto, 
                 role=pre.cargo, 
@@ -138,7 +150,6 @@ def auto_cadastro():
                 departamento=pre.departamento,
                 gestor_id=gestor_id_final,
                 is_first_access=False,
-                permissions="",
                 empresa_id=pre.empresa_id
             )
             
@@ -150,7 +161,6 @@ def auto_cadastro():
         else:
             return render_template('auth/auto_cadastro.html', step=2, cpf=cpf, nome=pre.nome_previsto)
 
-# --- RECUPERAÇÃO SEGURA DE SENHA ---
 @auth_bp.route('/esqueci-senha', methods=['GET', 'POST'])
 def esqueci_senha():
     if current_user.is_authenticated: 
@@ -168,10 +178,10 @@ def esqueci_senha():
             user.is_first_access = True
             db.session.commit()
             
-            flash(f'ACESSO RECUPERADO! Sua nova senha temporária é: {senha_temporaria} (Copie-a agora e altere no primeiro acesso).', 'success')
+            flash(f'ACESSO RECUPERADO! Sua senha temporária é: {senha_temporaria}', 'success')
             return redirect(url_for('auth.login'))
         else:
-            flash('Dados divergentes. Verifique o seu CPF e Data de Admissão, ou contate o RH.', 'error')
+            flash('Dados divergentes. Verifique o seu CPF e Data de Admissão.', 'error')
             
     return render_template('auth/esqueci_senha.html')
 
