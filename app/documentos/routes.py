@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash, send_file, jsonify
+from flask import Blueprint, render_template, request, redirect, url_for, flash, send_file, jsonify, g
 from flask_login import login_required, current_user
 import io
 
@@ -70,7 +70,7 @@ def admin_holerites():
         if not file: return redirect(request.url)
         try:
             doc_service = DocumentoService()
-            sucesso, revisao = doc_service.processar_holerites_lote(file.read())
+            sucesso, revisao = doc_service.processar_holerites_lote(file.read(), g.empresa.slug)
             flash(f"Processado: {sucesso} enviados, {revisao} para revisão manual.", "success")
             return redirect(url_for('documentos.dashboard_documentos'))
         except Exception as e:
@@ -151,7 +151,7 @@ def enviar_atestado():
         try:
             file_bytes = file.read()
             mes_ref = get_brasil_time().strftime('%Y-%m')
-            caminho_blob = salvar_no_storage(file_bytes, f"atestados/{mes_ref}")
+            caminho_blob = salvar_no_storage(file_bytes, f"atestados/{mes_ref}", g.empresa.slug)
             if not caminho_blob: return redirect(request.url)
 
             dados_ia = analisar_atestado_vision(file_bytes, current_user.real_name)
@@ -259,7 +259,7 @@ def novo_recibo():
         
         if arquivo and arquivo.filename:
             file_bytes = arquivo.read()
-            caminho = salvar_no_storage(file_bytes, f"recibos/{data_pagamento[:7]}")
+            caminho = salvar_no_storage(file_bytes, f"recibos/{data_pagamento[:7]}", g.empresa.slug)
             if caminho:
                 novo_r = Recibo(user_id=user_id, valor=float(valor), data_pagamento=data_pagamento, url_arquivo=caminho)
                 db.session.add(novo_r)

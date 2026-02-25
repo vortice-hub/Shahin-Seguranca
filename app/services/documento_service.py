@@ -23,7 +23,8 @@ class DocumentoService:
         self.user_repo = UserRepository()
         self.resumo_repo = PontoResumoRepository()
 
-    def processar_holerites_lote(self, file_bytes):
+    # Adicionamos o 'empresa_slug' como parâmetro recebido da rota
+    def processar_holerites_lote(self, file_bytes, empresa_slug):
         """Lê o PDF mestre e fatia em holerites individuais."""
         reader = PdfReader(io.BytesIO(file_bytes))
         sucesso, revisao = 0, 0
@@ -40,7 +41,8 @@ class DocumentoService:
             nome_identificado = dados.get('nome', '')
             mes_ref = dados.get('mes_referencia', '2026-02')
 
-            caminho_blob = salvar_no_storage(pdf_bytes_page, f"holerites/{mes_ref}")
+            # Repassamos o empresa_slug para o motor de storage
+            caminho_blob = salvar_no_storage(pdf_bytes_page, f"holerites/{mes_ref}", empresa_slug)
             if not caminho_blob: continue
 
             user_id = usuarios_map.get(nome_identificado)

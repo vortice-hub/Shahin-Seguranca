@@ -1,17 +1,20 @@
+import os
 from google.cloud import storage
 import uuid
 import io
 
-# NOVO BUCKET GRATUITO NOS EUA
-BUCKET_NAME = "shahin-docs-us"
+def get_bucket_name():
+    """Busca o nome do bucket nas variáveis de ambiente do Cloud Run."""
+    # O fallback 'shahin-docs-us' está aqui apenas por precaução caso a variável falhe
+    return os.environ.get('VORTICE_BUCKET', 'shahin-docs-us')
 
-def salvar_no_storage(pdf_bytes, pasta_ref):
-    """Salva o PDF no bucket e retorna o caminho relativo."""
+def salvar_no_storage(pdf_bytes, pasta_ref, empresa_slug):
+    """Salva o PDF no bucket isolado por empresa e retorna o caminho relativo."""
     try:
         client = storage.Client()
-        bucket = client.bucket(BUCKET_NAME)
-        # O arquivo será salvo com a estrutura: pasta_ref/uuid.pdf
-        nome_blob = f"{pasta_ref}/{uuid.uuid4()}.pdf"
+        bucket = client.bucket(get_bucket_name())
+        # O arquivo será salvo com a estrutura: slug_da_empresa/documentos/pasta_ref/uuid.pdf
+        nome_blob = f"{empresa_slug}/documentos/{pasta_ref}/{uuid.uuid4()}.pdf"
         blob = bucket.blob(nome_blob)
         blob.upload_from_string(pdf_bytes, content_type='application/pdf')
         return nome_blob
@@ -26,7 +29,7 @@ def baixar_bytes_storage(caminho_blob):
     """
     try:
         client = storage.Client()
-        bucket = client.bucket(BUCKET_NAME)
+        bucket = client.bucket(get_bucket_name())
         blob = bucket.blob(caminho_blob)
         
         if not blob.exists():

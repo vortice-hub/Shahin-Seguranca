@@ -62,14 +62,16 @@ def service_worker():
 @main_bp.route('/cdn/logos/<slug>')
 def serve_logo(slug):
     """Busca a logo privada no GCS e serve como se fosse estática."""
-    bucket_name = os.environ.get('VORTICE_BUCKET_NAME', 'vortice-assets')
+    # Atualizado para a nova variável padronizada do projeto
+    bucket_name = os.environ.get('VORTICE_BUCKET', 'vortice-assets')
     icone_padrao = '/static/icons/vortice-icon.png'
     
     try:
         client = storage.Client()
         bucket = client.bucket(bucket_name)
         
-        blobs = list(bucket.list_blobs(prefix=f"logos/logo_{slug}."))
+        # Atualizado para buscar na nova estrutura isolada por empresa
+        blobs = list(bucket.list_blobs(prefix=f"{slug}/logo/logo_{slug}."))
         
         if not blobs:
             return redirect(icone_padrao)

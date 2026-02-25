@@ -11,7 +11,8 @@ from app.extensions import db
 class EmpresaService:
     def __init__(self):
         self.empresa_repo = EmpresaRepository()
-        self.bucket_name = os.environ.get('VORTICE_BUCKET_NAME', 'vortice-assets')
+        # Atualizado para usar a nova variável de ambiente padronizada
+        self.bucket_name = os.environ.get('VORTICE_BUCKET', 'vortice-assets')
 
     def _upload_logo_to_gcs(self, empresa_slug, file_obj):
         """Redimensiona e faz o upload para o GCS. Retorna a rota do Proxy Interno (Plano B)."""
@@ -36,7 +37,8 @@ class EmpresaService:
             img.save(img_byte_arr, format=img_format, optimize=True, quality=85)
             img_byte_arr.seek(0)
 
-            blob_name = f"logos/logo_{empresa_slug}.{ext}"
+            # Atualizado para a nova estrutura de pastas por inquilino (tenant)
+            blob_name = f"{empresa_slug}/logo/logo_{empresa_slug}.{ext}"
             blob = bucket.blob(blob_name)
             
             blob.upload_from_file(img_byte_arr, content_type=f'image/{ext}')
