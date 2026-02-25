@@ -1,6 +1,6 @@
 ==================================================
 SNAPSHOT DO PROJETO: Shahin Gestão
-Gerado em: 2026-02-23 09:32:28
+Gerado em: 2026-02-25 18:31:17
 ==================================================
 
 --- ESTRUTURA DE ARQUIVOS ---
@@ -665,15 +665,16 @@ import hashlib
 import os
 import json
 from functools import wraps
-# Importamos 'session' para a nova arquitetura Deus Ex Machina
-from flask import abort, redirect, url_for, flash, request, session
+from flask import abort, redirect, url_for, flash, request, session, current_app
 from flask_login import current_user
+import traceback
 
 # Tenta importar o motor Push
 try:
-    from pywebpush import webpush, WebPushException
+    import pywebpush
+    from pywebpush import WebPushException
 except ImportError:
-    webpush = None
+    pywebpush = None
 
 def get_brasil_time():
     fuso_br = pytz.timezone('America/Sao_Paulo')
@@ -780,31 +781,93 @@ def super_admin_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
+# ==============================================================================
+# 🚀 MOTOR DE NOTIFICAÇÕES (ISOLADO E BLINDADO PARA WHITE-LABEL)
+# ==============================================================================
+
 def enviar_notificacao(user_id, mensagem, link=None):
     from app.extensions import db
-    from app.models import Notificacao, PushSubscription
+    from app.models import Notificacao, PushSubscription, User, Empresa
+    
+    # 1. Guarda a notificação física na base de dados (Sininho)
     try:
-        nova_notif = Notificacao(user_id=user_id, mensagem=mensagem, link=link, lida=False, data_criacao=get_brasil_time())
+        nova_notif = Notificacao(
+            user_id=user_id, 
+            mensagem=mensagem, 
+            link=link, 
+            lida=False, 
+            data_criacao=get_brasil_time()
+        )
         db.session.add(nova_notif)
         db.session.commit()
     except Exception as e:
+        print(f"Erro ao salvar notificação no banco: {e}")
         db.session.rollback()
         return False
-    if not webpush: return True
+        
+    # 2. Prepara o envio do Push (Telemóvel)
+    if not pywebpush: 
+        print("Biblioteca pywebpush não está instalada. Apenas notificação web salva.")
+        return True
+        
     VAPID_PRIVATE_KEY = os.environ.get('VAPID_PRIVATE_KEY')
     VAPID_CLAIM_EMAIL = 'mailto:contato@vortice.com.br' 
-    if not VAPID_PRIVATE_KEY: return True
+    
+    if not VAPID_PRIVATE_KEY: 
+        print("VAPID_PRIVATE_KEY não configurada no ambiente.")
+        return True
+
+    # 3. Busca os telemóveis registados por este utilizador específico
     subs = PushSubscription.query.filter_by(user_id=user_id).all()
-    if not subs: return True 
-    payload = json.dumps({"title": "Vortice SaaS", "body": mensagem, "url": link or "/"})
+    if not subs: 
+        return True 
+
+    # 4. Magia White-Label: Descobre qual é a empresa do utilizador para usar o nome correto
+    nome_app = "Sistema de Gestão"
+    try:
+        user = User.query.get(user_id)
+        if user and user.empresa_id:
+            empresa = Empresa.query.get(user.empresa_id)
+            if empresa:
+                # Usa apenas o primeiro nome da empresa para ficar bonito na notificação (ex: "Shahin RH")
+                nome_app = f"{empresa.nome.split()[0]} RH"
+    except:
+        pass
+
+    # Constrói o "envelope" que o Service Worker vai receber
+    payload = json.dumps({
+        "title": nome_app, 
+        "body": mensagem, 
+        "url": link or "/"
+    })
+
+    # 5. Dispara para todos os telemóveis/PCs deste funcionário
     for sub in subs:
         try:
-            sub_info = {"endpoint": sub.endpoint, "keys": {"p256dh": sub.p256dh, "auth": sub.auth}}
-            webpush(subscription_info=sub_info, data=payload, vapid_private_key=VAPID_PRIVATE_KEY, vapid_claims={"sub": VAPID_CLAIM_EMAIL})
+            sub_info = {
+                "endpoint": sub.endpoint, 
+                "keys": {
+                    "p256dh": sub.p256dh, 
+                    "auth": sub.auth
+                }
+            }
+            pywebpush.webpush(
+                subscription_info=sub_info, 
+                data=payload, 
+                vapid_private_key=VAPID_PRIVATE_KEY, 
+                vapid_claims={"sub": VAPID_CLAIM_EMAIL}
+            )
         except WebPushException as e:
+            # 410 Gone = O utilizador desinstalou o App ou revogou a permissão. Limpamos a base de dados.
             if e.response is not None and e.response.status_code == 410:
+                print(f"Dispositivo inativo detetado. Removendo inscrição do utilizador {user_id}.")
                 db.session.delete(sub)
                 db.session.commit()
+            else:
+                print(f"Falha ao enviar Push: {e}")
+        except Exception as e:
+             print(f"Erro inesperado no pywebpush: {e}")
+             
     return True
 
 
@@ -1197,10 +1260,13 @@ def excluir_cargo(id):
 FILE: app/admin/super_routes.py
 -------------------------------
 import os
+import json
 from flask import Blueprint, render_template, request, redirect, url_for, flash, session
 from app.services.empresa_service import EmpresaService
 from app.repositories.empresa_repository import EmpresaRepository
 from app.utils import super_admin_required
+from sqlalchemy.orm.attributes import flag_modified
+from app.extensions import db
 
 # 🚀 PREFIXO EXCLUSIVO: Isolando a plataforma Vortice do resto do sistema
 super_admin_bp = Blueprint('super_admin', __name__, template_folder='templates', url_prefix='/vortice')
@@ -1238,22 +1304,24 @@ def logout():
     return redirect(url_for('super_admin.login'))
 
 # ==============================================================================
-# 🌍 GESTÃO GLOBAL DE CLIENTES (SAAS)
+# 🌍 GESTÃO GLOBAL DE CLIENTES E MÓDULOS (SAAS)
 # ==============================================================================
 @super_admin_bp.route('/empresas', methods=['GET'])
 @super_admin_required
 def listar_empresas():
     repo = EmpresaRepository()
     empresas = repo.get_all()
+    # Garante que features_json é um dicionário para a view
+    for emp in empresas:
+        if not emp.features_json:
+            emp.features_json = {"ponto": True, "documentos": True, "estoque": True}
     return render_template('admin/super_empresas.html', empresas=empresas)
 
 @super_admin_bp.route('/empresas/nova', methods=['POST'])
 @super_admin_required
 def cadastrar_empresa():
-    """Cria nova empresa já processando o logotipo inicial."""
+    """Cria nova empresa processando o logotipo e as cores iniciais."""
     service = EmpresaService()
-    
-    # Captura ficheiro se houver
     file_logo = request.files.get('logo_arquivo')
     
     dados_empresa = {
@@ -1268,8 +1336,20 @@ def cadastrar_empresa():
     }
     
     try:
-        # Envia o ficheiro para o serviço salvar no GCS
         empresa, master = service.criar_nova_conta_cliente(dados_empresa, dados_master, file_logo=file_logo)
+        
+        # Injeta as cores escolhidas no momento da criação, se fornecidas
+        cor_primaria = request.form.get('cor_primaria')
+        cor_hover = request.form.get('cor_hover')
+        
+        if cor_primaria or cor_hover:
+            config = dict(empresa.config_json) if empresa.config_json else {}
+            if cor_primaria: config['cor_primaria'] = cor_primaria
+            if cor_hover: config['cor_hover'] = cor_hover
+            empresa.config_json = config
+            flag_modified(empresa, "config_json")
+            db.session.commit()
+            
         flash(f"Sucesso! Empresa '{empresa.nome}' criada com identidade visual.", "success")
     except ValueError as ve:
         flash(str(ve), "error")
@@ -1305,15 +1385,19 @@ def alterar_status_empresa(id):
 @super_admin_bp.route('/empresas/branding/<int:id>', methods=['POST'])
 @super_admin_required
 def configurar_branding(id):
-    """Processa o branding capturando ficheiros para o Cloud Storage."""
+    """Atualiza cores e, opcionalmente, o logotipo."""
     service = EmpresaService()
     file_logo = request.files.get('logo_arquivo')
     
     config_visual = {
         'cor_primaria': request.form.get('cor_primaria', '#2563eb'),
-        'cor_hover': request.form.get('cor_hover', '#1d4ed8'),
-        'logo_url': request.form.get('logo_url', '')
+        'cor_hover': request.form.get('cor_hover', '#1d4ed8')
     }
+    
+    # Só adiciona o logo_url ao dicionário se o utilizador preencheu o campo
+    logo_url = request.form.get('logo_url')
+    if logo_url and logo_url.strip() != '':
+        config_visual['logo_url'] = logo_url.strip()
     
     try:
         service.atualizar_branding(id, config_visual, file_logo=file_logo)
@@ -1321,6 +1405,35 @@ def configurar_branding(id):
     except Exception as e:
         flash(f"Erro ao atualizar branding: {e}", "error")
         
+    return redirect(url_for('super_admin.listar_empresas'))
+
+# 🚀 GESTÃO DE MÓDULOS (FEATURE TOGGLING)
+@super_admin_bp.route('/empresas/modulos/<int:id>', methods=['POST'])
+@super_admin_required
+def configurar_modulos(id):
+    """Ativa ou desativa módulos específicos para uma empresa."""
+    repo = EmpresaRepository()
+    empresa = repo.get_by_id(id)
+    
+    if not empresa:
+        flash("Empresa não encontrada.", "error")
+        return redirect(url_for('super_admin.listar_empresas'))
+
+    novos_modulos = {
+        "ponto": request.form.get('mod_ponto') == 'on',
+        "documentos": request.form.get('mod_documentos') == 'on',
+        "estoque": request.form.get('mod_estoque') == 'on'
+    }
+
+    try:
+        empresa.features_json = novos_modulos
+        flag_modified(empresa, "features_json")
+        db.session.commit()
+        flash(f"Módulos da empresa '{empresa.nome}' atualizados com sucesso!", "success")
+    except Exception as e:
+        db.session.rollback()
+        flash(f"Erro ao atualizar módulos: {e}", "error")
+
     return redirect(url_for('super_admin.listar_empresas'))
 
 
@@ -2405,6 +2518,13 @@ FILE: app/admin/templates/admin/super_empresas.html
                         </td>
                         <td class="py-5 px-8 text-center">
                             <div class="flex items-center justify-center gap-3">
+                                
+                                {% set feat = empresa.features_json or {} %}
+                                <button onclick="abrirModalModulos('{{ empresa.id }}', '{{ empresa.nome }}', {{ 'true' if feat.get('ponto', True) else 'false' }}, {{ 'true' if feat.get('documentos', True) else 'false' }}, {{ 'true' if feat.get('estoque', True) else 'false' }})" 
+                                        class="p-2.5 bg-slate-100 hover:bg-emerald-600 hover:text-white rounded-xl text-xs font-bold transition" title="Ligar/Desligar Módulos">
+                                    <i class="fas fa-cubes"></i>
+                                </button>
+
                                 <button onclick="abrirBranding('{{ empresa.id }}', '{{ empresa.nome }}', '{{ (empresa.config_json or {}).get('cor_primaria', '#2563eb') }}', '{{ (empresa.config_json or {}).get('cor_hover', '#1d4ed8') }}', '{{ (empresa.config_json or {}).get('logo_url', '') }}')" 
                                         class="p-2.5 bg-slate-100 hover:bg-indigo-600 hover:text-white rounded-xl text-xs font-bold transition" title="Editar Branding">
                                     <i class="fas fa-palette"></i>
@@ -2428,6 +2548,55 @@ FILE: app/admin/templates/admin/super_empresas.html
                 </tbody>
             </table>
         </div>
+    </div>
+</div>
+
+<div id="modal-modulos" class="hidden fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 transition-opacity">
+    <div class="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden border border-slate-200">
+        <div class="bg-emerald-600 p-6 text-white flex justify-between items-center">
+            <h3 class="text-xl font-black tracking-tight" id="modulos-nome-empresa"><i class="fas fa-cubes mr-2"></i> Módulos</h3>
+            <button onclick="toggleModal('modal-modulos')" class="text-white/70 hover:text-white"><i class="fas fa-times text-xl"></i></button>
+        </div>
+        <form id="form-modulos" method="POST" class="p-8 space-y-4">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            
+            <p class="text-xs font-bold text-slate-500 mb-6 uppercase tracking-wider text-center">Ative ou desative ferramentas para este cliente</p>
+
+            <label class="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-200 cursor-pointer hover:border-emerald-400 transition">
+                <div class="flex items-center gap-4">
+                    <div class="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center"><i class="fas fa-clock"></i></div>
+                    <div>
+                        <h4 class="font-bold text-slate-700 text-sm">Controle de Ponto</h4>
+                        <p class="text-[10px] text-slate-500">Registro, espelho e férias</p>
+                    </div>
+                </div>
+                <input type="checkbox" name="mod_ponto" id="toggle-ponto" class="w-5 h-5 text-emerald-600 bg-white border-slate-300 rounded focus:ring-emerald-500">
+            </label>
+
+            <label class="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-200 cursor-pointer hover:border-emerald-400 transition">
+                <div class="flex items-center gap-4">
+                    <div class="w-10 h-10 rounded-full bg-yellow-100 text-yellow-600 flex items-center justify-center"><i class="fas fa-file-contract"></i></div>
+                    <div>
+                        <h4 class="font-bold text-slate-700 text-sm">Documentos</h4>
+                        <p class="text-[10px] text-slate-500">Holerites, Recibos e Atestados</p>
+                    </div>
+                </div>
+                <input type="checkbox" name="mod_documentos" id="toggle-documentos" class="w-5 h-5 text-emerald-600 bg-white border-slate-300 rounded focus:ring-emerald-500">
+            </label>
+
+            <label class="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-200 cursor-pointer hover:border-emerald-400 transition">
+                <div class="flex items-center gap-4">
+                    <div class="w-10 h-10 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center"><i class="fas fa-box"></i></div>
+                    <div>
+                        <h4 class="font-bold text-slate-700 text-sm">Estoque de EPIs</h4>
+                        <p class="text-[10px] text-slate-500">Uniformes e controle de saída</p>
+                    </div>
+                </div>
+                <input type="checkbox" name="mod_estoque" id="toggle-estoque" class="w-5 h-5 text-emerald-600 bg-white border-slate-300 rounded focus:ring-emerald-500">
+            </label>
+
+            <button type="submit" class="w-full py-4 mt-6 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-2xl uppercase tracking-widest text-sm transition transform active:scale-95 shadow-lg shadow-emerald-200">Atualizar Módulos</button>
+        </form>
     </div>
 </div>
 
@@ -2486,6 +2655,17 @@ FILE: app/admin/templates/admin/super_empresas.html
                 </div>
             </div>
 
+            <div class="col-span-2 grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-[10px] uppercase font-bold text-slate-500 mb-2">Cor Principal</label>
+                    <input type="color" name="cor_primaria" value="#2563eb" class="w-full h-12 rounded-lg cursor-pointer bg-transparent border-0 p-0">
+                </div>
+                <div>
+                    <label class="block text-[10px] uppercase font-bold text-slate-500 mb-2">Cor Hover (Foco)</label>
+                    <input type="color" name="cor_hover" value="#1d4ed8" class="w-full h-12 rounded-lg cursor-pointer bg-transparent border-0 p-0">
+                </div>
+            </div>
+
             <div class="col-span-2 mt-4"><h4 class="text-xs font-black text-slate-400 uppercase border-b pb-2">Acesso Master</h4></div>
             <div class="col-span-2">
                 <label class="block text-xs font-bold text-slate-500 mb-2">Nome Completo do Responsável</label>
@@ -2516,7 +2696,7 @@ FILE: app/admin/templates/admin/super_empresas.html
             <div class="bg-slate-50 p-4 rounded-2xl border border-dashed border-slate-300">
                 <label class="block text-xs font-black text-slate-500 uppercase mb-3">Substituir Logotipo</label>
                 <input type="file" name="logo_arquivo" accept="image/*" class="text-xs mb-4 w-full">
-                <input type="url" name="logo_url" id="input-logo-url" placeholder="Ou link manual..." class="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm outline-none">
+                <input type="url" name="logo_url" id="input-logo-url" placeholder="Deixe em branco para manter o atual..." class="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm outline-none">
             </div>
             <div class="grid grid-cols-2 gap-4">
                 <div>
@@ -2541,13 +2721,12 @@ FILE: app/admin/templates/admin/super_empresas.html
     function abrirBranding(id, nome, cor, hover, logo) {
         document.getElementById('branding-nome-empresa').innerText = nome;
         document.getElementById('form-branding').action = `/vortice/empresas/branding/${id}`;
-        document.getElementById('input-logo-url').value = logo;
+        document.getElementById('input-logo-url').value = ""; // Limpa para evitar confusões ao invés de forçar o link atual
         document.getElementById('input-cor-primaria').value = cor;
         document.getElementById('input-cor-hover').value = hover;
         toggleModal('modal-branding');
     }
 
-    // NOVAS FUNÇÕES EXCLUSIVAS PARA EXCLUSÃO
     function abrirModalExclusao(id, nome) {
         document.getElementById('nome-empresa-excluir').innerText = nome;
         document.getElementById('form-excluir-empresa').action = `/vortice/empresas/excluir/${id}`;
@@ -2556,6 +2735,17 @@ FILE: app/admin/templates/admin/super_empresas.html
 
     function fecharModalExclusao() {
         document.getElementById('modal-excluir-empresa').classList.add('hidden');
+    }
+
+    function abrirModalModulos(id, nome, ponto_ativo, doc_ativo, est_ativo) {
+        document.getElementById('modulos-nome-empresa').innerHTML = `<i class="fas fa-cubes mr-2"></i> ${nome}`;
+        document.getElementById('form-modulos').action = `/vortice/empresas/modulos/${id}`;
+        
+        document.getElementById('toggle-ponto').checked = ponto_ativo;
+        document.getElementById('toggle-documentos').checked = doc_ativo;
+        document.getElementById('toggle-estoque').checked = est_ativo;
+        
+        toggleModal('modal-modulos');
     }
 </script>
 {% endblock %}
@@ -5908,7 +6098,7 @@ from app.main import routes
 
 FILE: app/main/routes.py
 ------------------------
-from flask import render_template, redirect, url_for, jsonify, request, g, Response
+from flask import render_template, redirect, url_for, jsonify, request, g, Response, make_response, send_from_directory, current_app
 from flask_login import login_required, current_user
 from app.extensions import db
 from app.models import User, PontoAjuste, Recibo, Holerite, PreCadastro, Notificacao, PontoResumo, PontoRegistro, HistoricoSaida, PushSubscription, Empresa
@@ -5956,6 +6146,17 @@ def dashboard():
     return render_template('main/dashboard.html', dados=dados, admin=admin_stats)
 
 # ==============================================================================
+# ⚙️ SERVICE WORKER (ESCOPO GLOBAL PARA PWA)
+# ==============================================================================
+@main_bp.route('/sw.js')
+def service_worker():
+    """Serve o Service Worker na raiz para dar permissão global ao PWA."""
+    response = make_response(send_from_directory(os.path.join(current_app.root_path, 'static'), 'service-worker.js'))
+    response.headers['Content-Type'] = 'application/javascript'
+    response.headers['Service-Worker-Allowed'] = '/'
+    return response
+
+# ==============================================================================
 # 🚀 CDN INTERNA VORTICE (PLANO B: BURLA BLOQUEIOS DE DOMÍNIO)
 # ==============================================================================
 @main_bp.route('/cdn/logos/<slug>')
@@ -5968,7 +6169,6 @@ def serve_logo(slug):
         client = storage.Client()
         bucket = client.bucket(bucket_name)
         
-        # Procura qualquer ficheiro que comece com logo_slug
         blobs = list(bucket.list_blobs(prefix=f"logos/logo_{slug}."))
         
         if not blobs:
@@ -5977,14 +6177,13 @@ def serve_logo(slug):
         blob = blobs[0]
         image_data = blob.download_as_bytes()
         
-        # Entrega a imagem perfeitamente ao navegador
         return Response(image_data, mimetype=blob.content_type)
     except Exception as e:
         print(f"Erro ao servir logo segura via CDN: {e}")
         return redirect(icone_padrao)
 
 # ==============================================================================
-# PWA WHITE-LABEL: Manifesto Dinamico
+# 📱 PWA WHITE-LABEL: Manifesto Dinamico
 # ==============================================================================
 @main_bp.route('/manifest.json')
 def dynamic_manifest():
@@ -6013,8 +6212,8 @@ def dynamic_manifest():
         "short_name": short_name,
         "name": app_name,
         "icons": [
-            { "src": icon_url, "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
-            { "src": icon_url, "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+            { "src": icon_url, "sizes": "192x192", "purpose": "any maskable" },
+            { "src": icon_url, "sizes": "512x512", "purpose": "any maskable" }
         ],
         "start_url": "/",
         "display": "standalone",
@@ -6882,10 +7081,10 @@ def solicitar_ajuste():
                 )
                 ajuste_repo.add(solic); ajuste_repo.commit()
                 
-                # GATILHO NOTIFICAÇÃO MASTER (Será refatorado com RBAC futuramente)
-                master = User.query.filter_by(username='50097952800').first()
-                if master:
-                    enviar_notificacao(master.id, f"{current_user.real_name} solicitou um Ajuste de Ponto.", "/ponto/admin/ausencias") # Correção de Rota
+                # 🚀 CORREÇÃO WHITE-LABEL: Busca o Master da EMPRESA ATUAL (Isolamento de Dados)
+                master_empresa = User.query.filter_by(empresa_id=current_user.empresa_id, role='Master').first()
+                if master_empresa:
+                    enviar_notificacao(master_empresa.id, f"{current_user.real_name} solicitou um Ajuste de Ponto.", "/ponto/admin/solicitacoes")
                 
                 flash('Enviado!')
                 return redirect(url_for('ponto.solicitar_ajuste'))
@@ -6961,10 +7160,10 @@ def solicitar_ferias():
     if request.method == 'POST':
         try:
              tipo = ponto_service.processar_solicitacao_ferias(current_user, request.form, saldo)
-             # GATILHO NOTIFICAÇÃO MASTER
-             master = User.query.filter_by(username='50097952800').first()
-             if master:
-                 enviar_notificacao(master.id, f"{current_user.real_name} enviou uma solicitação de {tipo}.", "/ponto/admin/ausencias")
+             # 🚀 CORREÇÃO WHITE-LABEL: Busca o Master da EMPRESA ATUAL (Isolamento de Dados)
+             master_empresa = User.query.filter_by(empresa_id=current_user.empresa_id, role='Master').first()
+             if master_empresa:
+                 enviar_notificacao(master_empresa.id, f"{current_user.real_name} enviou uma solicitação de {tipo}.", "/ponto/admin/ausencias")
              flash("Solicitação validada e enviada com sucesso ao RH!", "success")
         except ValueError as ve:
              flash(str(ve), "error")
@@ -7036,10 +7235,9 @@ def gestao_ausencias():
             
         return redirect(url_for('ponto.gestao_ausencias'))
 
-    # ... (O resto da lógica de alertas de vencimento se mantém igual nas rotas por envolver muita exibição na view)
     alertas_vencimento = []
     hoje = get_brasil_time().date()
-    usuarios_clt = user_repo.get_all() # Poderíamos criar um método get_clt_users depois
+    usuarios_clt = user_repo.get_all() 
     usuarios_clt = [u for u in usuarios_clt if u.username != '12345678900' and u.data_admissao is not None]
     
     for u in usuarios_clt:
@@ -7085,7 +7283,7 @@ def controle_escala():
     ausencia_repo = SolicitacaoAusenciaRepository()
     reg_repo = PontoRegistroRepository()
     
-    usuarios = user_repo.get_gestores() # Reutilizando a lógica que ignora master/terminal e ordena
+    usuarios = user_repo.get_gestores() 
     trabalhando, folga = [], []
     
     for u in usuarios:
@@ -9204,22 +9402,24 @@ FILE: app/static/manifest.json
 
 FILE: app/static/service-worker.js
 ----------------------------------
-const CACHE_NAME = 'shahin-app-v1';
+const CACHE_NAME = 'vortice-pwa-v2';
 
-// Recursos mínimos para o aplicativo iniciar mais rápido
+// Recursos mínimos para o aplicativo iniciar mais rápido e ser instalável
 const ASSETS_TO_CACHE = [
     '/',
-    '/static/manifest.json'
+    '/manifest.json' // Alterado para a nossa nova rota dinâmica!
 ];
 
 // Instalação do Motor no telemóvel
 self.addEventListener('install', (event) => {
     event.waitUntil(
         caches.open(CACHE_NAME).then((cache) => {
-            console.log('[Shahin App] Service Worker Instalado e Cache Criado.');
+            console.log('[Vortice PWA] Service Worker Instalado e Cache Criado.');
             return cache.addAll(ASSETS_TO_CACHE);
         })
     );
+    // Força o Service Worker a ativar imediatamente
+    self.skipWaiting();
 });
 
 // Ativação e limpeza de versões antigas do App
@@ -9229,13 +9429,15 @@ self.addEventListener('activate', (event) => {
             return Promise.all(
                 cacheNames.map((cacheName) => {
                     if (cacheName !== CACHE_NAME) {
-                        console.log('[Shahin App] Limpando versão antiga do cache:', cacheName);
+                        console.log('[Vortice PWA] Limpando versão antiga do cache:', cacheName);
                         return caches.delete(cacheName);
                     }
                 })
             );
         })
     );
+    // Assume o controlo de todas as abas abertas imediatamente para o botão de instalar funcionar rápido
+    event.waitUntil(clients.claim());
 });
 
 // Estratégia de Rede (Network First): Como é um sistema de gestão ao vivo, 
@@ -9258,12 +9460,12 @@ self.addEventListener('fetch', (event) => {
 
 // 1. À ESCUTA: Recebendo a notificação disparada pelo servidor Python
 self.addEventListener('push', function(event) {
-    console.log('[Shahin App] Push Message recebida!');
+    console.log('[Vortice PWA] Push Message recebida!');
     
     // Dados padrão caso algo falhe
     let data = { 
-        title: 'Shahin Gestão', 
-        body: 'Você tem uma nova notificação do RH.', 
+        title: 'Nova Notificação', 
+        body: 'Você tem uma nova mensagem do RH.', 
         url: '/' 
     };
     
@@ -9279,24 +9481,24 @@ self.addEventListener('push', function(event) {
     // Configuração do visual e comportamento do aviso no telemóvel
     const options = {
         body: data.body,
-        icon: '/static/icons/icon-192x192.png', // O ícone grande do app
-        badge: '/static/icons/icon-192x192.png', // O ícone pequenino da barra de notificações (status bar)
+        icon: '/static/icons/vortice-icon.png', // Ícone neutro
+        badge: '/static/icons/vortice-icon.png', 
         vibrate: [200, 100, 200, 100, 200, 100, 200], // Padrão de vibração chamativo
         data: {
-            url: data.url || '/' // Guarda o link (ex: /documentos/meus-documentos) para quando o utilizador clicar
+            url: data.url || '/' // Guarda o link para quando o utilizador clicar
         },
         requireInteraction: true // Força a notificação a ficar no ecrã até que o utilizador a veja e feche
     };
 
     // Diz ao telemóvel para mostrar o alerta final!
     event.waitUntil(
-        self.registration.showNotification(data.title || 'Shahin Gestão', options)
+        self.registration.showNotification(data.title || 'Sistema de Gestão', options)
     );
 });
 
 // 2. AÇÃO: O que acontece quando o funcionário clica na notificação
 self.addEventListener('notificationclick', function(event) {
-    console.log('[Shahin App] Utilizador clicou na notificação.');
+    console.log('[Vortice PWA] Utilizador clicou na notificação.');
     
     // Fecha a notificação do ecrã
     event.notification.close();
@@ -9306,7 +9508,7 @@ self.addEventListener('notificationclick', function(event) {
 
     // A magia de navegação:
     event.waitUntil(
-        // Verifica se o Shahin Gestão já está aberto em alguma aba ou em segundo plano
+        // Verifica se o App já está aberto em alguma aba ou em segundo plano
         clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function(clientList) {
             for (let i = 0; i < clientList.length; i++) {
                 let client = clientList[i];
@@ -9493,10 +9695,20 @@ FILE: app/templates/base.html
     {% set is_master = false %}
     {% set perms = "" %}
     
+    {% set feat_ponto = true %}
+    {% set feat_docs = true %}
+    {% set feat_estoque = true %}
+    
     {% if current_user.is_authenticated %}
         {% set clean_username = current_user.username | string | replace('.', '') | replace('-', '') %}
         {% set is_master = current_user.role == 'Master' or clean_username == '50097952800' %}
         {% set perms = current_user.permissions or "" %}
+        
+        {% if g.empresa and g.empresa.features_json %}
+            {% set feat_ponto = g.empresa.features_json.get('ponto', true) %}
+            {% set feat_docs = g.empresa.features_json.get('documentos', true) %}
+            {% set feat_estoque = g.empresa.features_json.get('estoque', true) %}
+        {% endif %}
     {% endif %}
 
     {% if current_user.is_authenticated and not current_user.is_first_access and not request.path.startswith('/vortice') %}
@@ -9534,15 +9746,21 @@ FILE: app/templates/base.html
             <nav class="flex-1 overflow-y-auto py-4">
                 <ul class="space-y-1">
                     {% if current_user.role == 'Terminal' %}
+                        {% if feat_ponto %}
                         <li><a href="/ponto/scanner" class="flex items-center px-6 py-3 hover:bg-[var(--sidebar-hover,#1e293b)] hover:text-white transition group"><i class="fas fa-qrcode w-6 text-center mr-2 text-blue-500"></i><span class="font-medium">Abrir Leitor</span></a></li>
+                        {% endif %}
                     {% else %}
                         <li><a href="/" class="flex items-center px-6 py-3 hover:bg-[var(--sidebar-hover,#1e293b)] hover:text-white transition group"><i class="fas fa-home w-6 text-center mr-2 text-slate-400 group-hover:text-blue-500"></i><span class="font-medium">Início</span></a></li>
                         
                         <li class="pt-4 pb-2 px-6 text-[10px] font-bold uppercase text-slate-500">Área Pessoal</li>
+                        
+                        {% if feat_ponto %}
                         <li><a href="/ponto/registrar" class="flex items-center px-6 py-3 hover:bg-[var(--sidebar-hover,#1e293b)] hover:text-white transition group"><i class="fas fa-fingerprint w-6 text-center mr-2 text-slate-400 group-hover:text-purple-500"></i><span class="font-medium">Registar Ponto</span></a></li>
                         <li><a href="/ponto/espelho" class="flex items-center px-6 py-3 hover:bg-[var(--sidebar-hover,#1e293b)] hover:text-white transition group"><i class="fas fa-file-invoice w-6 text-center mr-2 text-slate-400 group-hover:text-blue-400"></i><span class="font-medium">Espelho de Ponto</span></a></li>
                         <li><a href="/ponto/escala" class="flex items-center px-6 py-3 hover:bg-[var(--sidebar-hover,#1e293b)] hover:text-white transition group"><i class="fas fa-calendar-alt w-6 text-center mr-2 text-slate-400 group-hover:text-emerald-400"></i><span class="font-medium">Minha Escala</span></a></li>
+                        {% endif %}
                         
+                        {% if feat_ponto or feat_estoque %}
                         <li>
                             <button onclick="toggleSubmenu('submenu-solic', 'icon-solic')" class="w-full flex items-center justify-between px-6 py-3 hover:bg-[var(--sidebar-hover,#1e293b)] hover:text-white transition group focus:outline-none">
                                 <div class="flex items-center">
@@ -9552,19 +9770,26 @@ FILE: app/templates/base.html
                                 <i id="icon-solic" class="fas fa-chevron-down text-xs transition-transform duration-300"></i>
                             </button>
                             <ul id="submenu-solic" class="submenu hidden bg-[var(--sidebar-header,#020617)]">
+                                {% if feat_ponto %}
                                 <li><a href="/ponto/solicitar-ajuste" class="block pl-16 pr-6 py-2 text-sm text-slate-400 hover:text-white hover:bg-[var(--sidebar-hover,#1e293b)] transition border-l-2 border-transparent hover:border-yellow-500">Ajuste de Ponto</a></li>
                                 <li><a href="/ponto/solicitar-ferias" class="block pl-16 pr-6 py-2 text-sm text-slate-400 hover:text-white hover:bg-[var(--sidebar-hover,#1e293b)] transition border-l-2 border-transparent hover:border-emerald-500">Férias e Licenças</a></li>
+                                {% endif %}
+                                {% if feat_estoque %}
                                 <li><a href="/estoque/solicitar-uniforme" class="block pl-16 pr-6 py-2 text-sm text-slate-400 hover:text-white hover:bg-[var(--sidebar-hover,#1e293b)] transition border-l-2 border-transparent hover:border-blue-400">Uniforme e EPI</a></li>
+                                {% endif %}
                             </ul>
                         </li>
+                        {% endif %}
 
+                        {% if feat_docs %}
                         <li><a href="/documentos/meus-documentos" class="flex items-center px-6 py-3 hover:bg-[var(--sidebar-hover,#1e293b)] hover:text-white transition group"><i class="fas fa-folder-open w-6 text-center mr-2 text-slate-400 group-hover:text-yellow-400"></i><span class="font-medium">Meus Documentos</span></a></li>
                         <li><a href="/documentos/atestados/meus" class="flex items-center px-6 py-3 hover:bg-[var(--sidebar-hover,#1e293b)] hover:text-white transition group"><i class="fas fa-file-medical w-6 text-center mr-2 text-slate-400 group-hover:text-teal-400"></i><span class="font-medium">Meus Atestados</span></a></li>
+                        {% endif %}
 
                         {% if is_master or 'DOCUMENTOS' in perms or 'PONTO' in perms or 'ESTOQUE' in perms or 'USUARIOS' in perms %}
                         <li class="pt-6 pb-2 px-6 text-[10px] font-bold uppercase text-slate-500 border-t border-[var(--sidebar-border,#1e293b)] mt-4">Administração</li>
                         
-                        {% if is_master or 'PONTO' in perms %}
+                        {% if feat_ponto and (is_master or 'PONTO' in perms) %}
                         <li><a href="/ponto/admin/controle-escala" class="flex items-center px-6 py-3 hover:bg-[var(--sidebar-hover,#1e293b)] hover:text-white transition group"><i class="fas fa-users w-6 text-center mr-2 text-slate-400 group-hover:text-blue-400"></i><span class="font-medium">Controle de Escala</span></a></li>
                         <li>
                             <button onclick="toggleSubmenu('submenu-ponto', 'icon-ponto')" class="w-full flex items-center justify-between px-6 py-3 hover:bg-[var(--sidebar-hover,#1e293b)] hover:text-white transition group focus:outline-none">
@@ -9581,7 +9806,7 @@ FILE: app/templates/base.html
                         </li>
                         {% endif %}
 
-                        {% if is_master or 'DOCUMENTOS' in perms %}
+                        {% if feat_docs and (is_master or 'DOCUMENTOS' in perms) %}
                         <li>
                             <button onclick="toggleSubmenu('submenu-documentos', 'icon-documentos')" class="w-full flex items-center justify-between px-6 py-3 hover:bg-[var(--sidebar-hover,#1e293b)] hover:text-white transition group focus:outline-none">
                                 <div class="flex items-center">
@@ -9601,7 +9826,7 @@ FILE: app/templates/base.html
                         </li>
                         {% endif %}
 
-                        {% if is_master or 'ESTOQUE' in perms %}
+                        {% if feat_estoque and (is_master or 'ESTOQUE' in perms) %}
                         <li>
                             <button onclick="toggleSubmenu('submenu-estoque', 'icon-estoque')" class="w-full flex items-center justify-between px-6 py-3 hover:bg-[var(--sidebar-hover,#1e293b)] hover:text-white transition group focus:outline-none">
                                 <div class="flex items-center">
@@ -9643,7 +9868,7 @@ FILE: app/templates/base.html
             </nav>
         </aside>
         {% endif %} 
-        
+
         <div class="flex-1 h-full overflow-y-auto bg-slate-50 relative w-full">
             
             {% if current_user.is_authenticated and not current_user.is_first_access and not request.path.startswith('/vortice') %}
@@ -9714,7 +9939,7 @@ FILE: app/templates/base.html
 
     <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
     <script>
-        // Lógica do Modal de Confirmação (necessário para o botão de excluir cliente no Vortice)
+        // Lógica do Modal de Confirmação 
         function confirmarAcao(mensagem, actionUrl) {
             document.getElementById('modal-mensagem').innerText = mensagem;
             document.getElementById('form-confirmacao').action = actionUrl;
@@ -9834,6 +10059,121 @@ FILE: app/templates/base.html
                     } catch (err) { console.error(err); }
                 }
             };
+        }
+
+        // ==============================================================================
+        // ⚙️ LÓGICA DO PWA E NOTIFICAÇÕES PUSH
+        // ==============================================================================
+        
+        // --- INSTALAÇÃO DO PWA ---
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', function() {
+                navigator.serviceWorker.register('/sw.js').then(function(registration) {
+                    console.log('ServiceWorker White-Label registado com sucesso!');
+                    // Após registar, verifica se o Push está ativo
+                    verificarInscricaoPush();
+                }, function(err) {
+                    console.log('Falha no registo do ServiceWorker:', err);
+                });
+            });
+        }
+
+        let deferredPrompt;
+        const installContainer = document.getElementById('pwa-install-container');
+        const installBtn = document.getElementById('pwa-install-btn');
+
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            if(installContainer) installContainer.classList.remove('hidden');
+        });
+
+        if(installBtn) {
+            installBtn.addEventListener('click', async () => {
+                if (deferredPrompt) {
+                    deferredPrompt.prompt();
+                    const { outcome } = await deferredPrompt.userChoice;
+                    deferredPrompt = null;
+                    installContainer.classList.add('hidden');
+                }
+            });
+        }
+
+        window.addEventListener('appinstalled', () => {
+            if(installContainer) installContainer.classList.add('hidden');
+            deferredPrompt = null;
+        });
+
+        // --- ATIVAÇÃO DE ALERTAS PUSH ---
+        
+        const PUBLIC_VAPID_KEY = 'BLj7nNHVn8NIHL4lHkVOS03nYmMGdOQ4L4wO8_4H58oF0COavknccVgUUUfpClHhQegJjC9p6ZjFz3LH98Xupxo'; 
+
+        function urlBase64ToUint8Array(base64String) {
+            const padding = '='.repeat((4 - base64String.length % 4) % 4);
+            const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
+            const rawData = window.atob(base64);
+            const outputArray = new Uint8Array(rawData.length);
+            for (let i = 0; i < rawData.length; ++i) {
+                outputArray[i] = rawData.charCodeAt(i);
+            }
+            return outputArray;
+        }
+
+        async function verificarInscricaoPush() {
+            if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+            
+            try {
+                const registration = await navigator.serviceWorker.ready;
+                const subscription = await registration.pushManager.getSubscription();
+                const btnContainer = document.getElementById('push-subscribe-container');
+                
+                // Se NÃO tem inscrição e o utilizador NÃO bloqueou as notificações, mostra o botão
+                if (!subscription && Notification.permission !== 'denied') {
+                    if(btnContainer) btnContainer.classList.remove('hidden');
+                }
+            } catch (err) { console.error("Erro ao verificar Push:", err); }
+        }
+
+        async function ativarAlertas() {
+            try {
+                const registration = await navigator.serviceWorker.ready;
+                
+                // 1. Pede a inscrição encriptada usando a chave pública
+                const subscription = await registration.pushManager.subscribe({
+                    userVisibleOnly: true,
+                    applicationServerKey: urlBase64ToUint8Array(PUBLIC_VAPID_KEY)
+                });
+
+                // 2. Envia a assinatura para o nosso backend gravar (rota /api/push/subscribe)
+                const response = await fetch('/api/push/subscribe', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': '{{ csrf_token() }}'
+                    },
+                    body: JSON.stringify(subscription)
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    Toastify({ text: "Alertas ativados com sucesso! 🔔", style: { background: "#10b981" } }).showToast();
+                    document.getElementById('push-subscribe-container').classList.add('hidden');
+                } else {
+                    Toastify({ text: "Erro ao ativar alertas.", style: { background: "#ef4444" } }).showToast();
+                }
+            } catch (error) {
+                console.error('Erro na subscrição Push:', error);
+                if (Notification.permission === 'denied') {
+                    Toastify({ text: "Tem de permitir notificações nas definições do navegador.", style: { background: "#ef4444", fontSize: "12px" } }).showToast();
+                    document.getElementById('push-subscribe-container').classList.add('hidden');
+                }
+            }
+        }
+
+        // Liga a função ao clique do botão
+        const pushBtn = document.getElementById('push-subscribe-btn');
+        if(pushBtn) {
+            pushBtn.addEventListener('click', ativarAlertas);
         }
     </script>
 </body>
