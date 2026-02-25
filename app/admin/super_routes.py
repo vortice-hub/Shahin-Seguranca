@@ -1,11 +1,12 @@
 import os
 import json
-from flask import Blueprint, render_template, request, redirect, url_for, flash, session
+from flask import Blueprint, render_template, request, redirect, url_for, flash, session, jsonify
 from app.services.empresa_service import EmpresaService
 from app.repositories.empresa_repository import EmpresaRepository
 from app.utils import super_admin_required
 from sqlalchemy.orm.attributes import flag_modified
 from app.extensions import db
+from app.services.test_service import TestService
 
 # 🚀 PREFIXO EXCLUSIVO: Isolando a plataforma Vortice do resto do sistema
 super_admin_bp = Blueprint('super_admin', __name__, template_folder='templates', url_prefix='/vortice')
@@ -133,7 +134,6 @@ def configurar_branding(id):
         'cor_hover': request.form.get('cor_hover', '#1d4ed8')
     }
     
-    # Só adiciona o logo_url ao dicionário se o utilizador preencheu o campo
     logo_url = request.form.get('logo_url')
     if logo_url and logo_url.strip() != '':
         config_visual['logo_url'] = logo_url.strip()
@@ -146,7 +146,6 @@ def configurar_branding(id):
         
     return redirect(url_for('super_admin.listar_empresas'))
 
-# 🚀 GESTÃO DE MÓDULOS (FEATURE TOGGLING)
 @super_admin_bp.route('/empresas/modulos/<int:id>', methods=['POST'])
 @super_admin_required
 def configurar_modulos(id):
@@ -173,5 +172,29 @@ def configurar_modulos(id):
         db.session.rollback()
         flash(f"Erro ao atualizar módulos: {e}", "error")
 
+    return redirect(url_for('super_admin.listar_empresas'))
+
+# ==============================================================================
+# 🧪 VORTICE LABS: TESTES AUTOMATIZADOS DE INTEGRIDADE
+# ==============================================================================
+
+@super_admin_bp.route('/labs/audit', methods=['POST'])
+@super_admin_required
+def run_labs_audit():
+    """Aciona o robô de testes para validar isolamento e funções do sistema."""
+    tester = TestService()
+    resultados = tester.run_full_audit()
+    return jsonify({'logs': resultados})
+
+@super_admin_bp.route('/labs/cleanup', methods=['POST'])
+@super_admin_required
+def run_labs_cleanup():
+    """Remove instantaneamente todas as empresas de teste geradas."""
+    tester = TestService()
+    sucesso = tester.cleanup_tests()
+    if sucesso:
+        flash("Ambiente de teste limpo com sucesso!", "success")
+    else:
+        flash("Erro ao limpar dados de teste.", "error")
     return redirect(url_for('super_admin.listar_empresas'))
 
