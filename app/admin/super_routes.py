@@ -8,8 +8,8 @@ from sqlalchemy.orm.attributes import flag_modified
 from app.extensions import db
 from app.services.test_service import TestService
 
-# Importação necessária para buscar os dados do Master
-from app.models import User
+# Importação necessária para buscar os dados do Master e outras entidades
+from app.models import User, PreCadastro, PontoResumo, PontoAjuste, PontoRegistro, Holerite, Recibo, Role, Permission
 
 # 🚀 PREFIXO EXCLUSIVO: Isolando a plataforma Vortice do resto do sistema
 super_admin_bp = Blueprint('super_admin', __name__, template_folder='templates', url_prefix='/vortice')
@@ -59,7 +59,7 @@ def listar_empresas():
         if not emp.features_json:
             emp.features_json = {"ponto": True, "documentos": True, "estoque": True}
             
-        # --- NOVA LÓGICA: Busca os dados do Master para o menu de credenciais ---
+        # --- Lógica de Credenciais: Busca os dados do Master para o novo menu ---
         master = User.query.filter_by(empresa_id=emp.id, role='Master').first()
         if master:
             emp.master_nome = master.real_name
@@ -91,7 +91,7 @@ def cadastrar_empresa():
     try:
         empresa, master = service.criar_nova_conta_cliente(dados_empresa, dados_master, file_logo=file_logo)
         
-        # Injeta as cores escolhidas no momento da criação, se fornecidas
+        # Injeta as cores escolhidas no momento da criação
         cor_primaria = request.form.get('cor_primaria')
         cor_hover = request.form.get('cor_hover')
         
@@ -103,7 +103,6 @@ def cadastrar_empresa():
             flag_modified(empresa, "config_json")
             db.session.commit()
             
-        # A mensagem agora exibe as credenciais prontas do Terminal!
         flash(f"Empresa '{empresa.nome}' criada! Terminal: terminal_{empresa.slug} | Senha: terminal1234{empresa.slug}", "success")
     except ValueError as ve:
         flash(str(ve), "error")
@@ -191,7 +190,6 @@ def configurar_modulos(id):
 # ==============================================================================
 # 🧪 VORTICE LABS: TESTES AUTOMATIZADOS DE INTEGRIDADE
 # ==============================================================================
-
 @super_admin_bp.route('/labs/audit', methods=['POST'])
 @super_admin_required
 def run_labs_audit():
