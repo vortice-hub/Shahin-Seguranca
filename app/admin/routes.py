@@ -121,6 +121,31 @@ def editar_usuario(id):
 
     return render_template('admin/editar_usuario.html', user=user, carga_hm=user_carga_hm, gestores=gestores, cargos=cargos)
 
+@admin_bp.route('/usuarios/reset-biometria/<int:id>', methods=['POST'])
+@login_required
+@permission_required('USUARIOS')
+def reset_biometria(id):
+    """
+    Limpa o cadastro facial do usuário, obrigando-o a tirar uma nova foto 
+    na próxima vez que acessar o aplicativo.
+    """
+    user_repo = UserRepository()
+    user = user_repo.get_by_id(id)
+    
+    if not user:
+        flash('Utilizador não encontrado.', 'error')
+        return redirect(url_for('admin.gerenciar_usuarios'))
+        
+    try:
+        user.face_encoding = None
+        user.foto_biometria_url = None
+        user_repo.commit()
+        flash(f'Biometria de {user.real_name} resetada! Ele já pode tirar uma nova foto no aplicativo.', 'success')
+    except Exception as e:
+        user_repo.rollback()
+        flash(f'Erro ao resetar biometria: {str(e)}', 'error')
+        
+    return redirect(url_for('admin.gerenciar_usuarios'))
 
 # ==============================================================================
 # OUTROS MÓDULOS 

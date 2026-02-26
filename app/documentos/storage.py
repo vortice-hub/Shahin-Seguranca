@@ -22,6 +22,20 @@ def salvar_no_storage(pdf_bytes, pasta_ref, empresa_slug):
         print(f"Erro no Cloud Storage Upload: {e}")
         return None
 
+def salvar_imagem_storage(img_bytes, pasta_ref, empresa_slug, nome_arquivo):
+    """Salva imagens (como biometria facial) no bucket isolado por empresa."""
+    try:
+        client = storage.Client()
+        bucket = client.bucket(get_bucket_name())
+        # O arquivo será salvo com a estrutura: slug_da_empresa/pasta_ref/nome_arquivo
+        nome_blob = f"{empresa_slug}/{pasta_ref}/{nome_arquivo}"
+        blob = bucket.blob(nome_blob)
+        blob.upload_from_string(img_bytes, content_type='image/jpeg')
+        return nome_blob
+    except Exception as e:
+        print(f"Erro no Cloud Storage Upload (Imagem): {e}")
+        return None
+
 def baixar_bytes_storage(caminho_blob):
     """
     Baixa o arquivo do Storage para a memória do servidor.

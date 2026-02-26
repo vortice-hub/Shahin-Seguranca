@@ -96,13 +96,16 @@ class User(UserMixin, TenantModel):
     salario = db.Column(db.Float, default=0.0)
     razao_social_empregadora = db.Column(db.String(200))
     cnpj_empregador = db.Column(db.String(20))
+    
+    # 📸 NOVOS CAMPOS: Ponto Biométrico (Reconhecimento Facial)
+    foto_biometria_url = db.Column(db.String(500), nullable=True)
+    face_encoding = db.Column(db.JSON, nullable=True)
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
 
-# ... (As classes PreCadastro, ItemEstoque, Holerite, etc. continuam iguais abaixo) ...
 class PreCadastro(TenantModel):
     __tablename__ = 'pre_cadastros'
     id = db.Column(db.Integer, primary_key=True)

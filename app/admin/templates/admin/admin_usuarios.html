@@ -61,7 +61,20 @@
             <div class="flex items-center gap-3">
                 <span class="px-2 py-1 bg-emerald-100 text-emerald-700 text-[10px] font-bold uppercase rounded">Ativo</span>
                 
-                <a href="/admin/usuarios/editar/{{ u.id }}" class="w-8 h-8 flex items-center justify-center rounded-full text-slate-300 hover:bg-white hover:text-blue-600 hover:shadow border border-transparent hover:border-slate-200 transition">
+                {% if u.face_encoding %}
+                    <span class="px-2 py-1 bg-blue-100 text-blue-700 text-[10px] font-bold uppercase rounded flex items-center gap-1 cursor-default" title="Biometria Cadastrada">
+                        <i class="fas fa-fingerprint"></i> Biometria OK
+                    </span>
+                    <button type="button" onclick="confirmarAcao('Tem certeza que deseja resetar a biometria de {{ u.real_name }}? A foto atual será apagada e ele terá que tirar uma nova no aplicativo.', '/admin/usuarios/reset-biometria/{{ u.id }}')" class="w-8 h-8 flex items-center justify-center rounded-full text-amber-500 hover:bg-amber-50 hover:text-amber-600 hover:shadow border border-transparent hover:border-amber-200 transition" title="Resetar Biometria">
+                        <i class="fas fa-user-times text-xs"></i>
+                    </button>
+                {% else %}
+                    <span class="px-2 py-1 bg-slate-100 text-slate-500 text-[10px] font-bold uppercase rounded flex items-center gap-1 cursor-default" title="Aguardando Cadastro pelo App">
+                        <i class="fas fa-camera"></i> Pendente
+                    </span>
+                {% endif %}
+
+                <a href="/admin/usuarios/editar/{{ u.id }}" class="w-8 h-8 flex items-center justify-center rounded-full text-slate-300 hover:bg-white hover:text-blue-600 hover:shadow border border-transparent hover:border-slate-200 transition" title="Editar Dados">
                     <i class="fas fa-pencil-alt text-xs"></i>
                 </a>
             </div>

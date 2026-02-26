@@ -1,138 +1,177 @@
 {% extends 'base.html' %}
 {% block content %}
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-
 <div class="max-w-md mx-auto text-center">
     
-    <div class="mb-4">
-        <h2 class="text-2xl font-bold text-slate-800">Meu Ponto</h2>
-        <p class="text-sm text-slate-500">Aproxime este código do Terminal na portaria.</p>
+    <div class="mb-6">
+        <h2 class="text-2xl font-bold text-slate-800">Ponto Digital</h2>
+        <p class="text-sm text-slate-500">Reconhecimento Facial Vortice</p>
     </div>
 
-    {% if bloqueado %}
-    <div class="bg-red-50 border-l-4 border-red-500 p-6 rounded-r-xl shadow-md text-left mb-8">
-        <h3 class="text-lg font-bold text-red-700 flex items-center gap-2"><i class="fas fa-ban"></i> AÇÃO BLOQUEADA</h3>
-        <p class="text-sm text-red-600 mt-2">{{ motivo }}</p>
+    {% if biometria_cadastrada %}
+    <div class="bg-white rounded-3xl shadow-xl border border-emerald-200 p-8 text-center relative overflow-hidden">
+        <div class="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-emerald-400 to-teal-500"></div>
+        
+        <div class="w-24 h-24 bg-emerald-50 rounded-full flex items-center justify-center mx-auto mb-4 border-4 border-emerald-100">
+            <i class="fas fa-user-check text-4xl text-emerald-500"></i>
+        </div>
+        
+        <h3 class="text-xl font-black text-slate-800 mb-2">Biometria Ativa!</h3>
+        <p class="text-sm text-slate-500 mb-6">O seu rosto está mapeado e seguro na nossa base de dados.</p>
+        
+        <div class="bg-slate-50 p-5 rounded-2xl border border-slate-100 text-left">
+            <p class="text-[10px] text-slate-400 font-black uppercase tracking-widest mb-3">Como bater o ponto diariamente:</p>
+            <ul class="text-sm text-slate-600 space-y-3 font-medium">
+                <li class="flex items-center gap-3"><div class="w-6 h-6 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-xs">1</div> Dirija-se ao Terminal da portaria.</li>
+                <li class="flex items-center gap-3"><div class="w-6 h-6 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-xs">2</div> Olhe fixamente para a câmara do tablet.</li>
+                <li class="flex items-center gap-3"><div class="w-6 h-6 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-xs">3</div> Confirme o seu nome na tela e pronto!</li>
+            </ul>
+        </div>
     </div>
+
     {% else %}
-    
-    <div class="bg-white rounded-3xl shadow-xl border border-slate-200 p-8 relative overflow-hidden">
-        <div class="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-blue-500 to-purple-600"></div>
-
-        <div class="mb-4">
-            <h3 class="text-xl font-bold text-slate-800">{{ current_user.real_name }}</h3>
-            <p class="text-xs text-slate-400 font-mono uppercase">{{ current_user.role }}</p>
+    <div id="step-rules" class="bg-white rounded-3xl shadow-xl border border-slate-200 p-8">
+        <div class="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-4 text-blue-500 text-2xl">
+            <i class="fas fa-camera"></i>
         </div>
-
-        <div class="flex justify-center mb-6">
-            <div id="qrcode" class="p-2 border-4 border-slate-900 rounded-xl bg-white"></div>
-        </div>
-
-        <div class="w-full bg-slate-100 rounded-full h-2.5 mb-2">
-            <div id="progressBar" class="bg-blue-600 h-2.5 rounded-full transition-all duration-1000 ease-linear" style="width: 100%"></div>
-        </div>
-        <p class="text-xs text-slate-400 font-mono" id="statusToken">Atualizando em <span id="countdown">30</span>s...</p>
-
-        <div class="mt-6 pt-6 border-t border-slate-100 flex justify-between items-center">
-            <div class="text-left">
-                <span class="block text-[10px] font-bold text-slate-400 uppercase">Próximo Ponto</span>
-                <span class="text-sm font-bold text-blue-600">{{ proxima_acao }}</span>
+        <h3 class="text-lg font-bold text-slate-800 mb-2">Cadastre o seu Rosto</h3>
+        <p class="text-sm text-slate-500 mb-6">Para usar o ponto digital na empresa, precisamos de mapear a sua biometria facial. Siga as regras:</p>
+        
+        <div class="grid grid-cols-2 gap-3 mb-8 text-left">
+            <div class="bg-slate-50 p-3 rounded-xl border border-slate-100 flex items-start gap-2">
+                <i class="fas fa-sun text-amber-500 mt-1"></i>
+                <span class="text-xs text-slate-600 font-medium">Vá para um local bem iluminado</span>
             </div>
-            <div class="text-right">
-                <span class="block text-[10px] font-bold text-slate-400 uppercase">Hoje</span>
-                <span class="text-sm font-mono text-slate-600">{{ hoje.strftime('%d/%m') }}</span>
+            <div class="bg-slate-50 p-3 rounded-xl border border-slate-100 flex items-start gap-2">
+                <i class="fas fa-glasses text-red-400 mt-1"></i>
+                <span class="text-xs text-slate-600 font-medium">Retire óculos escuros e máscaras</span>
             </div>
+            <div class="bg-slate-50 p-3 rounded-xl border border-slate-100 flex items-start gap-2">
+                <i class="fas fa-hat-cowboy text-red-400 mt-1"></i>
+                <span class="text-xs text-slate-600 font-medium">Remova bonés ou chapéus</span>
+            </div>
+            <div class="bg-slate-50 p-3 rounded-xl border border-slate-100 flex items-start gap-2">
+                <i class="fas fa-user text-emerald-500 mt-1"></i>
+                <span class="text-xs text-slate-600 font-medium">Tire a foto sozinho(a)</span>
+            </div>
+        </div>
+
+        <button onclick="iniciarCamera()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl shadow-lg transition active:scale-95">
+            ESTOU PRONTO
+        </button>
+    </div>
+
+    <div id="step-camera" class="hidden bg-white rounded-3xl shadow-xl border border-slate-200 overflow-hidden relative">
+        <div class="p-4 bg-slate-900 text-white flex justify-between items-center z-10 relative">
+            <span class="text-xs font-bold uppercase tracking-widest"><i class="fas fa-video text-red-500 animate-pulse mr-2"></i> Captura Biométrica</span>
+            <button onclick="cancelarCamera()" class="text-white/50 hover:text-white"><i class="fas fa-times text-lg"></i></button>
+        </div>
+        
+        <div class="relative bg-black h-[400px] w-full flex items-center justify-center overflow-hidden">
+            <video id="video-feed" autoplay playsinline class="absolute min-w-full min-h-full object-cover opacity-50 transform scale-x-[-1]"></video>
+            
+            <div class="absolute inset-0 border-[40px] border-black/60 rounded-full z-10 scale-125 pointer-events-none"></div>
+            <div class="absolute inset-0 border-4 border-dashed border-white/50 rounded-full z-20 m-12 pointer-events-none animate-[spin_10s_linear_infinite]"></div>
+            
+            <p class="absolute bottom-6 z-30 text-white font-bold text-sm bg-black/50 px-4 py-1 rounded-full backdrop-blur-sm">Encaixe o rosto no círculo</p>
+        </div>
+
+        <div class="p-6 bg-slate-50 border-t border-slate-200">
+            <button id="btn-capturar" onclick="tirarFoto()" class="w-full bg-blue-600 text-white font-bold py-4 rounded-xl shadow-lg transition active:scale-95 flex items-center justify-center gap-2">
+                <i class="fas fa-camera text-xl"></i> TIRAR FOTO E ENVIAR
+            </button>
+        </div>
+        
+        <canvas id="canvas-foto" class="hidden"></canvas>
+    </div>
+
+    <div id="step-loading" class="hidden bg-white rounded-3xl shadow-xl border border-slate-200 p-10 text-center">
+        <i class="fas fa-robot text-5xl text-blue-500 mb-6 animate-pulse"></i>
+        <h3 class="text-xl font-black text-slate-800 mb-2">A processar Biometria...</h3>
+        <p class="text-sm text-slate-500 mb-6">A nossa Inteligência Artificial está a mapear os 128 pontos do seu rosto.</p>
+        <div class="w-full bg-slate-100 rounded-full h-2">
+            <div class="bg-blue-600 h-2 rounded-full w-2/3 animate-pulse"></div>
         </div>
     </div>
+
+    <script>
+        const video = document.getElementById('video-feed');
+        const canvas = document.getElementById('canvas-foto');
+        let stream = null;
+
+        async function iniciarCamera() {
+            document.getElementById('step-rules').classList.add('hidden');
+            document.getElementById('step-camera').classList.remove('hidden');
+            
+            try {
+                // Solicita a câmera frontal (user)
+                stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { facingMode: "user", width: { ideal: 720 }, height: { ideal: 720 } }, 
+                    audio: false 
+                });
+                video.srcObject = stream;
+            } catch (err) {
+                alert("Erro ao aceder à câmara: " + err.message + "\nPor favor, dê permissão nas definições do navegador.");
+                cancelarCamera();
+            }
+        }
+
+        function cancelarCamera() {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+            }
+            document.getElementById('step-camera').classList.add('hidden');
+            document.getElementById('step-rules').classList.remove('hidden');
+        }
+
+        async function tirarFoto() {
+            // Prepara a foto
+            const context = canvas.getContext('2d');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            
+            // Opcional: Inverter a imagem no canvas caso o espelhamento do vídeo atrapalhe o face_recognition
+            context.translate(canvas.width, 0);
+            context.scale(-1, 1);
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+            
+            const imageDataBase64 = canvas.toDataURL('image/jpeg', 0.85);
+            
+            // Pára a câmera e mostra a tela de carregamento
+            if (stream) stream.getTracks().forEach(track => track.stop());
+            document.getElementById('step-camera').classList.add('hidden');
+            document.getElementById('step-loading').classList.remove('hidden');
+
+            // Envia para o Backend (I.A.)
+            try {
+                const response = await fetch('/ponto/api/cadastrar-biometria', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': '{{ csrf_token() }}'
+                    },
+                    body: JSON.stringify({ image: imageDataBase64 })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    Toastify({ text: "Biometria Ativada! 🎉", duration: 3000, style: { background: "#10b981" } }).showToast();
+                    setTimeout(() => { window.location.reload(); }, 1500); // Recarrega para mostrar a tela verde
+                } else {
+                    alert("⚠️ FOTO RECUSADA:\n" + data.error);
+                    // Volta para as regras para tentar novamente
+                    document.getElementById('step-loading').classList.add('hidden');
+                    document.getElementById('step-rules').classList.remove('hidden');
+                }
+            } catch (err) {
+                alert("Erro de conexão ao enviar a foto.");
+                document.getElementById('step-loading').classList.add('hidden');
+                document.getElementById('step-rules').classList.remove('hidden');
+            }
+        }
+    </script>
     {% endif %}
 
-    <div class="mt-8 text-left">
-        <h3 class="text-xs font-bold text-slate-400 uppercase mb-3 ml-1">Batidas de Hoje</h3>
-        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden divide-y divide-slate-100">
-            {% for p in pontos %}
-            <div class="px-4 py-3 flex justify-between items-center">
-                <span class="text-sm font-bold text-slate-700 flex items-center gap-2">
-                    <i class="fas fa-circle text-[6px] {% if 'Entrada' in p.tipo %}text-emerald-500{% else %}text-amber-500{% endif %}"></i>
-                    {{ p.tipo }}
-                </span>
-                <span class="text-sm font-mono text-slate-500 font-bold bg-slate-50 px-2 py-1 rounded">{{ p.hora_registro.strftime('%H:%M') }}</span>
-            </div>
-            {% else %}
-            <div class="p-6 text-center text-xs text-slate-400">Ainda não iniciou a jornada.</div>
-            {% endfor %}
-        </div>
-    </div>
 </div>
-
-<script>
-    let timerInterval;
-    const TIME_LIMIT = 30; 
-    let timeLeft = TIME_LIMIT;
-
-    function generateQRCode() {
-        fetch('/ponto/api/gerar-token')
-            .then(response => response.json())
-            .then(data => {
-                if (data.error) {
-                    document.getElementById('qrcode').innerHTML = `<p class="text-red-500 text-xs">${data.error}</p>`;
-                    return;
-                }
-                const container = document.getElementById("qrcode");
-                container.innerHTML = "";
-                // AUMENTADO PARA 260px (Mais facil de ler)
-                new QRCode(container, {
-                    text: data.token,
-                    width: 260,
-                    height: 260,
-                    colorDark : "#000000",
-                    colorLight : "#ffffff",
-                    correctLevel : QRCode.CorrectLevel.L // Low correction = menos pixels = mais facil ler
-                });
-                resetTimer();
-            })
-            .catch(err => { console.error("Erro:", err); });
-    }
-
-    function resetTimer() {
-        timeLeft = TIME_LIMIT;
-        clearInterval(timerInterval);
-        const bar = document.getElementById("progressBar");
-        const text = document.getElementById("countdown");
-
-        timerInterval = setInterval(() => {
-            timeLeft--;
-            text.innerText = timeLeft;
-            const pct = (timeLeft / TIME_LIMIT) * 100;
-            bar.style.width = pct + "%";
-            if (timeLeft <= 0) generateQRCode();
-        }, 1000);
-    }
-    
-    // Polling: Verifica se o ponto foi batido a cada 2 segundos
-    setInterval(() => {
-        {% if not bloqueado %}
-        fetch('/ponto/api/check-status')
-            .then(r => r.json())
-            .then(data => {
-                if (data.marcado) {
-                    // Feedback Visual e Redirect
-                    document.body.innerHTML = `
-                        <div class="flex h-screen items-center justify-center bg-emerald-600 text-white flex-col">
-                            <i class="fas fa-check-circle text-6xl mb-4 animate-bounce"></i>
-                            <h1 class="text-3xl font-bold">PONTO REGISTRADO!</h1>
-                            <p class="text-lg mt-2">${data.tipo} às ${data.hora}</p>
-                            <p class="text-sm mt-4 opacity-80">Redirecionando...</p>
-                        </div>
-                    `;
-                    setTimeout(() => { window.location.href = '/'; }, 3000);
-                }
-            });
-        {% endif %}
-    }, 2000);
-
-    document.addEventListener("DOMContentLoaded", () => {
-        {% if not bloqueado %} generateQRCode(); {% endif %}
-    });
-</script>
 {% endblock %}
 

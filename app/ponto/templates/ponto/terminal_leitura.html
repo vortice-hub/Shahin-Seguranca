@@ -1,106 +1,229 @@
 {% extends 'base.html' %}
 {% block content %}
-<script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
 <style>
-    .terminal-mode { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #0f172a; z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; color: white; }
-    #reader { width: 100%; max-width: 600px; border-radius: 20px; overflow: hidden; border: 4px solid #3b82f6; background: black; }
+    .terminal-mode { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #0f172a; z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; color: white; overflow: hidden; }
     
-    /* MODAL OVERLAY */
-    #successModal {
-        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-        background: rgba(0,0,0,0.9);
-        display: flex; align-items: center; justify-content: center;
-        z-index: 10000;
-        opacity: 0; pointer-events: none; transition: opacity 0.3s;
-    }
-    #successModal.active { opacity: 1; pointer-events: all; }
+    #camera-container { width: 100%; max-width: 640px; position: relative; border-radius: 20px; overflow: hidden; border: 4px solid #3b82f6; background: black; box-shadow: 0 10px 30px rgba(59, 130, 246, 0.3); }
+    #video-feed { width: 100%; height: auto; transform: scaleX(-1); } /* Espelhado para parecer um espelho */
+    #scanner-line { position: absolute; top: 0; left: 0; width: 100%; height: 4px; background: #3b82f6; box-shadow: 0 0 10px #3b82f6; animation: scan 2s linear infinite; z-index: 10; }
     
-    .modal-content {
-        background: #064e3b; /* Emerald 900 */
-        padding: 40px; border-radius: 20px; text-align: center;
-        border: 2px solid #10b981;
-        box-shadow: 0 0 50px rgba(16, 185, 129, 0.5);
-        max-width: 90%;
+    @keyframes scan {
+        0% { top: 0; opacity: 0; }
+        10% { opacity: 1; }
+        90% { opacity: 1; }
+        100% { top: 100%; opacity: 0; }
     }
-    .modal-content h2 { font-size: 2rem; font-weight: bold; color: white; margin-bottom: 10px; }
-    .modal-content p { font-size: 1.5rem; color: #a7f3d0; margin-bottom: 30px; }
-    .btn-next {
-        background: white; color: #064e3b; font-size: 1.2rem; font-weight: bold;
-        padding: 15px 40px; border-radius: 50px; border: none; cursor: pointer;
-        display: inline-flex; align-items: center; gap: 10px;
-    }
+
+    /* OVERLAYS E MODAIS */
+    .overlay-modal { position: absolute; inset: 0; background: rgba(15, 23, 42, 0.95); z-index: 20; display: flex; flex-direction: column; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity 0.3s; padding: 20px; text-align: center; backdrop-filter: blur(5px); }
+    .overlay-modal.active { opacity: 1; pointer-events: all; }
+
+    .btn-action { width: 100%; padding: 15px; font-weight: bold; font-size: 1.1rem; border-radius: 12px; transition: transform 0.1s; }
+    .btn-action:active { transform: scale(0.95); }
+    .btn-sim { background: #10b981; color: white; border: 2px solid #059669; }
+    .btn-nao { background: transparent; color: #ef4444; border: 2px solid #ef4444; }
 </style>
 
 <div class="terminal-mode">
-    <div class="mb-4 text-center"><h1 class="text-3xl font-bold tracking-widest text-blue-400">SHAHIN GESTÃO</h1><p class="text-sm text-slate-400">TERMINAL DE PONTO</p></div>
-    <div id="reader"></div>
-    <div class="mt-4"><a href="/logout" class="text-xs text-slate-600 hover:text-slate-400">Sair do Modo Terminal</a></div>
-</div>
+    <div class="mb-6 text-center">
+        <h1 class="text-4xl font-black tracking-widest text-blue-400 uppercase">{{ g.empresa.nome if g.empresa else 'Vortice' }}</h1>
+        <p class="text-lg text-slate-400 font-mono tracking-widest mt-1">TERMINAL BIOMÉTRICO</p>
+    </div>
+    
+    <div id="camera-container">
+        <video id="video-feed" autoplay playsinline muted></video>
+        <div id="scanner-line"></div>
+        <canvas id="canvas-frame" class="hidden"></canvas>
 
-<!-- Modal de Sucesso -->
-<div id="successModal">
-    <div class="modal-content">
-        <i class="fas fa-check-circle text-6xl text-emerald-400 mb-4"></i>
-        <h2 id="modalTitle">REGISTRADO!</h2>
-        <p id="modalMsg">Fulano de Tal<br>14:30</p>
-        <button class="btn-next" onclick="resetScanner()">
-            <i class="fas fa-redo"></i> PRÓXIMO
-        </button>
+        <div id="modal-confirmacao" class="overlay-modal">
+            <div class="w-20 h-20 bg-blue-900/50 rounded-full flex items-center justify-center mb-4 border-2 border-blue-500 shadow-[0_0_30px_rgba(59,130,246,0.5)]">
+                <i class="fas fa-user-check text-4xl text-blue-400"></i>
+            </div>
+            <p class="text-slate-300 text-sm font-bold uppercase tracking-widest mb-1" id="lbl-tipo-ponto">A REGISTRAR ENTRADA</p>
+            <h2 class="text-3xl font-black text-white mb-2" id="lbl-nome-func">João Silva</h2>
+            <p class="text-xl text-blue-300 font-mono mb-8" id="lbl-hora-func">08:00</p>
+            
+            <div class="w-full max-w-xs space-y-3">
+                <button class="btn-action btn-sim" onclick="confirmarPonto()"><i class="fas fa-check-circle mr-2"></i> SIM, SOU EU</button>
+                <button class="btn-action btn-nao" onclick="rejeitarPonto()"><i class="fas fa-times-circle mr-2"></i> NÃO SOU EU</button>
+            </div>
+        </div>
+
+        <div id="modal-sucesso" class="overlay-modal" style="background: rgba(6, 78, 59, 0.95);">
+            <i class="fas fa-check-circle text-7xl text-emerald-400 mb-4 animate-bounce"></i>
+            <h2 class="text-3xl font-black text-white mb-2">PONTO REGISTRADO!</h2>
+            <p class="text-emerald-200 text-lg">Tenha um excelente trabalho.</p>
+        </div>
+
+        <div id="modal-erro" class="overlay-modal" style="background: rgba(127, 29, 29, 0.95);">
+            <i class="fas fa-exclamation-triangle text-7xl text-red-500 mb-6"></i>
+            <h2 class="text-2xl font-black text-white mb-2 uppercase">Biometria Não Reconhecida</h2>
+            <p class="text-red-200 text-lg mb-6 max-w-sm">Esgotou as tentativas ou o rosto não confere com a base de dados.</p>
+            <div class="px-6 py-3 bg-red-900 border border-red-500 text-white font-bold rounded-xl animate-pulse">
+                POR FAVOR, PROCURE O RH.
+            </div>
+            <p class="text-sm text-red-300 font-mono mt-8">Desbloqueando em <span id="lbl-timer-erro">5</span>s...</p>
+        </div>
+    </div>
+
+    <div class="mt-8">
+        <a href="/logout" class="px-6 py-2 bg-slate-800 rounded-full text-xs text-slate-400 hover:text-white transition">Encerrar Modo Terminal</a>
     </div>
 </div>
 
 <script>
-    const html5QrCode = new Html5Qrcode("reader");
-    let isScanning = true;
+    const video = document.getElementById('video-feed');
+    const canvas = document.getElementById('canvas-frame');
+    const ctx = canvas.getContext('2d');
     
-    // Configuração para QR Code denso
-    const config = { fps: 10, qrbox: { width: 300, height: 300 } };
-    
-    html5QrCode.start({ facingMode: "environment" }, config, onScanSuccess, onScanFailure);
+    let stream = null;
+    let isProcessing = false;
+    let scanInterval = null;
+    let falhasConsecutivas = 0;
+    const MAX_FALHAS = 3;
+    let userAlvoId = null;
 
-    function onScanSuccess(decodedText, decodedResult) {
-        if (!isScanning) return;
-        isScanning = false;
-        
-        // Som de Beep
-        try { new Audio("https://actions.google.com/sounds/v1/alarms/beep_short.ogg").play(); } catch(e){}
+    // Inicia a câmera ao carregar a página
+    async function iniciarTerminal() {
+        try {
+            // Tenta usar a câmera frontal do tablet
+            stream = await navigator.mediaDevices.getUserMedia({ 
+                video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } }, 
+                audio: false 
+            });
+            video.srcObject = stream;
+            
+            // Aguarda o vídeo carregar para começar a varredura
+            video.onloadedmetadata = () => {
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                // A cada 2 segundos, tira uma foto silenciosa e manda pra I.A.
+                scanInterval = setInterval(capturarEAnalisar, 2000);
+            };
+        } catch (err) {
+            alert("Erro fatal: Não foi possível acessar a câmera do Terminal.");
+        }
+    }
 
-        fetch('/ponto/api/registrar-leitura', { 
-            method: 'POST', 
-            headers: {'Content-Type': 'application/json'}, 
-            body: JSON.stringify({ token: decodedText }) 
-        })
-        .then(response => response.json())
-        .then(data => {
+    async function capturarEAnalisar() {
+        if (isProcessing) return; // Se já tiver um modal aberto, ignora a foto atual
+
+        // Tira a foto
+        ctx.translate(canvas.width, 0);
+        ctx.scale(-1, 1);
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        ctx.setTransform(1, 0, 0, 1, 0, 0); // Reseta a transformação
+
+        const base64Image = canvas.toDataURL('image/jpeg', 0.8);
+
+        isProcessing = true;
+
+        try {
+            const res = await fetch('/ponto/api/reconhecer-facial', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token() }}' },
+                body: JSON.stringify({ image: base64Image })
+            });
+            const data = await res.json();
+
             if (data.success) {
-                showModal(data.funcionario, data.hora, data.tipo);
+                // I.A. Reconheceu com segurança! Mostra a tela de confirmação.
+                tocarBeep();
+                userAlvoId = data.user_id;
+                document.getElementById('lbl-nome-func').innerText = data.nome;
+                document.getElementById('lbl-tipo-ponto').innerText = `A REGISTRAR ${data.tipo}`;
+                document.getElementById('lbl-hora-func').innerText = data.hora;
+                document.getElementById('modal-confirmacao').classList.add('active');
             } else {
-                alert("ERRO: " + data.error);
-                setTimeout(() => { isScanning = true; }, 2000);
+                // I.A. rejeitou (Ou a sala ta vazia, ou a pessoa não foi reconhecida)
+                if (data.error === "Rosto não reconhecido ou baixa similaridade.") {
+                    registrarFalha();
+                } else {
+                    // Sala vazia ou rosto borrado (ignora e continua rodando silencioso)
+                    isProcessing = false;
+                }
             }
-        })
-        .catch(err => {
-            alert("Erro de conexão.");
-            setTimeout(() => { isScanning = true; }, 2000);
-        });
+        } catch (e) {
+            console.error("Erro na I.A:", e);
+            isProcessing = false;
+        }
     }
 
-    function onScanFailure(error) {}
-
-    function showModal(nome, hora, tipo) {
-        document.getElementById('modalTitle').innerText = tipo.toUpperCase() + " REGISTRADA";
-        document.getElementById('modalMsg').innerHTML = `<strong>${nome}</strong><br>${hora}`;
-        document.getElementById('successModal').classList.add('active');
+    async function confirmarPonto() {
+        // Remove os modais temporariamente
+        document.getElementById('modal-confirmacao').classList.remove('active');
         
-        // Auto-fechar em 4s se ninguem clicar
-        setTimeout(() => {
-            if(document.getElementById('successModal').classList.contains('active')) resetScanner();
-        }, 4000);
+        try {
+            const res = await fetch('/ponto/api/confirmar-ponto', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token() }}' },
+                body: JSON.stringify({ user_id: userAlvoId })
+            });
+            const data = await res.json();
+
+            if (data.success) {
+                falhasConsecutivas = 0; // Reseta as falhas se deu certo
+                document.getElementById('modal-sucesso').classList.add('active');
+                
+                // Fecha o sucesso após 3 segundos e volta a varrer
+                setTimeout(() => {
+                    document.getElementById('modal-sucesso').classList.remove('active');
+                    userAlvoId = null;
+                    isProcessing = false;
+                }, 3000);
+            } else {
+                alert("Erro ao gravar: " + data.error);
+                isProcessing = false;
+            }
+        } catch(e) {
+            alert("Falha de conexão.");
+            isProcessing = false;
+        }
     }
 
-    function resetScanner() {
-        document.getElementById('successModal').classList.remove('active');
-        isScanning = true;
+    function rejeitarPonto() {
+        // O funcionário disse "NÃO SOU EU" (Falso positivo da IA)
+        document.getElementById('modal-confirmacao').classList.remove('active');
+        registrarFalha();
     }
+
+    function registrarFalha() {
+        falhasConsecutivas++;
+        userAlvoId = null;
+
+        if (falhasConsecutivas >= MAX_FALHAS) {
+            // Esgotou as tentativas! Bloqueia o terminal.
+            bloquearTerminal();
+        } else {
+            // Apenas volta a procurar na próxima volta do relógio
+            setTimeout(() => { isProcessing = false; }, 1000);
+        }
+    }
+
+    function bloquearTerminal() {
+        document.getElementById('modal-erro').classList.add('active');
+        let segundos = 5;
+        const lblTimer = document.getElementById('lbl-timer-erro');
+        lblTimer.innerText = segundos;
+
+        const timer = setInterval(() => {
+            segundos--;
+            lblTimer.innerText = segundos;
+            if (segundos <= 0) {
+                clearInterval(timer);
+                document.getElementById('modal-erro').classList.remove('active');
+                falhasConsecutivas = 0; // Zera para o próximo funcionário tentar
+                isProcessing = false; // Libera a câmera novamente
+            }
+        }, 1000);
+    }
+
+    function tocarBeep() {
+        try { new Audio("https://actions.google.com/sounds/v1/alarms/beep_short.ogg").play(); } catch(e){}
+    }
+
+    // Dá a partida no motor!
+    document.addEventListener('DOMContentLoaded', iniciarTerminal);
 </script>
 {% endblock %}
+
