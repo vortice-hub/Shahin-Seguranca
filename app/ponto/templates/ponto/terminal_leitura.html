@@ -27,6 +27,7 @@
         100% { box-shadow: 0 0 0 20px rgba(59, 130, 246, 0); }
     }
 
+    /* Nota: O vídeo continua espelhado para o usuário se ver normalmente, mas o canvas (que vai pro servidor) não será espelhado. */
     #video-feed { width: 100%; height: auto; transform: scaleX(-1); filter: contrast(1.1); }
     
     /* Linha de Scanner Dinâmica */
@@ -108,15 +109,16 @@
 
     async function iniciarTerminal() {
         try {
+            // Pedimos a câmera com uma resolução base, mas deixamos ela usar sua proporção natural
             const stream = await navigator.mediaDevices.getUserMedia({ 
-                video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } }, 
+                video: { facingMode: "user", width: { ideal: 640 } }, 
                 audio: false 
             });
             video.srcObject = stream;
             video.onloadedmetadata = () => {
-                // CORREÇÃO: Resolução aumentada para 640x480 para maior precisão da I.A.
-                canvas.width = 640; 
-                canvas.height = 480;
+                // CORREÇÃO MÁGICA: O canvas copia o tamanho EXATO da câmera, mantendo as proporções do rosto
+                canvas.width = video.videoWidth; 
+                canvas.height = video.videoHeight;
                 setInterval(capturarEAnalisar, 2500); 
             };
         } catch (err) { console.error("Erro câmera:", err); }
@@ -129,14 +131,13 @@
         statusLabel.innerText = "Analisando Rosto...";
         statusLabel.className = "text-blue-400";
 
-        // Captura com a nova resolução definida no canvas
-        ctx.save();
-        ctx.translate(canvas.width, 0);
-        ctx.scale(-1, 1);
-        ctx.drawImage(video, 0, 0, 640, 480);
-        ctx.restore();
+        // Limpa o canvas antes de desenhar
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        // CORREÇÃO: Qualidade aumentada para 0.8 para evitar ruídos no reconhecimento
+        // CORREÇÃO: Removemos o espelhamento (scale(-1, 1)). A I.A. precisa da foto em seu estado natural.
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+        // Qualidade mantida em 0.8 para garantir detalhes nítidos
         const base64Image = canvas.toDataURL('image/jpeg', 0.8);
 
         isProcessing = true;
