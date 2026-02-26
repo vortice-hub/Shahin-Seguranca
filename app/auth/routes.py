@@ -11,7 +11,7 @@ import string
 auth_bp = Blueprint('auth', __name__, template_folder='templates')
 
 # ==============================================================================
-# 🔐 PORTAL DE LOGIN CAMALEÃO (WHITE-LABEL)
+# 🔐 PORTAL DE LOGIN CAMALEÃO (WHITE-LABEL E HÍBRIDO)
 # ==============================================================================
 @auth_bp.route('/login', methods=['GET', 'POST'])
 @auth_bp.route('/login/<slug>', methods=['GET', 'POST'])
@@ -31,13 +31,20 @@ def login(slug=None):
         g.empresa = empresa_login
     
     if request.method == 'POST':
-        login_input = request.form.get('username', '').replace('.', '').replace('-', '').strip()
+        raw_input = request.form.get('username', '').strip()
         password = request.form.get('password')
         
-        user = User.query.filter_by(username=login_input).first()
-        
+        # LÓGICA HÍBRIDA: Se o input contiver letras, procura como texto cru (Terminal)
+        # Caso contrário, remove pontos e traços assumindo que é CPF
+        if re.search('[a-zA-Z]', raw_input):
+            user = User.query.filter_by(username=raw_input.lower()).first()
+        else:
+            cpf_limpo = raw_input.replace('.', '').replace('-', '')
+            user = User.query.filter_by(username=cpf_limpo).first()
+
+        # Fallback legado de segurança
         if not user:
-            user = User.query.filter_by(username=request.form.get('username')).first()
+            user = User.query.filter_by(username=raw_input).first()
 
         if user and user.check_password(password):
             # Validação de Segurança Multi-Tenant no Login
@@ -55,7 +62,7 @@ def login(slug=None):
                 return redirect(url_for('auth.primeiro_acesso'))
             return redirect(url_for('main.dashboard'))
         
-        flash('CPF ou senha inválidos.', 'error')
+        flash('Utilizador ou senha inválidos.', 'error')
         
     return render_template('auth/login.html', empresa_login=empresa_login)
 

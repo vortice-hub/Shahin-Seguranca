@@ -77,6 +77,7 @@ class EmpresaService:
         db.session.add(cargo_master)
         db.session.flush()
 
+        # 1. Criação do Utilizador Master
         novo_user = User(
             username=dados_master.get('cpf').replace('.', '').replace('-', ''),
             real_name=dados_master.get('nome_completo'),
@@ -88,6 +89,19 @@ class EmpresaService:
         )
         novo_user.set_password(dados_master.get('senha_provisoria', '123456'))
         db.session.add(novo_user)
+
+        # 2. Criação Automática da Conta Terminal
+        novo_terminal = User(
+            username=f"terminal_{slug}",
+            real_name=f"Terminal ({nome_empresa})",
+            cpf=None, # Terminais não têm CPF
+            role="Terminal",
+            cargo_id=None,
+            empresa_id=nova_empresa.id,
+            is_first_access=False # Não precisa resetar a senha, é um tablet
+        )
+        novo_terminal.set_password(f"terminal1234{slug}")
+        db.session.add(novo_terminal)
 
         self.empresa_repo.commit()
         return nova_empresa, novo_user
