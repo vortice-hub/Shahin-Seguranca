@@ -69,8 +69,8 @@
         
         <video id="video-feed" autoplay playsinline muted></video>
         
-        <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[220px] h-[300px] border-4 border-dashed border-white/50 rounded-[50%] z-20 pointer-events-none shadow-[0_0_0_9999px_rgba(0,0,0,0.6)] flex flex-col items-center justify-center transition-all duration-300">
-            <div class="w-[80px] h-[2px] bg-white/30 absolute top-[35%]"></div>
+        <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[320px] h-[450px] sm:w-[380px] sm:h-[500px] border-4 border-dashed border-white/50 rounded-[50%] z-20 pointer-events-none shadow-[0_0_0_9999px_rgba(0,0,0,0.6)] flex flex-col items-center justify-center transition-all duration-300">
+            <div class="w-[120px] h-[2px] bg-white/30 absolute top-[35%]"></div>
         </div>
         
         <div class="absolute bottom-8 w-full flex justify-center z-30 pointer-events-none">
@@ -123,11 +123,9 @@
     let userAlvoId = null;
 
     function entrarModoQuiosque() {
-        // Esconde o ecrã inicial e mostra o terminal (O CSS Falso Fullscreen garante a imersão)
         document.getElementById('kiosk-start-screen').classList.add('hidden');
         document.getElementById('terminal-ui').classList.remove('hidden');
 
-        // Tenta o Fullscreen nativo sem 'await' para evitar travamentos
         try {
             const elem = document.documentElement;
             if (elem.requestFullscreen) { elem.requestFullscreen(); }

@@ -2,6 +2,7 @@ import face_recognition
 import numpy as np
 import base64
 import io
+from PIL import Image
 
 class FaceService:
     def _decode_base64_image(self, base64_str):
@@ -10,11 +11,18 @@ class FaceService:
             base64_str = base64_str.split(',')[1]
             
         img_data = base64.b64decode(base64_str)
+        image = Image.open(io.BytesIO(img_data))
         
-        # CORREÇÃO DEFINITIVA: Em vez de tentarmos converter com PIL e Numpy manualmente,
-        # usamos a função nativa da própria biblioteca para carregar a imagem na memória.
-        # Isto elimina 100% o erro "Unsupported image type, must be 8bit gray or RGB image".
-        image_array = face_recognition.load_image_file(io.BytesIO(img_data))
+        # 1. Força a imagem a ser RGB (remove qualquer canal de transparência oculto)
+        image = image.convert("RGB")
+        
+        # 2. Converte para matriz matemática forçando 8-bits
+        image_array = np.array(image, dtype=np.uint8)
+        
+        # 3. A BALA DE PRATA PARA O ERRO DO DLIB
+        # Garante que os dados na RAM estão num bloco de memória "contíguo".
+        # O C++ crasha com "Unsupported image type" se os pixels estiverem dispersos na memória.
+        image_array = np.ascontiguousarray(image_array)
             
         return image_array, img_data
 
