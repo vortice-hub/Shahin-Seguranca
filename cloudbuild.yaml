@@ -1,0 +1,40 @@
+steps:
+  # 1. Tenta puxar a imagem anterior para usar como cache
+  - name: 'gcr.io/cloud-builders/docker'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        docker pull gcr.io/$PROJECT_ID/shahin-app:latest || exit 0
+
+  # 2. Constrói a imagem usando o cache da anterior (--cache-from)
+  - name: 'gcr.io/cloud-builders/docker'
+    args: [
+      'build',
+      '-t', 'gcr.io/$PROJECT_ID/shahin-app:latest',
+      '--cache-from', 'gcr.io/$PROJECT_ID/shahin-app:latest',
+      '.'
+    ]
+
+  # 3. Faz o push da nova imagem (que servirá de cache para a próxima)
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/shahin-app:latest']
+
+  # 4. Faz o deploy no Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'shahin-app' # Nome do seu serviço no Cloud Run
+      - '--image'
+      - 'gcr.io/$PROJECT_ID/shahin-app:latest'
+      - '--region'
+      - 'us-central1' # Mude para a sua região se for diferente
+      - '--platform'
+      - 'managed'
+
+timeout: '1800s' # 30 minutos de limite para garantir a 1ª compilação
+options:
+  machineType: 'E2_HIGHCPU_8' # Usa uma máquina potente para compilar a I.A. mais rápido
+
