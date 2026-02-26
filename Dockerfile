@@ -1,7 +1,7 @@
 # Usa a versão do Python que você já definiu no runtime.txt
 FROM python:3.11-slim
 
-# Define variáveis para o Python não gerar arquivos .pyc e logs aparecerem na hora
+# Define variáveis para o Python não gerar arquivos .pyc e logs aparecerem direto no console
 ENV PYTHONUNBUFFERED True
 ENV APP_HOME /app
 
@@ -12,18 +12,25 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
 WORKDIR $APP_HOME
 
-# Instala dependências do sistema (Linux) necessárias para o PostgreSQL e PDF
+# Instala dependências do sistema (Linux) necessárias para o PostgreSQL, fuso horário
+# E AGORA PARA A INTELIGÊNCIA ARTIFICIAL (cmake, g++, make, libgl)
 RUN apt-get update && apt-get install -y \
     gcc \
     libpq-dev \
     tzdata \
+    cmake \
+    g++ \
+    make \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
 # Copia e instala as bibliotecas do projeto
 COPY requirements.txt .
+# NOTA: O deploy vai demorar um pouco mais nesta etapa (o dlib será compilado do zero).
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copia todo o código do Shahin para dentro do container
+# Copia todo o código do sistema para dentro do container
 COPY . .
 
 # Comando de inicialização (Igual ao seu Procfile)
