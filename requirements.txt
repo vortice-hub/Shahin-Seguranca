@@ -21,7 +21,6 @@ pandas
 openpyxl
 pywebpush
 Pillow>=10.0.0
-face_recognition
 opencv-python-headless
 numpy
-
+face_recognition

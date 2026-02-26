@@ -109,15 +109,15 @@
     async function iniciarTerminal() {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ 
-                video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } }, 
+                video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } }, 
                 audio: false 
             });
             video.srcObject = stream;
             video.onloadedmetadata = () => {
-                // Configuramos o canvas de captura para ser PEQUENO (Otimização de Performance)
-                canvas.width = 320; 
-                canvas.height = 240;
-                setInterval(capturarEAnalisar, 2500); // Intervalo de 2.5s para não sobrecarregar
+                // CORREÇÃO: Resolução aumentada para 640x480 para maior precisão da I.A.
+                canvas.width = 640; 
+                canvas.height = 480;
+                setInterval(capturarEAnalisar, 2500); 
             };
         } catch (err) { console.error("Erro câmera:", err); }
     }
@@ -125,20 +125,19 @@
     async function capturarEAnalisar() {
         if (isProcessing) return;
 
-        // Visual: Indica início da análise
         container.className = "analyzing";
         statusLabel.innerText = "Analisando Rosto...";
         statusLabel.className = "text-blue-400";
 
-        // Captura e Redimensionamento (Super Rápido)
+        // Captura com a nova resolução definida no canvas
         ctx.save();
         ctx.translate(canvas.width, 0);
         ctx.scale(-1, 1);
-        ctx.drawImage(video, 0, 0, 320, 240);
+        ctx.drawImage(video, 0, 0, 640, 480);
         ctx.restore();
 
-        // Qualidade 0.6 para upload instantâneo
-        const base64Image = canvas.toDataURL('image/jpeg', 0.6);
+        // CORREÇÃO: Qualidade aumentada para 0.8 para evitar ruídos no reconhecimento
+        const base64Image = canvas.toDataURL('image/jpeg', 0.8);
 
         isProcessing = true;
 
@@ -162,7 +161,6 @@
                 document.getElementById('lbl-hora-func').innerText = data.hora;
                 document.getElementById('modal-confirmacao').classList.add('active');
             } else {
-                // Reset visual para procurar novamente
                 container.className = "searching";
                 statusLabel.innerText = "Aguardando Rosto...";
                 statusLabel.className = "text-yellow-500";
