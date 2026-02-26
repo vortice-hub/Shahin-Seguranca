@@ -66,13 +66,17 @@
             <button onclick="cancelarCamera()" class="text-white/50 hover:text-white"><i class="fas fa-times text-lg"></i></button>
         </div>
         
-        <div class="relative bg-black h-[400px] w-full flex items-center justify-center overflow-hidden">
-            <video id="video-feed" autoplay playsinline class="absolute min-w-full min-h-full object-cover opacity-50 transform scale-x-[-1]"></video>
+        <div class="relative bg-black h-[450px] w-full flex items-center justify-center overflow-hidden">
+            <video id="video-feed" autoplay playsinline class="absolute min-w-full min-h-full object-cover transform scale-x-[-1]"></video>
             
-            <div class="absolute inset-0 border-[40px] border-black/60 rounded-full z-10 scale-125 pointer-events-none"></div>
-            <div class="absolute inset-0 border-4 border-dashed border-white/50 rounded-full z-20 m-12 pointer-events-none animate-[spin_10s_linear_infinite]"></div>
+            <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[220px] h-[300px] border-4 border-dashed border-blue-400 rounded-[50%] z-20 pointer-events-none shadow-[0_0_0_9999px_rgba(0,0,0,0.7)] flex flex-col items-center justify-center">
+                <div class="w-[80px] h-[2px] bg-blue-400/50 absolute top-[35%]"></div>
+            </div>
             
-            <p class="absolute bottom-6 z-30 text-white font-bold text-sm bg-black/50 px-4 py-1 rounded-full backdrop-blur-sm">Encaixe o rosto no círculo</p>
+            <div class="absolute bottom-6 z-30 flex flex-col items-center w-full px-4">
+                <p class="text-white font-black text-sm bg-blue-600 px-5 py-2 rounded-full shadow-lg mb-2 text-center">Encaixe o rosto no formato</p>
+                <p class="text-white text-[11px] font-bold bg-black/60 px-4 py-1.5 rounded-full text-center tracking-wide">Aproxime ou afaste até preencher a linha</p>
+            </div>
         </div>
 
         <div class="p-6 bg-slate-50 border-t border-slate-200">

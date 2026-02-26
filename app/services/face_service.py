@@ -84,17 +84,17 @@ class FaceService:
             if not known_encodings:
                 return None # Ninguém na empresa tem biometria cadastrada
                 
-            # --- OTIMIZAÇÃO VETORIAL (Passo 2) ---
+            # --- OTIMIZAÇÃO VETORIAL ---
             # A função face_distance do NumPy compara 'unknown_encoding' contra TODOS os 'known_encodings' simultaneamente.
-            # Isso reduz o tempo de busca de O(N) linear para O(1) em termos de chamadas Python.
             face_distances = face_recognition.face_distance(known_encodings, unknown_encoding)
             
             # Encontra o índice matemático com a menor distância (o rosto mais parecido)
             best_match_index = np.argmin(face_distances)
             
-            # Tolerância padrão do face_recognition é 0.6. 
-            # Mantemos < 0.50 = Muito Rigoroso (Anti-fraude forte)
-            if face_distances[best_match_index] < 0.50:
+            # --- A MÁGICA ACONTECE AQUI ---
+            # Alterado de 0.50 para 0.60. Agora o sistema é mais tolerante com iluminação e ângulos,
+            # tornando o uso diário muito mais fácil e fluido para os funcionários.
+            if face_distances[best_match_index] < 0.60:
                 return known_user_ids[best_match_index]
                 
             return None # Rosto não reconhecido com a precisão exigida

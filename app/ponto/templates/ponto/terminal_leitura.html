@@ -31,7 +31,7 @@
     #video-feed { width: 100%; height: auto; transform: scaleX(-1); filter: contrast(1.1); }
     
     /* Linha de Scanner Dinâmica */
-    #scanner-line { position: absolute; top: 0; left: 0; width: 100%; height: 2px; background: rgba(59, 130, 246, 0.5); box-shadow: 0 0 15px #3b82f6; animation: scan 2.5s linear infinite; z-index: 10; display: none; }
+    #scanner-line { position: absolute; top: 0; left: 0; width: 100%; height: 2px; background: rgba(59, 130, 246, 0.5); box-shadow: 0 0 15px #3b82f6; animation: scan 2.5s linear infinite; z-index: 30; display: none; }
     .searching #scanner-line, .analyzing #scanner-line { display: block; }
     .analyzing #scanner-line { background: #3b82f6; height: 4px; animation-duration: 1s; }
 
@@ -42,7 +42,7 @@
         position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
         padding: 8px 20px; background: rgba(15, 23, 42, 0.8); backdrop-filter: blur(10px);
         border-radius: 100px; font-size: 10px; font-weight: 900; letter-spacing: 2px;
-        text-transform: uppercase; z-index: 30; border: 1px solid rgba(255,255,255,0.1);
+        text-transform: uppercase; z-index: 35; border: 1px solid rgba(255,255,255,0.1);
     }
 
     .overlay-modal { position: absolute; inset: 0; background: rgba(15, 23, 42, 0.98); z-index: 40; display: flex; flex-direction: column; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: all 0.3s; padding: 40px; text-align: center; }
@@ -61,7 +61,17 @@
     
     <div id="camera-container" class="searching">
         <div id="status-label" class="text-yellow-500">Aguardando Rosto...</div>
+        
         <video id="video-feed" autoplay playsinline muted></video>
+        
+        <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[220px] h-[300px] border-4 border-dashed border-white/50 rounded-[50%] z-20 pointer-events-none shadow-[0_0_0_9999px_rgba(0,0,0,0.6)] flex flex-col items-center justify-center transition-all duration-300">
+            <div class="w-[80px] h-[2px] bg-white/30 absolute top-[35%]"></div>
+        </div>
+        
+        <div class="absolute bottom-8 w-full flex justify-center z-30 pointer-events-none">
+            <p class="text-white text-[10px] font-black bg-black/70 px-5 py-2 rounded-full tracking-widest uppercase border border-white/10 shadow-lg">Encaixe o rosto no oval</p>
+        </div>
+
         <div id="scanner-line"></div>
         <canvas id="canvas-frame" class="hidden"></canvas>
 
@@ -116,7 +126,7 @@
             });
             video.srcObject = stream;
             video.onloadedmetadata = () => {
-                // CORREÇÃO MÁGICA: O canvas copia o tamanho EXATO da câmera, mantendo as proporções do rosto
+                // O canvas copia o tamanho EXATO da câmera, mantendo as proporções do rosto
                 canvas.width = video.videoWidth; 
                 canvas.height = video.videoHeight;
                 setInterval(capturarEAnalisar, 2500); 
@@ -134,7 +144,7 @@
         // Limpa o canvas antes de desenhar
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        // CORREÇÃO: Removemos o espelhamento (scale(-1, 1)). A I.A. precisa da foto em seu estado natural.
+        // Removemos o espelhamento (scale(-1, 1)). A I.A. precisa da foto em seu estado natural.
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
         // Qualidade mantida em 0.8 para garantir detalhes nítidos
@@ -198,7 +208,6 @@
         } catch(e) { resetSistema(); }
     }
 
-    // NOVA FUNÇÃO ADICIONADA AQUI
     function rejeitarPonto() {
         document.getElementById('modal-confirmacao').classList.remove('active');
         resetSistema();
