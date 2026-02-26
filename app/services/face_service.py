@@ -1,28 +1,29 @@
 import face_recognition
 import numpy as np
 import base64
-import io
-from PIL import Image
+import cv2
 
 class FaceService:
     def _decode_base64_image(self, base64_str):
-        """Converte a string base64 do frontend num formato que a IA consiga ler."""
+        """Converte a string base64 do frontend num formato que a IA consiga ler usando OpenCV."""
         if ',' in base64_str:
             base64_str = base64_str.split(',')[1]
             
         img_data = base64.b64decode(base64_str)
-        image = Image.open(io.BytesIO(img_data))
         
-        # 1. Força a imagem a ser RGB (remove qualquer canal de transparência oculto)
-        image = image.convert("RGB")
+        # 1. Converte os bytes brutos para um array NumPy unidimensional (1D) de 8-bits
+        nparr = np.frombuffer(img_data, np.uint8)
         
-        # 2. Converte para matriz matemática forçando 8-bits
-        image_array = np.array(image, dtype=np.uint8)
+        # 2. O ROLO COMPRESSOR: O OpenCV lê esse array bruto e monta a imagem perfeitamente.
+        # Ele descarta qualquer metadado lixo do telemóvel e garante que a memória está contígua.
+        img_cv2 = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         
-        # 3. A BALA DE PRATA PARA O ERRO DO DLIB
-        # Garante que os dados na RAM estão num bloco de memória "contíguo".
-        # O C++ crasha com "Unsupported image type" se os pixels estiverem dispersos na memória.
-        image_array = np.ascontiguousarray(image_array)
+        if img_cv2 is None:
+            raise ValueError("O OpenCV não conseguiu descodificar a imagem.")
+            
+        # 3. O OpenCV lê em formato BGR (Azul, Verde, Vermelho), mas a IA exige RGB.
+        # Fazemos a conversão de cores final aqui.
+        image_array = cv2.cvtColor(img_cv2, cv2.COLOR_BGR2RGB)
             
         return image_array, img_data
 

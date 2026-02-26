@@ -1,7 +1,6 @@
 {% extends 'base.html' %}
 {% block content %}
 <style>
-    /* O Falso Fullscreen em CSS que garante a imersão independentemente do navegador */
     .terminal-mode { position: fixed; inset: 0; background: #0f172a; z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; color: white; overflow: hidden; font-family: 'Inter', sans-serif; width: 100vw; height: 100vh; }
     
     #camera-container { 
@@ -69,8 +68,8 @@
         
         <video id="video-feed" autoplay playsinline muted></video>
         
-        <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[320px] h-[450px] sm:w-[380px] sm:h-[500px] border-4 border-dashed border-white/50 rounded-[50%] z-20 pointer-events-none shadow-[0_0_0_9999px_rgba(0,0,0,0.6)] flex flex-col items-center justify-center transition-all duration-300">
-            <div class="w-[120px] h-[2px] bg-white/30 absolute top-[35%]"></div>
+        <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[440px] h-[600px] max-w-[85vw] max-h-[70vh] border-4 border-dashed border-white/50 rounded-[50%] z-20 pointer-events-none shadow-[0_0_0_9999px_rgba(0,0,0,0.7)] flex flex-col items-center justify-center transition-all duration-300">
+            <div class="w-[50%] h-[2px] bg-white/30 absolute top-[35%]"></div>
         </div>
         
         <div class="absolute bottom-8 w-full flex justify-center z-30 pointer-events-none">
