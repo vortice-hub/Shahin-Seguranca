@@ -27,7 +27,6 @@
         100% { box-shadow: 0 0 0 20px rgba(59, 130, 246, 0); }
     }
 
-    /* Nota: O vídeo continua espelhado para o usuário se ver normalmente, mas o canvas (que vai pro servidor) não será espelhado. */
     #video-feed { width: 100%; height: auto; transform: scaleX(-1); filter: contrast(1.1); }
     
     /* Linha de Scanner Dinâmica */
@@ -53,8 +52,17 @@
     .btn-nao { background: rgba(239, 68, 68, 0.1); color: #ef4444; border: 2px solid #ef4444; margin-top: 15px; }
 </style>
 
+<div id="kiosk-start-screen" class="fixed inset-0 bg-slate-900 z-[10000] flex flex-col items-center justify-center text-white">
+    <i class="fas fa-tablet-alt text-6xl text-blue-500 mb-6 animate-bounce"></i>
+    <h2 class="text-3xl font-black mb-2">{{ g.empresa.nome if g.empresa else 'Vortice' }}</h2>
+    <p class="text-slate-400 mb-8 font-medium">Terminal de Ponto Inteligente</p>
+    <button onclick="entrarModoQuiosque()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-5 px-10 rounded-2xl shadow-[0_10px_30px_rgba(37,99,235,0.4)] transition transform hover:scale-105 active:scale-95 text-xl flex items-center gap-3">
+        <i class="fas fa-play"></i> INICIAR TERMINAL
+    </button>
+</div>
+
 <div class="terminal-mode">
-    <div class="mb-8 text-center">
+    <div class="mb-8 text-center" id="header-terminal">
         <h1 class="text-3xl font-black tracking-tighter text-white">{{ g.empresa.nome if g.empresa else 'Vortice' }}</h1>
         <div class="h-1 w-12 bg-blue-500 mx-auto mt-2 rounded-full"></div>
     </div>
@@ -101,7 +109,7 @@
     </div>
 
     <div class="mt-12 opacity-30 hover:opacity-100 transition">
-        <a href="/logout" class="text-[10px] font-bold text-slate-500 uppercase tracking-widest border-b border-slate-700 pb-1">Sair do Modo Terminal</a>
+        <button onclick="sairModoQuiosque()" class="text-[10px] font-bold text-slate-500 uppercase tracking-widest border-b border-slate-700 pb-1">Sair do Modo Terminal</button>
     </div>
 </div>
 
@@ -117,16 +125,42 @@
     const MAX_FALHAS = 3;
     let userAlvoId = null;
 
+    // Função que ativa o ecrã inteiro e depois inicia a câmara
+    async function entrarModoQuiosque() {
+        try {
+            const elem = document.documentElement;
+            if (elem.requestFullscreen) {
+                await elem.requestFullscreen();
+            } else if (elem.webkitRequestFullscreen) { /* Safari */
+                await elem.webkitRequestFullscreen();
+            } else if (elem.msRequestFullscreen) { /* IE11 */
+                await elem.msRequestFullscreen();
+            }
+        } catch (e) {
+            console.log("Modo ecrã inteiro não suportado.");
+        }
+        
+        document.getElementById('kiosk-start-screen').classList.add('hidden');
+        iniciarTerminal();
+    }
+
+    // Função para sair e voltar ao menu
+    function sairModoQuiosque() {
+        try {
+            if (document.exitFullscreen) { document.exitFullscreen(); } 
+            else if (document.webkitExitFullscreen) { document.webkitExitFullscreen(); }
+        } catch (e) {}
+        window.location.href = '/logout';
+    }
+
     async function iniciarTerminal() {
         try {
-            // Pedimos a câmera com uma resolução base, mas deixamos ela usar sua proporção natural
             const stream = await navigator.mediaDevices.getUserMedia({ 
                 video: { facingMode: "user", width: { ideal: 640 } }, 
                 audio: false 
             });
             video.srcObject = stream;
             video.onloadedmetadata = () => {
-                // O canvas copia o tamanho EXATO da câmera, mantendo as proporções do rosto
                 canvas.width = video.videoWidth; 
                 canvas.height = video.videoHeight;
                 setInterval(capturarEAnalisar, 2500); 
@@ -141,15 +175,10 @@
         statusLabel.innerText = "Analisando Rosto...";
         statusLabel.className = "text-blue-400";
 
-        // Limpa o canvas antes de desenhar
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-        // Removemos o espelhamento (scale(-1, 1)). A I.A. precisa da foto em seu estado natural.
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-        // Qualidade mantida em 0.8 para garantir detalhes nítidos
         const base64Image = canvas.toDataURL('image/jpeg', 0.8);
-
         isProcessing = true;
 
         try {
@@ -249,8 +278,6 @@
     function tocarBeep() {
         try { new Audio("https://actions.google.com/sounds/v1/alarms/beep_short.ogg").play(); } catch(e){}
     }
-
-    document.addEventListener('DOMContentLoaded', iniciarTerminal);
 </script>
 {% endblock %}
 

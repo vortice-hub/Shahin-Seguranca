@@ -18,7 +18,9 @@ class FaceService:
         if image.mode != "RGB":
             image = image.convert("RGB")
             
-        return np.array(image), img_data
+        # CORREÇÃO FASE 1: Força a matriz numpy a ser estritamente de 8-bits (uint8).
+        # Isto evita o erro "Unsupported image type, must be 8bit gray or RGB image" no dlib.
+        return np.array(image, dtype=np.uint8), img_data
 
     def cadastrar_face(self, base64_image):
         """
@@ -85,15 +87,12 @@ class FaceService:
                 return None # Ninguém na empresa tem biometria cadastrada
                 
             # --- OTIMIZAÇÃO VETORIAL ---
-            # A função face_distance do NumPy compara 'unknown_encoding' contra TODOS os 'known_encodings' simultaneamente.
             face_distances = face_recognition.face_distance(known_encodings, unknown_encoding)
             
             # Encontra o índice matemático com a menor distância (o rosto mais parecido)
             best_match_index = np.argmin(face_distances)
             
-            # --- A MÁGICA ACONTECE AQUI ---
-            # Alterado de 0.50 para 0.60. Agora o sistema é mais tolerante com iluminação e ângulos,
-            # tornando o uso diário muito mais fácil e fluido para os funcionários.
+            # Tolerância otimizada para portarias (0.60)
             if face_distances[best_match_index] < 0.60:
                 return known_user_ids[best_match_index]
                 

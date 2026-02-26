@@ -1,8 +1,8 @@
 {% extends 'base.html' %}
 {% block content %}
-<div class="max-w-md mx-auto text-center">
+<div class="max-w-md mx-auto text-center relative">
     
-    <div class="mb-6">
+    <div class="mb-6" id="header-titulos">
         <h2 class="text-2xl font-bold text-slate-800">Ponto Digital</h2>
         <p class="text-sm text-slate-500">Reconhecimento Facial Vortice</p>
     </div>
@@ -66,7 +66,7 @@
             <button onclick="cancelarCamera()" class="text-white/50 hover:text-white"><i class="fas fa-times text-lg"></i></button>
         </div>
         
-        <div class="relative bg-black h-[450px] w-full flex items-center justify-center overflow-hidden">
+        <div class="relative bg-black h-[60vh] md:h-[450px] w-full flex items-center justify-center overflow-hidden">
             <video id="video-feed" autoplay playsinline class="absolute min-w-full min-h-full object-cover transform scale-x-[-1]"></video>
             
             <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[220px] h-[300px] border-4 border-dashed border-blue-400 rounded-[50%] z-20 pointer-events-none shadow-[0_0_0_9999px_rgba(0,0,0,0.7)] flex flex-col items-center justify-center">
@@ -97,17 +97,43 @@
         </div>
     </div>
 
+    <div id="modal-erro-custom" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[10000] hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl p-8 w-full max-w-sm text-center shadow-2xl transform transition-all scale-100 border-t-4 border-red-500">
+            <div class="w-20 h-20 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4 border-4 border-red-100">
+                <i class="fas fa-user-times text-4xl text-red-500"></i>
+            </div>
+            <h3 class="text-2xl font-black text-slate-800 mb-2">Foto Recusada</h3>
+            <p id="msg-erro-custom" class="text-sm text-slate-600 mb-8 font-medium">Motivo do erro aparecerá aqui.</p>
+            <button onclick="fecharModalErro()" class="w-full bg-slate-800 text-white font-bold py-4 rounded-xl hover:bg-slate-700 transition shadow-lg flex items-center justify-center gap-2">
+                <i class="fas fa-redo"></i> TENTAR NOVAMENTE
+            </button>
+        </div>
+    </div>
+
     <script>
         const video = document.getElementById('video-feed');
         const canvas = document.getElementById('canvas-foto');
         let stream = null;
 
         async function iniciarCamera() {
+            // Tenta forçar o modo Ecrã Inteiro (Fullscreen)
+            try {
+                if (document.documentElement.requestFullscreen) {
+                    await document.documentElement.requestFullscreen();
+                } else if (document.documentElement.webkitRequestFullscreen) { /* Safari */
+                    await document.documentElement.webkitRequestFullscreen();
+                } else if (document.documentElement.msRequestFullscreen) { /* IE11 */
+                    await document.documentElement.msRequestFullscreen();
+                }
+            } catch (e) {
+                console.log("Modo ecrã inteiro não suportado ou bloqueado no dispositivo.");
+            }
+
+            document.getElementById('header-titulos').classList.add('hidden');
             document.getElementById('step-rules').classList.add('hidden');
             document.getElementById('step-camera').classList.remove('hidden');
             
             try {
-                // Solicita a câmera frontal (user)
                 stream = await navigator.mediaDevices.getUserMedia({ 
                     video: { facingMode: "user", width: { ideal: 720 }, height: { ideal: 720 } }, 
                     audio: false 
@@ -124,28 +150,33 @@
                 stream.getTracks().forEach(track => track.stop());
             }
             document.getElementById('step-camera').classList.add('hidden');
+            document.getElementById('header-titulos').classList.remove('hidden');
             document.getElementById('step-rules').classList.remove('hidden');
+            
+            // Sai do modo Ecrã Inteiro se estiver ativo
+            try {
+                if (document.fullscreenElement || document.webkitFullscreenElement) {
+                    if (document.exitFullscreen) { document.exitFullscreen(); } 
+                    else if (document.webkitExitFullscreen) { document.webkitExitFullscreen(); }
+                }
+            } catch (e) {}
         }
 
         async function tirarFoto() {
-            // Prepara a foto
             const context = canvas.getContext('2d');
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
             
-            // Opcional: Inverter a imagem no canvas caso o espelhamento do vídeo atrapalhe o face_recognition
             context.translate(canvas.width, 0);
             context.scale(-1, 1);
             context.drawImage(video, 0, 0, canvas.width, canvas.height);
             
             const imageDataBase64 = canvas.toDataURL('image/jpeg', 0.85);
             
-            // Pára a câmera e mostra a tela de carregamento
             if (stream) stream.getTracks().forEach(track => track.stop());
             document.getElementById('step-camera').classList.add('hidden');
             document.getElementById('step-loading').classList.remove('hidden');
 
-            // Envia para o Backend (I.A.)
             try {
                 const response = await fetch('/ponto/api/cadastrar-biometria', {
                     method: 'POST',
@@ -160,18 +191,32 @@
 
                 if (data.success) {
                     Toastify({ text: "Biometria Ativada! 🎉", duration: 3000, style: { background: "#10b981" } }).showToast();
-                    setTimeout(() => { window.location.reload(); }, 1500); // Recarrega para mostrar a tela verde
+                    setTimeout(() => { window.location.reload(); }, 1500); 
                 } else {
-                    alert("⚠️ FOTO RECUSADA:\n" + data.error);
-                    // Volta para as regras para tentar novamente
+                    // Substitui o Alert Padrão pelo Modal Profissional Customizado
+                    document.getElementById('msg-erro-custom').innerText = data.error;
                     document.getElementById('step-loading').classList.add('hidden');
-                    document.getElementById('step-rules').classList.remove('hidden');
+                    document.getElementById('modal-erro-custom').classList.remove('hidden');
                 }
             } catch (err) {
-                alert("Erro de conexão ao enviar a foto.");
+                document.getElementById('msg-erro-custom').innerText = "Erro de conexão com o servidor. Verifique a internet e tente novamente.";
                 document.getElementById('step-loading').classList.add('hidden');
-                document.getElementById('step-rules').classList.remove('hidden');
+                document.getElementById('modal-erro-custom').classList.remove('hidden');
             }
+        }
+
+        function fecharModalErro() {
+            document.getElementById('modal-erro-custom').classList.add('hidden');
+            document.getElementById('step-rules').classList.remove('hidden');
+            document.getElementById('header-titulos').classList.remove('hidden');
+            
+            // Se falhou, sai do fullscreen para não prender o funcionário
+            try {
+                if (document.fullscreenElement || document.webkitFullscreenElement) {
+                    if (document.exitFullscreen) { document.exitFullscreen(); } 
+                    else if (document.webkitExitFullscreen) { document.webkitExitFullscreen(); }
+                }
+            } catch (e) {}
         }
     </script>
     {% endif %}
