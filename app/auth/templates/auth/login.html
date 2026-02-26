@@ -17,10 +17,10 @@
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
             
             <div>
-                <label class="label-pro ml-1">CPF ou Terminal</label>
+                <label class="label-pro ml-1">CPF</label>
                 <div class="relative">
                     <i class="fas fa-user absolute left-4 top-4 text-slate-400"></i>
-                    <input type="text" name="username" id="cpf_input" placeholder="000.000.000-00 ou terminal_..." 
+                    <input type="text" name="username" id="cpf_input" placeholder="000.000.000-00" 
                            class="input-pro pl-12 font-mono" required>
                 </div>
             </div>
@@ -54,8 +54,7 @@
     input.addEventListener('input', (e) => {
         let rawValue = e.target.value;
         
-        // MÁSCARA HÍBRIDA: Se o utilizador digitar alguma letra (como 'terminal_'),
-        // não aplica a máscara de CPF e deixa o texto correr livremente.
+        // MÁSCARA HÍBRIDA "SECRETA": Se digitar letras, desliga a formatação do CPF.
         if (/[a-zA-Z]/.test(rawValue)) {
             return;
         }

@@ -62,7 +62,7 @@ def login(slug=None):
                 return redirect(url_for('auth.primeiro_acesso'))
             return redirect(url_for('main.dashboard'))
         
-        flash('Utilizador ou senha inválidos.', 'error')
+        flash('CPF, Terminal ou senha inválidos.', 'error')
         
     return render_template('auth/login.html', empresa_login=empresa_login)
 

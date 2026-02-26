@@ -97,16 +97,20 @@ def dynamic_manifest():
     elif hasattr(g, 'empresa') and g.empresa:
         empresa_contexto = g.empresa
 
-    app_name = "Vortice App"
+    # Fallbacks da Marca Mãe (Vortice)
+    app_name = "Vortice SaaS"
     short_name = "Vortice"
     icon_url = "/static/icons/vortice-icon.png"
     theme_color = "#0f172a"
     
     if empresa_contexto:
         app_name = empresa_contexto.nome
+        # Pega a primeira palavra da empresa para caber bonitinho debaixo do ícone no celular
         short_name = empresa_contexto.nome.split()[0]
+        
         config = empresa_contexto.config_json or {}
-        icon_url = config.get('logo_url', icon_url)
+        # Garante que, se o cliente não subir logo, o PWA mostre a logo da Vortice
+        icon_url = config.get('logo_url') if config.get('logo_url') else icon_url
         theme_color = config.get('cor_primaria', theme_color)
 
     manifest = {
@@ -116,7 +120,7 @@ def dynamic_manifest():
             { "src": icon_url, "sizes": "192x192", "purpose": "any maskable" },
             { "src": icon_url, "sizes": "512x512", "purpose": "any maskable" }
         ],
-        "start_url": "/",
+        "start_url": f"/?slug={slug}" if slug else "/",
         "display": "standalone",
         "theme_color": theme_color,
         "background_color": "#ffffff"

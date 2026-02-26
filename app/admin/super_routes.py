@@ -90,7 +90,8 @@ def cadastrar_empresa():
             flag_modified(empresa, "config_json")
             db.session.commit()
             
-        flash(f"Sucesso! Empresa '{empresa.nome}' criada com identidade visual.", "success")
+        # 🚀 MODIFICAÇÃO: A mensagem agora exibe as credenciais prontas do Terminal!
+        flash(f"Empresa '{empresa.nome}' criada! Terminal: terminal_{empresa.slug} | Senha: terminal1234{empresa.slug}", "success")
     except ValueError as ve:
         flash(str(ve), "error")
     except Exception as e:

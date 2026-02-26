@@ -6,7 +6,7 @@ from google.cloud import storage
 from sqlalchemy.orm.attributes import flag_modified
 from app.extensions import db
 
-# CORREÇÃO: Importamos TODOS os modelos para fazer a limpeza cirúrgica sem erros de chave estrangeira
+# Importamos TODOS os modelos para fazer a limpeza cirúrgica sem erros de chave estrangeira
 from app.models import (Empresa, Role, Permission, User, PontoRegistro, PontoResumo, 
                         PontoAjuste, Notificacao, SolicitacaoAusencia, SolicitacaoUniforme, 
                         ItemEstoque, Holerite, Recibo, AssinaturaDigital, PreCadastro, 
@@ -50,7 +50,7 @@ class EmpresaService:
             return None
 
     def criar_nova_conta_cliente(self, dados_empresa, dados_master, file_logo=None):
-        """Lógica de Onboarding SaaS."""
+        """Lógica de Onboarding SaaS com criação automática de Terminal."""
         nome_empresa = dados_empresa.get('nome')
         slug = re.sub(r'[^a-z0-9]', '', nome_empresa.lower())
         
