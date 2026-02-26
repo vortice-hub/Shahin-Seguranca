@@ -140,8 +140,14 @@ class TestService:
     def _workflow_atestado_medico(self):
         """Simula o envio de um atestado médico e a conversão de Falta para Atestado."""
         try:
-            # Finge que o funcionário anexou um PDF e criou no banco
-            atestado = Atestado(user_id=self.func_alfa.id, empresa_id=self.emp_alfa.id, url_documento="fake_url", status="Pendente")
+            # Finge que o funcionário anexou um PDF e criou no banco (Campos corrigidos)
+            atestado = Atestado(
+                user_id=self.func_alfa.id, 
+                empresa_id=self.emp_alfa.id, 
+                url_arquivo="fake_url", 
+                status="Pendente",
+                data_envio=get_brasil_time()
+            )
             db.session.add(atestado); db.session.commit()
             
             # RH avalia
@@ -170,7 +176,7 @@ class TestService:
             self.add_log('P20', 'Motor IA PDF Lote', 'ERRO', f"O Motor de PDF quebrou durante o processamento em lote: {str(e)}")
 
     # ==============================================================================
-    # ⚙️ MÓDULOS BASE (Segurança e Integração) - [CÓDIGO JÁ ESTÁVEL ANTERIORMENTE]
+    # ⚙️ MÓDULOS BASE (Segurança e Integração)
     # ==============================================================================
 
     def _audit_rbac_penetration(self):
@@ -278,7 +284,6 @@ class TestService:
             PreCadastro.query.filter(PreCadastro.empresa_id.in_(ids)).delete(synchronize_session=False)
             Role.query.filter(Role.empresa_id.in_(ids)).delete(synchronize_session=False)
             
-            # Deleta tabelas soltas de Histórico que podem atrapalhar
             HistoricoEntrada.query.filter(HistoricoEntrada.item_nome.like('%TESTE%')).delete(synchronize_session=False)
             HistoricoSaida.query.filter(HistoricoSaida.item_nome.like('%TESTE%')).delete(synchronize_session=False)
 
