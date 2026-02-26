@@ -115,34 +115,33 @@
         const canvas = document.getElementById('canvas-foto');
         let stream = null;
 
-        async function iniciarCamera() {
-            // Tenta forçar o modo Ecrã Inteiro (Fullscreen)
-            try {
-                if (document.documentElement.requestFullscreen) {
-                    await document.documentElement.requestFullscreen();
-                } else if (document.documentElement.webkitRequestFullscreen) { /* Safari */
-                    await document.documentElement.webkitRequestFullscreen();
-                } else if (document.documentElement.msRequestFullscreen) { /* IE11 */
-                    await document.documentElement.msRequestFullscreen();
-                }
-            } catch (e) {
-                console.log("Modo ecrã inteiro não suportado ou bloqueado no dispositivo.");
-            }
-
+        function iniciarCamera() {
+            // 1. Muda a interface IMEDIATAMENTE para dar feedback ao funcionário
             document.getElementById('header-titulos').classList.add('hidden');
             document.getElementById('step-rules').classList.add('hidden');
             document.getElementById('step-camera').classList.remove('hidden');
-            
+
+            // 2. Tenta forçar o modo Ecrã Inteiro (sem 'await' para não travar o código no Android)
             try {
-                stream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { facingMode: "user", width: { ideal: 720 }, height: { ideal: 720 } }, 
-                    audio: false 
-                });
+                const elem = document.documentElement;
+                if (elem.requestFullscreen) { elem.requestFullscreen(); }
+                else if (elem.webkitRequestFullscreen) { elem.webkitRequestFullscreen(); }
+                else if (elem.msRequestFullscreen) { elem.msRequestFullscreen(); }
+            } catch (e) {
+                console.log("Modo fullscreen não suportado.");
+            }
+            
+            // 3. Pede acesso à câmara
+            navigator.mediaDevices.getUserMedia({ 
+                video: { facingMode: "user", width: { ideal: 720 }, height: { ideal: 720 } }, 
+                audio: false 
+            }).then(str => {
+                stream = str;
                 video.srcObject = stream;
-            } catch (err) {
+            }).catch(err => {
                 alert("Erro ao aceder à câmara: " + err.message + "\nPor favor, dê permissão nas definições do navegador.");
                 cancelarCamera();
-            }
+            });
         }
 
         function cancelarCamera() {
@@ -155,10 +154,8 @@
             
             // Sai do modo Ecrã Inteiro se estiver ativo
             try {
-                if (document.fullscreenElement || document.webkitFullscreenElement) {
-                    if (document.exitFullscreen) { document.exitFullscreen(); } 
-                    else if (document.webkitExitFullscreen) { document.webkitExitFullscreen(); }
-                }
+                if (document.exitFullscreen) { document.exitFullscreen(); } 
+                else if (document.webkitExitFullscreen) { document.webkitExitFullscreen(); }
             } catch (e) {}
         }
 
@@ -167,8 +164,8 @@
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
             
-            context.translate(canvas.width, 0);
-            context.scale(-1, 1);
+            // CORREÇÃO: Limpa o canvas e desenha a foto original SEM ESPELHAR.
+            context.clearRect(0, 0, canvas.width, canvas.height);
             context.drawImage(video, 0, 0, canvas.width, canvas.height);
             
             const imageDataBase64 = canvas.toDataURL('image/jpeg', 0.85);
@@ -190,10 +187,9 @@
                 const data = await response.json();
 
                 if (data.success) {
-                    Toastify({ text: "Biometria Ativada! 🎉", duration: 3000, style: { background: "#10b981" } }).showToast();
+                    try { Toastify({ text: "Biometria Ativada! 🎉", duration: 3000, style: { background: "#10b981" } }).showToast(); } catch(e){}
                     setTimeout(() => { window.location.reload(); }, 1500); 
                 } else {
-                    // Substitui o Alert Padrão pelo Modal Profissional Customizado
                     document.getElementById('msg-erro-custom').innerText = data.error;
                     document.getElementById('step-loading').classList.add('hidden');
                     document.getElementById('modal-erro-custom').classList.remove('hidden');
@@ -210,12 +206,9 @@
             document.getElementById('step-rules').classList.remove('hidden');
             document.getElementById('header-titulos').classList.remove('hidden');
             
-            // Se falhou, sai do fullscreen para não prender o funcionário
             try {
-                if (document.fullscreenElement || document.webkitFullscreenElement) {
-                    if (document.exitFullscreen) { document.exitFullscreen(); } 
-                    else if (document.webkitExitFullscreen) { document.webkitExitFullscreen(); }
-                }
+                if (document.exitFullscreen) { document.exitFullscreen(); } 
+                else if (document.webkitExitFullscreen) { document.webkitExitFullscreen(); }
             } catch (e) {}
         }
     </script>
