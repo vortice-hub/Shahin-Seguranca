@@ -1,384 +1,174 @@
 {% extends 'base.html' %}
-{% block title %}Vortice - Gestão Global SaaS{% endblock %}
-
 {% block content %}
-<div class="max-w-7xl mx-auto pb-20 mt-2">
-    <div class="mb-10 flex flex-col md:flex-row md:items-center justify-between gap-6 bg-white p-8 rounded-3xl border border-slate-200 shadow-sm">
-        <div class="flex items-center gap-4">
-            <div class="p-4 bg-indigo-600 text-white rounded-2xl shadow-lg shadow-indigo-200">
-                <i class="fas fa-network-wired text-2xl"></i>
+<div class="flex items-center justify-between mb-6">
+    <div>
+        <h2 class="text-2xl font-black text-slate-800 tracking-tight">Gestão de Inquilinos</h2>
+        <p class="text-sm text-slate-500">Plataforma Vortice SaaS</p>
+    </div>
+    <button onclick="document.getElementById('modalNovaEmpresa').classList.remove('hidden')" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-xl shadow-lg transition transform hover:-translate-y-1 flex items-center gap-2">
+        <i class="fas fa-plus"></i> Novo Cliente
+    </button>
+</div>
+
+<div class="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+    <table class="w-full text-left border-collapse">
+        <thead>
+            <tr class="bg-slate-50 border-b border-slate-100 text-xs text-slate-500 uppercase tracking-wider">
+                <th class="p-4 font-bold">Empresa (Clique p/ Credenciais)</th>
+                <th class="p-4 font-bold">Plano</th>
+                <th class="p-4 font-bold">Status</th>
+                <th class="p-4 font-bold text-right">Ações</th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+            {% for empresa in empresas %}
+            <tr class="hover:bg-slate-50/50 transition group">
+                <td class="p-4">
+                    <div class="flex items-center gap-3">
+                        <img src="{{ (empresa.config_json or {}).get('logo_url', '/static/icons/vortice-icon.png') }}" class="w-10 h-10 rounded-lg object-cover border border-slate-200 bg-white">
+                        <div>
+                            <button onclick="abrirCredenciais('{{ empresa.nome }}', '{{ empresa.master_nome }}', '{{ empresa.master_cpf }}', 'terminal_{{ empresa.slug }}', 'terminal1234{{ empresa.slug }}')" class="font-bold text-slate-800 hover:text-blue-600 transition flex items-center gap-2 text-left">
+                                {{ empresa.nome }} <i class="fas fa-key text-slate-300 text-xs"></i>
+                            </button>
+                            <div class="text-[10px] text-slate-400 font-mono">{{ empresa.slug }}</div>
+                        </div>
+                    </div>
+                </td>
+                <td class="p-4">
+                    <span class="px-3 py-1 bg-slate-100 text-slate-600 text-[10px] font-bold uppercase rounded-full border border-slate-200">{{ empresa.plano }}</span>
+                </td>
+                <td class="p-4">
+                    {% if empresa.ativa %}
+                        <span class="px-3 py-1 bg-emerald-100 text-emerald-700 text-[10px] font-bold uppercase rounded-full flex items-center w-max gap-1"><i class="fas fa-circle text-[8px]"></i> Ativa</span>
+                    {% else %}
+                        <span class="px-3 py-1 bg-red-100 text-red-700 text-[10px] font-bold uppercase rounded-full flex items-center w-max gap-1"><i class="fas fa-circle text-[8px]"></i> Bloqueada</span>
+                    {% endif %}
+                </td>
+                <td class="p-4 text-right space-x-2">
+                    <form action="/vortice/empresas/status/{{ empresa.id }}" method="POST" class="inline">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                        <button type="submit" class="w-8 h-8 rounded-full text-slate-400 hover:text-amber-500 hover:bg-amber-50 transition" title="Bloquear/Desbloquear">
+                            <i class="fas fa-power-off text-sm"></i>
+                        </button>
+                    </form>
+                    <button type="button" onclick="confirmarAcao('Tem certeza que deseja DELETAR a empresa {{ empresa.nome }}? ISSO APAGARÁ TUDO.', '/vortice/empresas/excluir/{{ empresa.id }}')" class="w-8 h-8 rounded-full text-slate-400 hover:text-red-500 hover:bg-red-50 transition" title="Excluir Definitivamente">
+                        <i class="fas fa-trash-alt text-sm"></i>
+                    </button>
+                </td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="4" class="p-10 text-center text-slate-400 text-sm">Nenhum cliente cadastrado na base.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div id="modalCredenciais" class="hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 opacity-0 transition-opacity duration-300">
+    <div class="bg-white rounded-3xl shadow-2xl max-w-sm w-full overflow-hidden transform scale-95 transition-transform duration-300" id="modalCredenciaisContent">
+        
+        <div class="bg-slate-900 p-6 flex justify-between items-start text-white relative overflow-hidden">
+            <div class="absolute -right-4 -top-4 text-white/5 text-9xl"><i class="fas fa-key"></i></div>
+            <div class="relative z-10">
+                <h3 class="font-bold text-lg mb-1 leading-tight" id="credNomeEmpresa">Nome da Empresa</h3>
+                <p class="text-xs text-blue-300 uppercase tracking-widest">Painel de Acesso</p>
             </div>
-            <div>
-                <h2 class="text-2xl font-black text-slate-800 tracking-tight">Vortice: Control Plane</h2>
-                <p class="text-slate-500 text-xs font-mono uppercase tracking-widest mt-1">Infraestrutura Multi-Tenant Ativa</p>
+            <button onclick="fecharCredenciais()" class="text-slate-400 hover:text-white relative z-10"><i class="fas fa-times text-xl"></i></button>
+        </div>
+        
+        <div class="p-6 space-y-4">
+            <div class="bg-blue-50 p-4 rounded-2xl border border-blue-100 relative">
+                <div class="absolute top-3 right-4 text-blue-200 text-2xl"><i class="fas fa-user-tie"></i></div>
+                <h4 class="text-[10px] font-black text-blue-800 uppercase tracking-widest mb-3">Usuário Master</h4>
+                
+                <div class="mb-2">
+                    <span class="block text-[10px] text-blue-600 font-bold uppercase">Nome</span>
+                    <span class="text-sm font-bold text-slate-800" id="credMasterNome">---</span>
+                </div>
+                <div>
+                    <span class="block text-[10px] text-blue-600 font-bold uppercase">CPF (Login)</span>
+                    <span class="text-sm font-mono font-bold text-slate-800 bg-white px-2 py-1 rounded border border-blue-100 inline-block mt-1 select-all" id="credMasterCpf">---</span>
+                </div>
+            </div>
+
+            <div class="bg-emerald-50 p-4 rounded-2xl border border-emerald-100 relative">
+                <div class="absolute top-3 right-4 text-emerald-200 text-2xl"><i class="fas fa-tablet-alt"></i></div>
+                <h4 class="text-[10px] font-black text-emerald-800 uppercase tracking-widest mb-3">Ponto Terminal</h4>
+                
+                <div class="mb-2">
+                    <span class="block text-[10px] text-emerald-600 font-bold uppercase">Usuário</span>
+                    <span class="text-sm font-mono font-bold text-slate-800 bg-white px-2 py-1 rounded border border-emerald-100 inline-block mt-1 select-all" id="credTerminalUser">---</span>
+                </div>
+                <div>
+                    <span class="block text-[10px] text-emerald-600 font-bold uppercase">Senha</span>
+                    <span class="text-sm font-mono font-bold text-slate-800 bg-white px-2 py-1 rounded border border-emerald-100 inline-block mt-1 select-all" id="credTerminalPass">---</span>
+                </div>
             </div>
         </div>
         
-        <div class="flex items-center gap-3">
-            <button onclick="runLabsAudit()" class="inline-flex items-center px-6 py-3 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl shadow-md transition transform active:scale-95">
-                <i class="fas fa-vial mr-2"></i> Vortice Labs (Audit)
+        <div class="p-4 bg-slate-50 border-t border-slate-100">
+            <button onclick="fecharCredenciais()" class="w-full py-3 bg-white border border-slate-200 hover:bg-slate-100 text-slate-600 font-bold rounded-xl transition">
+                Fechar
             </button>
-
-            <form action="{{ url_for('super_admin.run_labs_cleanup') }}" method="POST" class="inline">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <button type="submit" class="inline-flex items-center px-4 py-3 bg-red-50 hover:bg-red-100 text-red-600 font-bold rounded-xl transition border border-red-200" title="Limpar Tudo (Prefix TEST_)">
-                    <i class="fas fa-broom"></i>
-                </button>
-            </form>
-
-            <div class="h-10 w-px bg-slate-200 mx-2"></div>
-
-            <button onclick="toggleModal('modal-nova-empresa')" class="inline-flex items-center px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-md transition transform active:scale-95">
-                <i class="fas fa-plus-circle mr-2"></i> Novo Cliente
-            </button>
-
-            <a href="{{ url_for('super_admin.logout') }}" class="inline-flex items-center px-6 py-3 bg-slate-100 hover:bg-red-50 text-slate-600 hover:text-red-600 font-bold rounded-xl transition border border-slate-200">
-                <i class="fas fa-sign-out-alt mr-2"></i> Encerrar Sessão
-            </a>
-        </div>
-    </div>
-
-    <div class="bg-white rounded-3xl border border-slate-200 shadow-xl overflow-hidden">
-        <div class="p-6 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
-            <h3 class="font-bold text-slate-700 flex items-center gap-2">
-                <i class="fas fa-list-ul text-indigo-500"></i> Ecossistema de Clientes
-            </h3>
-            <span class="text-[10px] font-black bg-slate-200 text-slate-600 px-2 py-1 rounded-md uppercase">Total: {{ empresas|length }}</span>
-        </div>
-        
-        <div class="overflow-x-auto">
-            <table class="w-full text-left border-collapse">
-                <thead class="bg-slate-50 text-xs font-bold text-slate-400 uppercase tracking-wider">
-                    <tr>
-                        <th class="py-4 px-8">Identificação</th>
-                        <th class="py-4 px-6">Identidade Visual</th>
-                        <th class="py-4 px-6">Status</th>
-                        <th class="py-4 px-8 text-center">Ações de Gestão</th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-slate-100">
-                    {% for empresa in empresas %}
-                    <tr class="hover:bg-indigo-50/30 transition group">
-                        <td class="py-5 px-8">
-                            <div class="flex items-center gap-4">
-                                <img src="{{ (empresa.config_json or {}).get('logo_url', '/static/icons/vortice-icon.png') }}" class="w-12 h-12 rounded-xl object-cover border border-slate-200 bg-white shadow-sm">
-                                <div>
-                                    <p class="text-sm font-black text-slate-800">{{ empresa.nome }}</p>
-                                    <code class="text-[10px] text-indigo-500 font-bold">/login/{{ empresa.slug }}</code>
-                                </div>
-                            </div>
-                        </td>
-                        <td class="py-5 px-6">
-                            <div class="flex items-center gap-3">
-                                <div class="w-8 h-8 rounded-lg border-2 border-white shadow-sm" style="background-color: {{ (empresa.config_json or {}).get('cor_primaria', '#2563eb') }};"></div>
-                                <span class="text-xs font-mono font-bold text-slate-600">{{ (empresa.config_json or {}).get('cor_primaria', '#2563eb') }}</span>
-                            </div>
-                        </td>
-                        <td class="py-5 px-6">
-                            {% if empresa.ativa %}
-                                <span class="px-3 py-1 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-700 uppercase">Ativo</span>
-                            {% else %}
-                                <span class="px-3 py-1 rounded-full text-[10px] font-black bg-slate-100 text-slate-400 uppercase">Bloqueado</span>
-                            {% endif %}
-                        </td>
-                        <td class="py-5 px-8 text-center">
-                            <div class="flex items-center justify-center gap-3">
-                                
-                                {% set feat = empresa.features_json or {} %}
-                                <button onclick="abrirModalModulos('{{ empresa.id }}', '{{ empresa.nome }}', {{ 'true' if feat.get('ponto', True) else 'false' }}, {{ 'true' if feat.get('documentos', True) else 'false' }}, {{ 'true' if feat.get('estoque', True) else 'false' }})" 
-                                        class="p-2.5 bg-slate-100 hover:bg-emerald-600 hover:text-white rounded-xl text-xs font-bold transition" title="Ligar/Desligar Módulos">
-                                    <i class="fas fa-cubes"></i>
-                                </button>
-
-                                <button onclick="abrirBranding('{{ empresa.id }}', '{{ empresa.nome }}', '{{ (empresa.config_json or {}).get('cor_primaria', '#2563eb') }}', '{{ (empresa.config_json or {}).get('cor_hover', '#1d4ed8') }}', '{{ (empresa.config_json or {}).get('logo_url', '') }}')" 
-                                        class="p-2.5 bg-slate-100 hover:bg-indigo-600 hover:text-white rounded-xl text-xs font-bold transition" title="Editar Branding">
-                                    <i class="fas fa-palette"></i>
-                                </button>
-
-                                <form action="{{ url_for('super_admin.alterar_status_empresa', id=empresa.id) }}" method="POST">
-                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                    <button type="submit" class="p-2.5 bg-slate-100 hover:bg-slate-200 rounded-xl transition" title="Ativar/Bloquear">
-                                        <i class="fas {% if empresa.ativa %}fa-toggle-on text-emerald-500{% else %}fa-toggle-off text-slate-400{% endif %} text-lg"></i>
-                                    </button>
-                                </form>
-
-                                <button onclick="abrirModalExclusao('{{ empresa.id }}', '{{ empresa.nome }}')" 
-                                        class="p-2.5 bg-red-50 hover:bg-red-600 text-red-500 hover:text-white rounded-xl text-xs font-bold transition" title="Excluir Empresa">
-                                    <i class="fas fa-trash-alt"></i>
-                                </button>
-                            </div>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
         </div>
     </div>
 </div>
 
-<div id="modal-labs" class="hidden fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/80 backdrop-blur-md p-4">
-    <div class="bg-white rounded-3xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden border border-slate-200 flex flex-col">
-        <div class="bg-slate-900 p-6 text-white flex justify-between items-center">
-            <h3 class="text-xl font-black tracking-tight"><i class="fas fa-microscope mr-2 text-amber-400"></i> Relatório de Auditoria SaaS</h3>
-            <button onclick="toggleModal('modal-labs')" class="text-white/70 hover:text-white"><i class="fas fa-times text-xl"></i></button>
+<div id="modalNovaEmpresa" class="hidden fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden">
+        <div class="bg-blue-600 p-5 flex justify-between items-center text-white">
+            <h3 class="font-bold text-lg">Criar Novo Cliente</h3>
+            <button onclick="document.getElementById('modalNovaEmpresa').classList.add('hidden')" class="hover:text-blue-200"><i class="fas fa-times"></i></button>
         </div>
-        
-        <div class="p-8 overflow-y-auto flex-1" id="labs-content">
-            <div id="labs-loading" class="flex flex-col items-center justify-center py-20">
-                <i class="fas fa-circle-notch fa-spin text-5xl text-amber-500 mb-6"></i>
-                <p class="text-lg font-bold text-slate-700">Executando auditoria completa...</p>
-                <p class="text-sm text-slate-500 mt-2">Criando tenants, simulando pontos e validando isolamento de dados.</p>
-            </div>
-
-            <div id="labs-results" class="hidden">
-                <div class="bg-amber-50 border border-amber-200 p-4 rounded-2xl mb-6 flex items-center gap-3">
-                    <i class="fas fa-info-circle text-amber-600 text-xl"></i>
-                    <p class="text-xs text-amber-800 font-medium">Os testes criaram dados com prefixo <strong>TEST</strong>. Use o botão de vassoura no painel principal para limpar tudo após validar.</p>
+        <form action="/vortice/empresas/nova" method="POST" enctype="multipart/form-data" class="p-6 max-h-[80vh] overflow-y-auto">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <div class="space-y-4">
+                <div><label class="text-xs font-bold text-slate-500 uppercase">Nome da Empresa</label><input type="text" name="nome_empresa" required class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl"></div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div><label class="text-xs font-bold text-slate-500 uppercase">Nome do Master</label><input type="text" name="nome_master" required class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl"></div>
+                    <div><label class="text-xs font-bold text-slate-500 uppercase">CPF do Master</label><input type="text" name="cpf_master" required class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl"></div>
                 </div>
-
-                <table class="w-full text-left text-sm">
-                    <thead class="bg-slate-50 text-[10px] uppercase text-slate-400 font-black border-b">
-                        <tr>
-                            <th class="px-4 py-3">Módulo</th>
-                            <th class="px-4 py-3">Ação Realizada</th>
-                            <th class="px-4 py-3 text-center">Status</th>
-                            <th class="px-4 py-3">Diagnóstico Técnico</th>
-                        </tr>
-                    </thead>
-                    <tbody id="labs-table-body" class="divide-y divide-slate-100">
-                        </tbody>
-                </table>
+                <div><label class="text-xs font-bold text-slate-500 uppercase">Logotipo</label><input type="file" name="logo_arquivo" accept="image/*" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm"></div>
             </div>
-        </div>
-
-        <div class="p-6 bg-slate-50 border-t flex justify-end">
-             <button onclick="toggleModal('modal-labs')" class="px-8 py-3 bg-slate-900 text-white font-bold rounded-xl shadow-lg transition active:scale-95">FECHAR RELATÓRIO</button>
-        </div>
-    </div>
-</div>
-
-<div id="modal-modulos" class="hidden fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 transition-opacity">
-    <div class="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden border border-slate-200">
-        <div class="bg-emerald-600 p-6 text-white flex justify-between items-center">
-            <h3 class="text-xl font-black tracking-tight" id="modulos-nome-empresa"><i class="fas fa-cubes mr-2"></i> Módulos</h3>
-            <button onclick="toggleModal('modal-modulos')" class="text-white/70 hover:text-white"><i class="fas fa-times text-xl"></i></button>
-        </div>
-        <form id="form-modulos" method="POST" class="p-8 space-y-4">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <p class="text-xs font-bold text-slate-500 mb-6 uppercase tracking-wider text-center">Ative ou desative ferramentas para este cliente</p>
-            <label class="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-200 cursor-pointer hover:border-emerald-400 transition">
-                <div class="flex items-center gap-4">
-                    <div class="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center"><i class="fas fa-clock"></i></div>
-                    <div>
-                        <h4 class="font-bold text-slate-700 text-sm">Controle de Ponto</h4>
-                        <p class="text-[10px] text-slate-500">Registro, espelho e férias</p>
-                    </div>
-                </div>
-                <input type="checkbox" name="mod_ponto" id="toggle-ponto" class="w-5 h-5 text-emerald-600 bg-white border-slate-300 rounded focus:ring-emerald-500">
-            </label>
-            <label class="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-200 cursor-pointer hover:border-emerald-400 transition">
-                <div class="flex items-center gap-4">
-                    <div class="w-10 h-10 rounded-full bg-yellow-100 text-yellow-600 flex items-center justify-center"><i class="fas fa-file-contract"></i></div>
-                    <div>
-                        <h4 class="font-bold text-slate-700 text-sm">Documentos</h4>
-                        <p class="text-[10px] text-slate-500">Holerites, Recibos e Atestados</p>
-                    </div>
-                </div>
-                <input type="checkbox" name="mod_documentos" id="toggle-documentos" class="w-5 h-5 text-emerald-600 bg-white border-slate-300 rounded focus:ring-emerald-500">
-            </label>
-            <label class="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-200 cursor-pointer hover:border-emerald-400 transition">
-                <div class="flex items-center gap-4">
-                    <div class="w-10 h-10 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center"><i class="fas fa-box"></i></div>
-                    <div>
-                        <h4 class="font-bold text-slate-700 text-sm">Estoque de EPIs</h4>
-                        <p class="text-[10px] text-slate-500">Uniformes e controle de saída</p>
-                    </div>
-                </div>
-                <input type="checkbox" name="mod_estoque" id="toggle-estoque" class="w-5 h-5 text-emerald-600 bg-white border-slate-300 rounded focus:ring-emerald-500">
-            </label>
-            <button type="submit" class="w-full py-4 mt-6 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-2xl uppercase tracking-widest text-sm transition transform active:scale-95 shadow-lg shadow-emerald-200">Atualizar Módulos</button>
-        </form>
-    </div>
-</div>
-
-<div id="modal-excluir-empresa" class="hidden fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 transition-opacity">
-    <div class="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden border border-slate-200 transform transition-all">
-        <div class="p-8 text-center">
-            <div class="w-20 h-20 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-5 border-4 border-red-100">
-                <i class="fas fa-trash-alt text-red-500 text-3xl"></i>
-            </div>
-            <h3 class="text-2xl font-black text-slate-800 mb-2">Excluir Cliente?</h3>
-            <p class="text-sm text-slate-500 mb-8 leading-relaxed">
-                Tem certeza que deseja excluir permanentemente a empresa <strong id="nome-empresa-excluir" class="text-slate-700"></strong>? Esta ação apagará todos os usuários, pontos e registros vinculados e <b>não pode ser desfeita</b>.
-            </p>
-            <div class="flex gap-4">
-                <button onclick="fecharModalExclusao()" class="flex-1 py-3.5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-xl transition">Cancelar</button>
-                <form id="form-excluir-empresa" method="POST" class="flex-1">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                    <button type="submit" class="w-full h-full py-3.5 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl shadow-lg shadow-red-200 transition transform active:scale-95 flex items-center justify-center gap-2">Excluir Agora</button>
-                </form>
-            </div>
-        </div>
-    </div>
-</div>
-
-<div id="modal-nova-empresa" class="hidden fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-    <div class="bg-white rounded-3xl shadow-2xl max-w-2xl w-full overflow-hidden border border-slate-200">
-        <div class="bg-indigo-600 p-6 text-white flex justify-between items-center">
-            <h3 class="text-xl font-black tracking-tight"><i class="fas fa-plus-circle mr-2"></i> Cadastrar Novo Cliente</h3>
-            <button onclick="toggleModal('modal-nova-empresa')" class="text-white/70 hover:text-white"><i class="fas fa-times text-xl"></i></button>
-        </div>
-        <form action="{{ url_for('super_admin.cadastrar_empresa') }}" method="POST" enctype="multipart/form-data" class="p-8 grid grid-cols-1 md:grid-cols-2 gap-6">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <div class="col-span-2"><h4 class="text-xs font-black text-slate-400 uppercase border-b pb-2">Dados do Cliente</h4></div>
-            <div class="col-span-2 md:col-span-1">
-                <label class="block text-xs font-bold text-slate-500 mb-2">Nome da Empresa</label>
-                <input type="text" name="nome_empresa" required class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500">
-            </div>
-            <div class="col-span-2 md:col-span-1">
-                <label class="block text-xs font-bold text-slate-500 mb-2">Plano Contratado</label>
-                <select name="plano" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none">
-                    <option value="Standard">Standard</option>
-                    <option value="Enterprise">Enterprise</option>
-                </select>
-            </div>
-            <div class="col-span-2">
-                <label class="block text-xs font-bold text-slate-500 mb-2">Logotipo Inicial (Opcional - GCS)</label>
-                <div class="p-4 bg-slate-50 border border-dashed border-slate-300 rounded-xl">
-                    <input type="file" name="logo_arquivo" accept="image/*" class="text-xs w-full file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-bold file:bg-indigo-50 file:text-indigo-700">
-                </div>
-            </div>
-            <div class="col-span-2 grid grid-cols-2 gap-4">
-                <div>
-                    <label class="block text-[10px] uppercase font-bold text-slate-500 mb-2">Cor Principal</label>
-                    <input type="color" name="cor_primaria" value="#2563eb" class="w-full h-12 rounded-lg cursor-pointer bg-transparent border-0 p-0">
-                </div>
-                <div>
-                    <label class="block text-[10px] uppercase font-bold text-slate-500 mb-2">Cor Hover (Foco)</label>
-                    <input type="color" name="cor_hover" value="#1d4ed8" class="w-full h-12 rounded-lg cursor-pointer bg-transparent border-0 p-0">
-                </div>
-            </div>
-            <div class="col-span-2 mt-4"><h4 class="text-xs font-black text-slate-400 uppercase border-b pb-2">Acesso Master</h4></div>
-            <div class="col-span-2">
-                <label class="block text-xs font-bold text-slate-500 mb-2">Nome Completo do Responsável</label>
-                <input type="text" name="nome_master" required class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none">
-            </div>
-            <div>
-                <label class="block text-xs font-bold text-slate-500 mb-2">CPF (Login Inicial)</label>
-                <input type="text" name="cpf_master" required class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none">
-            </div>
-            <div>
-                <label class="block text-xs font-bold text-slate-500 mb-2">Senha Provisória</label>
-                <input type="password" name="senha_provisoria" value="123456" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none">
-            </div>
-            <button type="submit" class="col-span-2 py-4 bg-indigo-600 text-white font-black rounded-2xl shadow-lg uppercase text-sm mt-4 transform transition active:scale-95">Finalizar Onboarding</button>
-        </form>
-    </div>
-</div>
-
-<div id="modal-branding" class="hidden fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-    <div class="bg-white rounded-3xl shadow-2xl max-w-lg w-full overflow-hidden border border-slate-200">
-        <div class="bg-indigo-600 p-6 text-white flex justify-between items-center">
-            <h3 class="text-xl font-black tracking-tight" id="branding-nome-empresa">Ajustar Branding</h3>
-            <button onclick="toggleModal('modal-branding')" class="text-white/70 hover:text-white"><i class="fas fa-times text-xl"></i></button>
-        </div>
-        <form id="form-branding" method="POST" enctype="multipart/form-data" class="p-8 space-y-6">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <div class="bg-slate-50 p-4 rounded-2xl border border-dashed border-slate-300">
-                <label class="block text-xs font-black text-slate-500 uppercase mb-3">Substituir Logotipo</label>
-                <input type="file" name="logo_arquivo" accept="image/*" class="text-xs mb-4 w-full">
-                <input type="url" name="logo_url" id="input-logo-url" placeholder="Deixe em branco para manter o atual..." class="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm outline-none">
-            </div>
-            <div class="grid grid-cols-2 gap-4">
-                <div>
-                    <label class="text-[10px] uppercase font-bold text-slate-400">Cor Principal</label>
-                    <input type="color" name="cor_primaria" id="input-cor-primaria" class="w-full h-12 rounded-lg cursor-pointer">
-                </div>
-                <div>
-                    <label class="text-[10px] uppercase font-bold text-slate-400">Cor Hover</label>
-                    <input type="color" name="cor_hover" id="input-cor-hover" class="w-full h-12 rounded-lg cursor-pointer">
-                </div>
-            </div>
-            <button type="submit" class="w-full py-4 bg-indigo-600 text-white font-black rounded-2xl uppercase tracking-widest text-sm">Salvar Alterações</button>
+            <button type="submit" class="w-full mt-6 bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl shadow-lg transition">CRIAR CLIENTE</button>
         </form>
     </div>
 </div>
 
 <script>
-    function toggleModal(id) { 
-        document.getElementById(id).classList.toggle('hidden');
-    }
-
-    // 🧪 LOGICA VORTICE LABS
-    async function runLabsAudit() {
-        toggleModal('modal-labs');
-        document.getElementById('labs-loading').classList.remove('hidden');
-        document.getElementById('labs-results').classList.add('hidden');
+    function abrirCredenciais(empresa, mNome, mCpf, tUser, tPass) {
+        // Preenche os dados
+        document.getElementById('credNomeEmpresa').innerText = empresa;
+        document.getElementById('credMasterNome').innerText = mNome;
+        document.getElementById('credMasterCpf').innerText = mCpf;
+        document.getElementById('credTerminalUser').innerText = tUser;
+        document.getElementById('credTerminalPass').innerText = tPass;
         
-        try {
-            const response = await fetch("{{ url_for('super_admin.run_labs_audit') }}", {
-                method: 'POST',
-                headers: { 'X-CSRFToken': '{{ csrf_token() }}' }
-            });
-            const data = await response.json();
-            
-            const tbody = document.getElementById('labs-table-body');
-            tbody.innerHTML = '';
-            
-            data.logs.forEach(log => {
-                const statusClass = log.status === 'OK' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700';
-                const statusIcon = log.status === 'OK' ? 'fa-check-circle' : 'fa-times-circle';
-                
-                tbody.innerHTML += `
-                    <tr class="hover:bg-slate-50/50">
-                        <td class="px-4 py-4 font-black text-slate-400 text-[10px] uppercase">${log.funcionalidade}</td>
-                        <td class="px-4 py-4 font-bold text-slate-700 text-xs">${log.acao}</td>
-                        <td class="px-4 py-4 text-center">
-                            <span class="px-2 py-1 rounded text-[10px] font-black ${statusClass} inline-flex items-center gap-1">
-                                <i class="fas ${statusIcon}"></i> ${log.status}
-                            </span>
-                        </td>
-                        <td class="px-4 py-4 text-[11px] text-slate-500 font-mono leading-relaxed">${log.diagnostico}</td>
-                    </tr>
-                `;
-            });
-            
-            document.getElementById('labs-loading').classList.add('hidden');
-            document.getElementById('labs-results').classList.remove('hidden');
-            
-        } catch (error) {
-            console.error(error);
-            alert("Falha crítica ao contactar o motor de testes.");
-            toggleModal('modal-labs');
-        }
+        // Abre o modal com animação suave
+        const modal = document.getElementById('modalCredenciais');
+        const content = document.getElementById('modalCredenciaisContent');
+        
+        modal.classList.remove('hidden');
+        // Pequeno delay para a transição de opacidade/escala funcionar no Tailwind
+        setTimeout(() => {
+            modal.classList.remove('opacity-0');
+            content.classList.remove('scale-95');
+            content.classList.add('scale-100');
+        }, 10);
     }
 
-    function abrirBranding(id, nome, cor, hover, logo) {
-        document.getElementById('branding-nome-empresa').innerText = nome;
-        document.getElementById('form-branding').action = `/vortice/empresas/branding/${id}`;
-        document.getElementById('input-logo-url').value = ""; 
-        document.getElementById('input-cor-primaria').value = cor;
-        document.getElementById('input-cor-hover').value = hover;
-        toggleModal('modal-branding');
-    }
-
-    function abrirModalExclusao(id, nome) {
-        document.getElementById('nome-empresa-excluir').innerText = nome;
-        document.getElementById('form-excluir-empresa').action = `/vortice/empresas/excluir/${id}`;
-        document.getElementById('modal-excluir-empresa').classList.remove('hidden');
-    }
-
-    function fecharModalExclusao() {
-        document.getElementById('modal-excluir-empresa').classList.add('hidden');
-    }
-
-    function abrirModalModulos(id, nome, ponto_ativo, doc_ativo, est_ativo) {
-        document.getElementById('modulos-nome-empresa').innerHTML = `<i class="fas fa-cubes mr-2"></i> ${nome}`;
-        document.getElementById('form-modulos').action = `/vortice/empresas/modulos/${id}`;
-        document.getElementById('toggle-ponto').checked = ponto_ativo;
-        document.getElementById('toggle-documentos').checked = doc_ativo;
-        document.getElementById('toggle-estoque').checked = est_ativo;
-        toggleModal('modal-modulos');
+    function fecharCredenciais() {
+        const modal = document.getElementById('modalCredenciais');
+        const content = document.getElementById('modalCredenciaisContent');
+        
+        modal.classList.add('opacity-0');
+        content.classList.remove('scale-100');
+        content.classList.add('scale-95');
+        
+        setTimeout(() => {
+            modal.classList.add('hidden');
+        }, 300); // Tempo igual ao duration-300 do Tailwind
     }
 </script>
 {% endblock %}

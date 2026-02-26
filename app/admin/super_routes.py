@@ -8,6 +8,9 @@ from sqlalchemy.orm.attributes import flag_modified
 from app.extensions import db
 from app.services.test_service import TestService
 
+# Importação necessária para buscar os dados do Master
+from app.models import User
+
 # 🚀 PREFIXO EXCLUSIVO: Isolando a plataforma Vortice do resto do sistema
 super_admin_bp = Blueprint('super_admin', __name__, template_folder='templates', url_prefix='/vortice')
 
@@ -55,6 +58,16 @@ def listar_empresas():
     for emp in empresas:
         if not emp.features_json:
             emp.features_json = {"ponto": True, "documentos": True, "estoque": True}
+            
+        # --- NOVA LÓGICA: Busca os dados do Master para o menu de credenciais ---
+        master = User.query.filter_by(empresa_id=emp.id, role='Master').first()
+        if master:
+            emp.master_nome = master.real_name
+            emp.master_cpf = master.cpf or master.username
+        else:
+            emp.master_nome = "Não cadastrado"
+            emp.master_cpf = "N/A"
+            
     return render_template('admin/super_empresas.html', empresas=empresas)
 
 @super_admin_bp.route('/empresas/nova', methods=['POST'])
@@ -90,7 +103,7 @@ def cadastrar_empresa():
             flag_modified(empresa, "config_json")
             db.session.commit()
             
-        # 🚀 MODIFICAÇÃO: A mensagem agora exibe as credenciais prontas do Terminal!
+        # A mensagem agora exibe as credenciais prontas do Terminal!
         flash(f"Empresa '{empresa.nome}' criada! Terminal: terminal_{empresa.slug} | Senha: terminal1234{empresa.slug}", "success")
     except ValueError as ve:
         flash(str(ve), "error")
