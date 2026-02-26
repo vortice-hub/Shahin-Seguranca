@@ -13,7 +13,7 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 WORKDIR $APP_HOME
 
 # Instala dependências do sistema (Linux) necessárias para o PostgreSQL, fuso horário
-# E AGORA PARA A INTELIGÊNCIA ARTIFICIAL (cmake, g++, make, libgl)
+# E PARA A INTELIGÊNCIA ARTIFICIAL (cmake, g++, libgl1)
 RUN apt-get update && apt-get install -y \
     gcc \
     libpq-dev \
@@ -21,7 +21,7 @@ RUN apt-get update && apt-get install -y \
     cmake \
     g++ \
     make \
-    libgl1-mesa-glx \
+    libgl1 \
     libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
