@@ -198,6 +198,12 @@
         } catch(e) { resetSistema(); }
     }
 
+    // NOVA FUNÇÃO ADICIONADA AQUI
+    function rejeitarPonto() {
+        document.getElementById('modal-confirmacao').classList.remove('active');
+        resetSistema();
+    }
+
     function resetSistema() {
         isProcessing = false;
         userAlvoId = null;
