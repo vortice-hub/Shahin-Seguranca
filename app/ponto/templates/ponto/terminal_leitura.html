@@ -1,120 +1,144 @@
 {% extends 'base.html' %}
 {% block content %}
 <style>
-    .terminal-mode { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #0f172a; z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; color: white; overflow: hidden; }
+    .terminal-mode { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #0f172a; z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; color: white; overflow: hidden; font-family: 'Inter', sans-serif; }
     
-    #camera-container { width: 100%; max-width: 640px; position: relative; border-radius: 20px; overflow: hidden; border: 4px solid #3b82f6; background: black; box-shadow: 0 10px 30px rgba(59, 130, 246, 0.3); }
-    #video-feed { width: 100%; height: auto; transform: scaleX(-1); } /* Espelhado para parecer um espelho */
-    #scanner-line { position: absolute; top: 0; left: 0; width: 100%; height: 4px; background: #3b82f6; box-shadow: 0 0 10px #3b82f6; animation: scan 2s linear infinite; z-index: 10; }
-    
-    @keyframes scan {
-        0% { top: 0; opacity: 0; }
-        10% { opacity: 1; }
-        90% { opacity: 1; }
-        100% { top: 100%; opacity: 0; }
+    /* Container com Feedback de Status */
+    #camera-container { 
+        width: 100%; 
+        max-width: 600px; 
+        position: relative; 
+        border-radius: 30px; 
+        overflow: hidden; 
+        border: 8px solid #334155; 
+        background: black; 
+        transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        box-shadow: 0 0 50px rgba(0,0,0,0.5);
     }
 
-    /* OVERLAYS E MODAIS */
-    .overlay-modal { position: absolute; inset: 0; background: rgba(15, 23, 42, 0.95); z-index: 20; display: flex; flex-direction: column; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity 0.3s; padding: 20px; text-align: center; backdrop-filter: blur(5px); }
+    /* Estados do HUD */
+    #camera-container.searching { border-color: #eab308; box-shadow: 0 0 30px rgba(234, 179, 8, 0.2); }
+    #camera-container.analyzing { border-color: #3b82f6; animation: pulse-blue 1.5s infinite; }
+    #camera-container.success { border-color: #10b981; }
+    #camera-container.error { border-color: #ef4444; }
+
+    @keyframes pulse-blue {
+        0% { box-shadow: 0 0 0 0px rgba(59, 130, 246, 0.7); }
+        100% { box-shadow: 0 0 0 20px rgba(59, 130, 246, 0); }
+    }
+
+    #video-feed { width: 100%; height: auto; transform: scaleX(-1); filter: contrast(1.1); }
+    
+    /* Linha de Scanner Dinâmica */
+    #scanner-line { position: absolute; top: 0; left: 0; width: 100%; height: 2px; background: rgba(59, 130, 246, 0.5); box-shadow: 0 0 15px #3b82f6; animation: scan 2.5s linear infinite; z-index: 10; display: none; }
+    .searching #scanner-line, .analyzing #scanner-line { display: block; }
+    .analyzing #scanner-line { background: #3b82f6; height: 4px; animation-duration: 1s; }
+
+    @keyframes scan { 0% { top: 0; } 100% { top: 100%; } }
+
+    /* Rótulo de Status Superior */
+    #status-label {
+        position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
+        padding: 8px 20px; background: rgba(15, 23, 42, 0.8); backdrop-filter: blur(10px);
+        border-radius: 100px; font-size: 10px; font-weight: 900; letter-spacing: 2px;
+        text-transform: uppercase; z-index: 30; border: 1px solid rgba(255,255,255,0.1);
+    }
+
+    .overlay-modal { position: absolute; inset: 0; background: rgba(15, 23, 42, 0.98); z-index: 40; display: flex; flex-direction: column; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: all 0.3s; padding: 40px; text-align: center; }
     .overlay-modal.active { opacity: 1; pointer-events: all; }
 
-    .btn-action { width: 100%; padding: 15px; font-weight: bold; font-size: 1.1rem; border-radius: 12px; transition: transform 0.1s; }
-    .btn-action:active { transform: scale(0.95); }
-    .btn-sim { background: #10b981; color: white; border: 2px solid #059669; }
-    .btn-nao { background: transparent; color: #ef4444; border: 2px solid #ef4444; }
+    .btn-action { width: 100%; padding: 20px; font-weight: 800; font-size: 1.2rem; border-radius: 16px; transition: all 0.2s; }
+    .btn-sim { background: #10b981; color: white; box-shadow: 0 10px 20px rgba(16, 185, 129, 0.3); }
+    .btn-nao { background: rgba(239, 68, 68, 0.1); color: #ef4444; border: 2px solid #ef4444; margin-top: 15px; }
 </style>
 
 <div class="terminal-mode">
-    <div class="mb-6 text-center">
-        <h1 class="text-4xl font-black tracking-widest text-blue-400 uppercase">{{ g.empresa.nome if g.empresa else 'Vortice' }}</h1>
-        <p class="text-lg text-slate-400 font-mono tracking-widest mt-1">TERMINAL BIOMÉTRICO</p>
+    <div class="mb-8 text-center">
+        <h1 class="text-3xl font-black tracking-tighter text-white">{{ g.empresa.nome if g.empresa else 'Vortice' }}</h1>
+        <div class="h-1 w-12 bg-blue-500 mx-auto mt-2 rounded-full"></div>
     </div>
     
-    <div id="camera-container">
+    <div id="camera-container" class="searching">
+        <div id="status-label" class="text-yellow-500">Aguardando Rosto...</div>
         <video id="video-feed" autoplay playsinline muted></video>
         <div id="scanner-line"></div>
         <canvas id="canvas-frame" class="hidden"></canvas>
 
         <div id="modal-confirmacao" class="overlay-modal">
-            <div class="w-20 h-20 bg-blue-900/50 rounded-full flex items-center justify-center mb-4 border-2 border-blue-500 shadow-[0_0_30px_rgba(59,130,246,0.5)]">
-                <i class="fas fa-user-check text-4xl text-blue-400"></i>
-            </div>
-            <p class="text-slate-300 text-sm font-bold uppercase tracking-widest mb-1" id="lbl-tipo-ponto">A REGISTRAR ENTRADA</p>
-            <h2 class="text-3xl font-black text-white mb-2" id="lbl-nome-func">João Silva</h2>
-            <p class="text-xl text-blue-300 font-mono mb-8" id="lbl-hora-func">08:00</p>
-            
-            <div class="w-full max-w-xs space-y-3">
-                <button class="btn-action btn-sim" onclick="confirmarPonto()"><i class="fas fa-check-circle mr-2"></i> SIM, SOU EU</button>
-                <button class="btn-action btn-nao" onclick="rejeitarPonto()"><i class="fas fa-times-circle mr-2"></i> NÃO SOU EU</button>
+            <div class="text-blue-400 text-xs font-black mb-2 tracking-widest uppercase" id="lbl-tipo-ponto">Check-in</div>
+            <h2 class="text-4xl font-black text-white mb-1" id="lbl-nome-func">---</h2>
+            <p class="text-2xl text-slate-400 font-mono mb-10" id="lbl-hora-func">00:00</p>
+            <div class="w-full max-w-xs">
+                <button class="btn-action btn-sim" onclick="confirmarPonto()">CONFIRMAR PONTO</button>
+                <button class="btn-action btn-nao" onclick="rejeitarPonto()">NÃO SOU EU</button>
             </div>
         </div>
 
-        <div id="modal-sucesso" class="overlay-modal" style="background: rgba(6, 78, 59, 0.95);">
-            <i class="fas fa-check-circle text-7xl text-emerald-400 mb-4 animate-bounce"></i>
-            <h2 class="text-3xl font-black text-white mb-2">PONTO REGISTRADO!</h2>
-            <p class="text-emerald-200 text-lg">Tenha um excelente trabalho.</p>
-        </div>
-
-        <div id="modal-erro" class="overlay-modal" style="background: rgba(127, 29, 29, 0.95);">
-            <i class="fas fa-exclamation-triangle text-7xl text-red-500 mb-6"></i>
-            <h2 class="text-2xl font-black text-white mb-2 uppercase">Biometria Não Reconhecida</h2>
-            <p class="text-red-200 text-lg mb-6 max-w-sm">Esgotou as tentativas ou o rosto não confere com a base de dados.</p>
-            <div class="px-6 py-3 bg-red-900 border border-red-500 text-white font-bold rounded-xl animate-pulse">
-                POR FAVOR, PROCURE O RH.
+        <div id="modal-sucesso" class="overlay-modal" style="background: #064e3b;">
+            <div class="w-24 h-24 bg-emerald-500 rounded-full flex items-center justify-center mb-6 shadow-lg shadow-emerald-900/50">
+                <i class="fas fa-check text-4xl text-white"></i>
             </div>
-            <p class="text-sm text-red-300 font-mono mt-8">Desbloqueando em <span id="lbl-timer-erro">5</span>s...</p>
+            <h2 class="text-3xl font-black text-white">REGISTRADO!</h2>
+            <p class="text-emerald-200 mt-2">Bom trabalho.</p>
+        </div>
+        
+        <div id="modal-erro" class="overlay-modal" style="background: #450a0a;">
+            <i class="fas fa-user-slash text-6xl text-red-500 mb-6"></i>
+            <h2 class="text-2xl font-black text-white">ACESSO NEGADO</h2>
+            <p class="text-red-300 mt-4 text-sm">Rosto não identificado.<br>Tente novamente em <span id="lbl-timer-erro">5</span>s.</p>
         </div>
     </div>
 
-    <div class="mt-8">
-        <a href="/logout" class="px-6 py-2 bg-slate-800 rounded-full text-xs text-slate-400 hover:text-white transition">Encerrar Modo Terminal</a>
+    <div class="mt-12 opacity-30 hover:opacity-100 transition">
+        <a href="/logout" class="text-[10px] font-bold text-slate-500 uppercase tracking-widest border-b border-slate-700 pb-1">Sair do Modo Terminal</a>
     </div>
 </div>
 
 <script>
     const video = document.getElementById('video-feed');
     const canvas = document.getElementById('canvas-frame');
+    const container = document.getElementById('camera-container');
+    const statusLabel = document.getElementById('status-label');
     const ctx = canvas.getContext('2d');
     
-    let stream = null;
     let isProcessing = false;
-    let scanInterval = null;
     let falhasConsecutivas = 0;
     const MAX_FALHAS = 3;
     let userAlvoId = null;
 
-    // Inicia a câmera ao carregar a página
     async function iniciarTerminal() {
         try {
-            // Tenta usar a câmera frontal do tablet
-            stream = await navigator.mediaDevices.getUserMedia({ 
+            const stream = await navigator.mediaDevices.getUserMedia({ 
                 video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } }, 
                 audio: false 
             });
             video.srcObject = stream;
-            
-            // Aguarda o vídeo carregar para começar a varredura
             video.onloadedmetadata = () => {
-                canvas.width = video.videoWidth;
-                canvas.height = video.videoHeight;
-                // A cada 2 segundos, tira uma foto silenciosa e manda pra I.A.
-                scanInterval = setInterval(capturarEAnalisar, 2000);
+                // Configuramos o canvas de captura para ser PEQUENO (Otimização de Performance)
+                canvas.width = 320; 
+                canvas.height = 240;
+                setInterval(capturarEAnalisar, 2500); // Intervalo de 2.5s para não sobrecarregar
             };
-        } catch (err) {
-            alert("Erro fatal: Não foi possível acessar a câmera do Terminal.");
-        }
+        } catch (err) { console.error("Erro câmera:", err); }
     }
 
     async function capturarEAnalisar() {
-        if (isProcessing) return; // Se já tiver um modal aberto, ignora a foto atual
+        if (isProcessing) return;
 
-        // Tira a foto
+        // Visual: Indica início da análise
+        container.className = "analyzing";
+        statusLabel.innerText = "Analisando Rosto...";
+        statusLabel.className = "text-blue-400";
+
+        // Captura e Redimensionamento (Super Rápido)
+        ctx.save();
         ctx.translate(canvas.width, 0);
         ctx.scale(-1, 1);
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        ctx.setTransform(1, 0, 0, 1, 0, 0); // Reseta a transformação
+        ctx.drawImage(video, 0, 0, 320, 240);
+        ctx.restore();
 
-        const base64Image = canvas.toDataURL('image/jpeg', 0.8);
+        // Qualidade 0.6 para upload instantâneo
+        const base64Image = canvas.toDataURL('image/jpeg', 0.6);
 
         isProcessing = true;
 
@@ -127,32 +151,36 @@
             const data = await res.json();
 
             if (data.success) {
-                // I.A. Reconheceu com segurança! Mostra a tela de confirmação.
+                container.className = "success";
+                statusLabel.innerText = "Reconhecido!";
+                statusLabel.className = "text-emerald-400";
+                
                 tocarBeep();
                 userAlvoId = data.user_id;
                 document.getElementById('lbl-nome-func').innerText = data.nome;
-                document.getElementById('lbl-tipo-ponto').innerText = `A REGISTRAR ${data.tipo}`;
+                document.getElementById('lbl-tipo-ponto').innerText = `A Registrar ${data.tipo}`;
                 document.getElementById('lbl-hora-func').innerText = data.hora;
                 document.getElementById('modal-confirmacao').classList.add('active');
             } else {
-                // I.A. rejeitou (Ou a sala ta vazia, ou a pessoa não foi reconhecida)
+                // Reset visual para procurar novamente
+                container.className = "searching";
+                statusLabel.innerText = "Aguardando Rosto...";
+                statusLabel.className = "text-yellow-500";
+                
                 if (data.error === "Rosto não reconhecido ou baixa similaridade.") {
                     registrarFalha();
                 } else {
-                    // Sala vazia ou rosto borrado (ignora e continua rodando silencioso)
                     isProcessing = false;
                 }
             }
         } catch (e) {
-            console.error("Erro na I.A:", e);
             isProcessing = false;
+            container.className = "searching";
         }
     }
 
     async function confirmarPonto() {
-        // Remove os modais temporariamente
         document.getElementById('modal-confirmacao').classList.remove('active');
-        
         try {
             const res = await fetch('/ponto/api/confirmar-ponto', {
                 method: 'POST',
@@ -160,60 +188,46 @@
                 body: JSON.stringify({ user_id: userAlvoId })
             });
             const data = await res.json();
-
             if (data.success) {
-                falhasConsecutivas = 0; // Reseta as falhas se deu certo
+                falhasConsecutivas = 0;
                 document.getElementById('modal-sucesso').classList.add('active');
-                
-                // Fecha o sucesso após 3 segundos e volta a varrer
                 setTimeout(() => {
                     document.getElementById('modal-sucesso').classList.remove('active');
-                    userAlvoId = null;
-                    isProcessing = false;
+                    resetSistema();
                 }, 3000);
-            } else {
-                alert("Erro ao gravar: " + data.error);
-                isProcessing = false;
             }
-        } catch(e) {
-            alert("Falha de conexão.");
-            isProcessing = false;
-        }
+        } catch(e) { resetSistema(); }
     }
 
-    function rejeitarPonto() {
-        // O funcionário disse "NÃO SOU EU" (Falso positivo da IA)
-        document.getElementById('modal-confirmacao').classList.remove('active');
-        registrarFalha();
+    function resetSistema() {
+        isProcessing = false;
+        userAlvoId = null;
+        container.className = "searching";
+        statusLabel.innerText = "Aguardando Rosto...";
     }
 
     function registrarFalha() {
         falhasConsecutivas++;
-        userAlvoId = null;
-
         if (falhasConsecutivas >= MAX_FALHAS) {
-            // Esgotou as tentativas! Bloqueia o terminal.
             bloquearTerminal();
         } else {
-            // Apenas volta a procurar na próxima volta do relógio
             setTimeout(() => { isProcessing = false; }, 1000);
         }
     }
 
     function bloquearTerminal() {
+        container.className = "error";
         document.getElementById('modal-erro').classList.add('active');
         let segundos = 5;
         const lblTimer = document.getElementById('lbl-timer-erro');
-        lblTimer.innerText = segundos;
-
         const timer = setInterval(() => {
             segundos--;
             lblTimer.innerText = segundos;
             if (segundos <= 0) {
                 clearInterval(timer);
                 document.getElementById('modal-erro').classList.remove('active');
-                falhasConsecutivas = 0; // Zera para o próximo funcionário tentar
-                isProcessing = false; // Libera a câmera novamente
+                falhasConsecutivas = 0;
+                resetSistema();
             }
         }, 1000);
     }
@@ -222,7 +236,6 @@
         try { new Audio("https://actions.google.com/sounds/v1/alarms/beep_short.ogg").play(); } catch(e){}
     }
 
-    // Dá a partida no motor!
     document.addEventListener('DOMContentLoaded', iniciarTerminal);
 </script>
 {% endblock %}
