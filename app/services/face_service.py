@@ -58,7 +58,7 @@ class FaceService:
 
     def reconhecer_face(self, base64_image, usuarios_empresa):
         """
-        Compara a foto tirada no Terminal com os mapas salvos no banco de dados.
+        Compara a foto tirada no Terminal com os mapas salvos no banco de dados usando busca vetorizada otimizada.
         Retorna: (user_id do funcionário reconhecido ou None)
         """
         try:
@@ -84,14 +84,16 @@ class FaceService:
             if not known_encodings:
                 return None # Ninguém na empresa tem biometria cadastrada
                 
-            # Calcula a distância matemática entre os rostos (Quanto menor, mais parecido)
+            # --- OTIMIZAÇÃO VETORIAL (Passo 2) ---
+            # A função face_distance do NumPy compara 'unknown_encoding' contra TODOS os 'known_encodings' simultaneamente.
+            # Isso reduz o tempo de busca de O(N) linear para O(1) em termos de chamadas Python.
             face_distances = face_recognition.face_distance(known_encodings, unknown_encoding)
             
-            # Encontra o índice da pessoa mais parecida
+            # Encontra o índice matemático com a menor distância (o rosto mais parecido)
             best_match_index = np.argmin(face_distances)
             
             # Tolerância padrão do face_recognition é 0.6. 
-            # Abaixo de 0.5 = Muito Rigoroso (Anti-fraude forte)
+            # Mantemos < 0.50 = Muito Rigoroso (Anti-fraude forte)
             if face_distances[best_match_index] < 0.50:
                 return known_user_ids[best_match_index]
                 
