@@ -1,31 +1,36 @@
 import face_recognition
 import numpy as np
 import base64
-import cv2
+import os
+import uuid
 
 class FaceService:
     def _decode_base64_image(self, base64_str):
-        """Converte a string base64 do frontend num formato que a IA consiga ler usando OpenCV."""
+        """Converte a string base64 do frontend num ficheiro físico temporário para garantir leitura perfeita da IA."""
         if ',' in base64_str:
             base64_str = base64_str.split(',')[1]
             
         img_data = base64.b64decode(base64_str)
         
-        # 1. Converte os bytes brutos para um array NumPy unidimensional (1D) de 8-bits
-        nparr = np.frombuffer(img_data, np.uint8)
+        # 1. Cria um nome de ficheiro único na pasta de ficheiros temporários do Linux (Google Cloud)
+        temp_filename = f"/tmp/face_{uuid.uuid4().hex}.jpg"
         
-        # 2. O ROLO COMPRESSOR: O OpenCV lê esse array bruto e monta a imagem perfeitamente.
-        # Ele descarta qualquer metadado lixo do telemóvel e garante que a memória está contígua.
-        img_cv2 = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-        
-        if img_cv2 is None:
-            raise ValueError("O OpenCV não conseguiu descodificar a imagem.")
+        try:
+            # 2. Guarda a imagem fisicamente no disco. Isso força a recriação perfeita dos bits.
+            with open(temp_filename, "wb") as f:
+                f.write(img_data)
             
-        # 3. O OpenCV lê em formato BGR (Azul, Verde, Vermelho), mas a IA exige RGB.
-        # Fazemos a conversão de cores final aqui.
-        image_array = cv2.cvtColor(img_cv2, cv2.COLOR_BGR2RGB)
+            # 3. A BALA DE PRATA: O dlib (C++) foi desenhado para ler ficheiros físicos. 
+            # Ele abre o ficheiro recém-criado sem nenhum erro de "Unsupported image type".
+            image_array = face_recognition.load_image_file(temp_filename)
             
-        return image_array, img_data
+            return image_array, img_data
+            
+        finally:
+            # 4. Independentemente de dar erro ou sucesso, apagamos o ficheiro imediatamente 
+            # para não encher o disco do servidor.
+            if os.path.exists(temp_filename):
+                os.remove(temp_filename)
 
     def cadastrar_face(self, base64_image):
         """
