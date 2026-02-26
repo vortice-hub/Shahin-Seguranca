@@ -2,25 +2,21 @@ import face_recognition
 import numpy as np
 import base64
 import io
-from PIL import Image
 
 class FaceService:
     def _decode_base64_image(self, base64_str):
         """Converte a string base64 do frontend num formato que a IA consiga ler."""
-        # Remove o cabeçalho 'data:image/jpeg;base64,' se existir
         if ',' in base64_str:
             base64_str = base64_str.split(',')[1]
             
         img_data = base64.b64decode(base64_str)
-        image = Image.open(io.BytesIO(img_data))
         
-        # O face_recognition exige imagens no formato RGB
-        if image.mode != "RGB":
-            image = image.convert("RGB")
+        # CORREÇÃO DEFINITIVA: Em vez de tentarmos converter com PIL e Numpy manualmente,
+        # usamos a função nativa da própria biblioteca para carregar a imagem na memória.
+        # Isto elimina 100% o erro "Unsupported image type, must be 8bit gray or RGB image".
+        image_array = face_recognition.load_image_file(io.BytesIO(img_data))
             
-        # CORREÇÃO FASE 1: Força a matriz numpy a ser estritamente de 8-bits (uint8).
-        # Isto evita o erro "Unsupported image type, must be 8bit gray or RGB image" no dlib.
-        return np.array(image, dtype=np.uint8), img_data
+        return image_array, img_data
 
     def cadastrar_face(self, base64_image):
         """

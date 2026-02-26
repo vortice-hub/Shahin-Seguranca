@@ -60,51 +60,49 @@
         </button>
     </div>
 
-    <div id="step-camera" class="hidden bg-white rounded-3xl shadow-xl border border-slate-200 overflow-hidden relative">
-        <div class="p-4 bg-slate-900 text-white flex justify-between items-center z-10 relative">
-            <span class="text-xs font-bold uppercase tracking-widest"><i class="fas fa-video text-red-500 animate-pulse mr-2"></i> Captura Biométrica</span>
-            <button onclick="cancelarCamera()" class="text-white/50 hover:text-white"><i class="fas fa-times text-lg"></i></button>
+    <div id="step-camera" class="hidden fixed inset-0 z-[9999] bg-black flex flex-col items-center justify-center">
+        <div class="absolute top-0 left-0 w-full p-6 bg-gradient-to-b from-black/80 to-transparent flex justify-between items-center z-50">
+            <span class="text-xs font-bold uppercase tracking-widest text-white"><i class="fas fa-video text-red-500 animate-pulse mr-2"></i> Captura Biométrica</span>
+            <button onclick="cancelarCamera()" class="text-white hover:text-red-400 transition p-2"><i class="fas fa-times text-2xl"></i></button>
         </div>
         
-        <div class="relative bg-black h-[60vh] md:h-[450px] w-full flex items-center justify-center overflow-hidden">
-            <video id="video-feed" autoplay playsinline class="absolute min-w-full min-h-full object-cover transform scale-x-[-1]"></video>
-            
-            <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[220px] h-[300px] border-4 border-dashed border-blue-400 rounded-[50%] z-20 pointer-events-none shadow-[0_0_0_9999px_rgba(0,0,0,0.7)] flex flex-col items-center justify-center">
-                <div class="w-[80px] h-[2px] bg-blue-400/50 absolute top-[35%]"></div>
-            </div>
-            
-            <div class="absolute bottom-6 z-30 flex flex-col items-center w-full px-4">
-                <p class="text-white font-black text-sm bg-blue-600 px-5 py-2 rounded-full shadow-lg mb-2 text-center">Encaixe o rosto no formato</p>
-                <p class="text-white text-[11px] font-bold bg-black/60 px-4 py-1.5 rounded-full text-center tracking-wide">Aproxime ou afaste até preencher a linha</p>
-            </div>
+        <video id="video-feed" autoplay playsinline class="absolute inset-0 w-full h-full object-cover transform scale-x-[-1]"></video>
+        
+        <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[250px] h-[340px] border-4 border-dashed border-blue-400 rounded-[50%] z-20 pointer-events-none shadow-[0_0_0_9999px_rgba(0,0,0,0.8)] flex flex-col items-center justify-center">
+            <div class="w-[100px] h-[2px] bg-blue-400/50 absolute top-[35%]"></div>
+        </div>
+        
+        <div class="absolute bottom-[100px] z-30 flex flex-col items-center w-full px-4 pointer-events-none">
+            <p class="text-white font-black text-sm bg-blue-600 px-6 py-3 rounded-full shadow-lg mb-2 text-center">Encaixe o rosto no formato</p>
+            <p class="text-white text-[11px] font-bold bg-black/60 px-4 py-1.5 rounded-full text-center tracking-wide">Aproxime ou afaste até preencher a linha</p>
         </div>
 
-        <div class="p-6 bg-slate-50 border-t border-slate-200">
-            <button id="btn-capturar" onclick="tirarFoto()" class="w-full bg-blue-600 text-white font-bold py-4 rounded-xl shadow-lg transition active:scale-95 flex items-center justify-center gap-2">
-                <i class="fas fa-camera text-xl"></i> TIRAR FOTO E ENVIAR
+        <div class="absolute bottom-0 left-0 w-full p-6 bg-gradient-to-t from-black/90 to-transparent z-50 pb-8">
+            <button id="btn-capturar" onclick="tirarFoto()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-5 rounded-2xl shadow-[0_10px_30px_rgba(37,99,235,0.4)] transition transform active:scale-95 flex items-center justify-center gap-3 text-lg">
+                <i class="fas fa-camera text-2xl"></i> TIRAR FOTO
             </button>
         </div>
         
         <canvas id="canvas-foto" class="hidden"></canvas>
     </div>
 
-    <div id="step-loading" class="hidden bg-white rounded-3xl shadow-xl border border-slate-200 p-10 text-center">
-        <i class="fas fa-robot text-5xl text-blue-500 mb-6 animate-pulse"></i>
-        <h3 class="text-xl font-black text-slate-800 mb-2">A processar Biometria...</h3>
-        <p class="text-sm text-slate-500 mb-6">A nossa Inteligência Artificial está a mapear os 128 pontos do seu rosto.</p>
-        <div class="w-full bg-slate-100 rounded-full h-2">
-            <div class="bg-blue-600 h-2 rounded-full w-2/3 animate-pulse"></div>
+    <div id="step-loading" class="hidden fixed inset-0 z-[10000] bg-slate-900 flex flex-col items-center justify-center p-10 text-center">
+        <i class="fas fa-robot text-6xl text-blue-500 mb-8 animate-pulse"></i>
+        <h3 class="text-2xl font-black text-white mb-2">A processar Biometria...</h3>
+        <p class="text-sm text-slate-400 mb-10">A nossa Inteligência Artificial está a mapear os 128 pontos do seu rosto.</p>
+        <div class="w-full max-w-xs bg-slate-800 rounded-full h-3 overflow-hidden">
+            <div class="bg-blue-500 h-full rounded-full w-2/3 animate-pulse"></div>
         </div>
     </div>
 
-    <div id="modal-erro-custom" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[10000] hidden flex items-center justify-center p-4">
-        <div class="bg-white rounded-3xl p-8 w-full max-w-sm text-center shadow-2xl transform transition-all scale-100 border-t-4 border-red-500">
-            <div class="w-20 h-20 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4 border-4 border-red-100">
-                <i class="fas fa-user-times text-4xl text-red-500"></i>
+    <div id="modal-erro-custom" class="fixed inset-0 bg-slate-900/90 backdrop-blur-md z-[10005] hidden flex items-center justify-center p-6">
+        <div class="bg-white rounded-[2rem] p-8 w-full max-w-sm text-center shadow-2xl transform transition-all scale-100 border-t-8 border-red-500">
+            <div class="w-24 h-24 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-6 border-4 border-red-100">
+                <i class="fas fa-user-times text-5xl text-red-500"></i>
             </div>
-            <h3 class="text-2xl font-black text-slate-800 mb-2">Foto Recusada</h3>
-            <p id="msg-erro-custom" class="text-sm text-slate-600 mb-8 font-medium">Motivo do erro aparecerá aqui.</p>
-            <button onclick="fecharModalErro()" class="w-full bg-slate-800 text-white font-bold py-4 rounded-xl hover:bg-slate-700 transition shadow-lg flex items-center justify-center gap-2">
+            <h3 class="text-3xl font-black text-slate-800 mb-2">Foto Recusada</h3>
+            <p id="msg-erro-custom" class="text-base text-slate-600 mb-10 font-medium">Motivo do erro aparecerá aqui.</p>
+            <button onclick="fecharModalErro()" class="w-full bg-slate-800 text-white font-bold py-5 rounded-xl hover:bg-slate-700 transition shadow-lg flex items-center justify-center gap-2 text-lg">
                 <i class="fas fa-redo"></i> TENTAR NOVAMENTE
             </button>
         </div>
@@ -116,22 +114,11 @@
         let stream = null;
 
         function iniciarCamera() {
-            // 1. Muda a interface IMEDIATAMENTE para dar feedback ao funcionário
-            document.getElementById('header-titulos').classList.add('hidden');
+            // Fim da dor de cabeça do "await". Mostra a interface imediatamente via CSS
             document.getElementById('step-rules').classList.add('hidden');
+            document.getElementById('header-titulos').classList.add('hidden');
             document.getElementById('step-camera').classList.remove('hidden');
-
-            // 2. Tenta forçar o modo Ecrã Inteiro (sem 'await' para não travar o código no Android)
-            try {
-                const elem = document.documentElement;
-                if (elem.requestFullscreen) { elem.requestFullscreen(); }
-                else if (elem.webkitRequestFullscreen) { elem.webkitRequestFullscreen(); }
-                else if (elem.msRequestFullscreen) { elem.msRequestFullscreen(); }
-            } catch (e) {
-                console.log("Modo fullscreen não suportado.");
-            }
             
-            // 3. Pede acesso à câmara
             navigator.mediaDevices.getUserMedia({ 
                 video: { facingMode: "user", width: { ideal: 720 }, height: { ideal: 720 } }, 
                 audio: false 
@@ -139,8 +126,7 @@
                 stream = str;
                 video.srcObject = stream;
             }).catch(err => {
-                alert("Erro ao aceder à câmara: " + err.message + "\nPor favor, dê permissão nas definições do navegador.");
-                cancelarCamera();
+                mostrarErroCustomizado("Erro ao aceder à câmara. Por favor, dê permissão nas definições do navegador.");
             });
         }
 
@@ -151,12 +137,6 @@
             document.getElementById('step-camera').classList.add('hidden');
             document.getElementById('header-titulos').classList.remove('hidden');
             document.getElementById('step-rules').classList.remove('hidden');
-            
-            // Sai do modo Ecrã Inteiro se estiver ativo
-            try {
-                if (document.exitFullscreen) { document.exitFullscreen(); } 
-                else if (document.webkitExitFullscreen) { document.webkitExitFullscreen(); }
-            } catch (e) {}
         }
 
         async function tirarFoto() {
@@ -164,7 +144,7 @@
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
             
-            // CORREÇÃO: Limpa o canvas e desenha a foto original SEM ESPELHAR.
+            // Foto real (não espelhada) vai para o servidor
             context.clearRect(0, 0, canvas.width, canvas.height);
             context.drawImage(video, 0, 0, canvas.width, canvas.height);
             
@@ -190,26 +170,24 @@
                     try { Toastify({ text: "Biometria Ativada! 🎉", duration: 3000, style: { background: "#10b981" } }).showToast(); } catch(e){}
                     setTimeout(() => { window.location.reload(); }, 1500); 
                 } else {
-                    document.getElementById('msg-erro-custom').innerText = data.error;
-                    document.getElementById('step-loading').classList.add('hidden');
-                    document.getElementById('modal-erro-custom').classList.remove('hidden');
+                    mostrarErroCustomizado(data.error);
                 }
             } catch (err) {
-                document.getElementById('msg-erro-custom').innerText = "Erro de conexão com o servidor. Verifique a internet e tente novamente.";
-                document.getElementById('step-loading').classList.add('hidden');
-                document.getElementById('modal-erro-custom').classList.remove('hidden');
+                mostrarErroCustomizado("Erro de conexão com o servidor. Verifique a internet e tente novamente.");
             }
+        }
+
+        function mostrarErroCustomizado(mensagem) {
+            document.getElementById('step-camera').classList.add('hidden');
+            document.getElementById('step-loading').classList.add('hidden');
+            document.getElementById('msg-erro-custom').innerText = mensagem;
+            document.getElementById('modal-erro-custom').classList.remove('hidden');
         }
 
         function fecharModalErro() {
             document.getElementById('modal-erro-custom').classList.add('hidden');
             document.getElementById('step-rules').classList.remove('hidden');
             document.getElementById('header-titulos').classList.remove('hidden');
-            
-            try {
-                if (document.exitFullscreen) { document.exitFullscreen(); } 
-                else if (document.webkitExitFullscreen) { document.webkitExitFullscreen(); }
-            } catch (e) {}
         }
     </script>
     {% endif %}
