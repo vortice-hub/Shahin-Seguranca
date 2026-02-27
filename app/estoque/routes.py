@@ -10,10 +10,11 @@ from app.services.estoque_service import EstoqueService
 from app.repositories.estoque_repository import (ItemEstoqueRepository, HistoricoEntradaRepository, 
                                                  HistoricoSaidaRepository, SolicitacaoUniformeRepository)
 
-estoque_bp = Blueprint('estoque', __name__, template_folder='templates')
+estoque_bp = Blueprint('estoque', __name__, template_folder='templates', url_prefix='/estoque')
 logger = logging.getLogger(__name__)
 
-@estoque_bp.route('/controle-uniforme')
+# CORREÇÃO FASE 1: Rota alterada de '/controle-uniforme' para '/gerenciar'
+@estoque_bp.route('/gerenciar')
 @login_required
 @permission_required('ESTOQUE')
 def gerenciar_estoque():
@@ -138,7 +139,8 @@ def api_buscar_tamanhos():
     resultados = [{'id': item.id, 'tamanho': item.tamanho, 'genero': item.genero, 'quantidade': item.quantidade} for item in itens]
     return jsonify(resultados)
 
-@estoque_bp.route('/solicitar', methods=['GET', 'POST'])
+# CORREÇÃO FASE 1: Rota alterada de '/solicitar' para '/solicitar-uniforme'
+@estoque_bp.route('/solicitar-uniforme', methods=['GET', 'POST'])
 @login_required
 def solicitar_uniforme():
     item_repo = ItemEstoqueRepository()
@@ -161,7 +163,8 @@ def solicitar_uniforme():
     
     return render_template('estoque/solicitar_uniforme.html', nomes_disponiveis=nomes_disponiveis, solicitacoes=minhas_solicitacoes)
 
-@estoque_bp.route('/solicitacoes', methods=['GET', 'POST'])
+# CORREÇÃO FASE 1: Rota alterada de '/solicitacoes' para '/admin/solicitacoes'
+@estoque_bp.route('/admin/solicitacoes', methods=['GET', 'POST'])
 @login_required
 @permission_required('ESTOQUE')
 def gestao_solicitacoes():

@@ -21,9 +21,11 @@ def dashboard():
     if current_user.role == 'Terminal':
         return redirect(url_for('ponto.terminal_scanner'))
 
-    # Dados Basicos (Usando g.empresa carregado no middleware)
+    hoje = get_brasil_time().date()
+
+    # Dados Basicos
     dados = {
-        'hoje': get_brasil_time().strftime('%d/%m/%Y'),
+        'hoje': hoje.strftime('%d/%m/%Y'),
         'doc_pendentes': 0,
         'nome_empresa': g.empresa.nome if hasattr(g, 'empresa') and g.empresa else "Vortice SaaS"
     }
@@ -32,6 +34,45 @@ def dashboard():
     docs_h = Holerite.query.filter_by(user_id=current_user.id, visualizado=False).count()
     docs_r = Recibo.query.filter_by(user_id=current_user.id, visualizado=False).count()
     dados['doc_pendentes'] = docs_h + docs_r
+
+    # ==========================================
+    # LÓGICA DO DASHBOARD DE PONTO DINÂMICO
+    # ==========================================
+    ultimo_ponto = PontoRegistro.query.filter_by(
+        user_id=current_user.id, 
+        data_registro=hoje
+    ).order_by(PontoRegistro.hora_registro.desc()).first()
+
+    status_ponto = {
+        'texto': 'Não Iniciado',
+        'badge': 'bg-slate-500',
+        'icone': 'fa-coffee',
+        'proximo': 'Entrada'
+    }
+
+    if ultimo_ponto:
+        tipo = ultimo_ponto.tipo.lower()
+        if 'entrada' in tipo or 'retorno' in tipo:
+            status_ponto = {
+                'texto': 'Trabalhando',
+                'badge': 'bg-emerald-500',
+                'icone': 'fa-briefcase',
+                'proximo': 'Saída p/ Almoço' if 'entrada' in tipo else 'Saída'
+            }
+        elif 'almoço' in tipo and 'saída' in tipo:
+            status_ponto = {
+                'texto': 'Em Almoço',
+                'badge': 'bg-amber-500',
+                'icone': 'fa-utensils',
+                'proximo': 'Retorno do Almoço'
+            }
+        elif 'saída' in tipo and 'almoço' not in tipo:
+             status_ponto = {
+                'texto': 'Encerrado',
+                'badge': 'bg-blue-500',
+                'icone': 'fa-check-circle',
+                'proximo': 'Jornada Concluída'
+            }
 
     # Dados Administrativos
     admin_stats = {}
@@ -43,7 +84,7 @@ def dashboard():
     if has_permission('PONTO'):
         admin_stats['ajustes_pendentes'] = PontoAjuste.query.filter_by(status='Pendente').count()
 
-    return render_template('main/dashboard.html', dados=dados, admin=admin_stats)
+    return render_template('main/dashboard.html', dados=dados, admin=admin_stats, status_ponto=status_ponto)
 
 # ==============================================================================
 # ⚙️ SERVICE WORKER (ESCOPO GLOBAL PARA PWA)
@@ -271,4 +312,48 @@ def semear_permissoes():
     except Exception as e:
         db.session.rollback()
         return f"Erro: {str(e)}"
+
+# ==============================================================================
+# 🔔 ROTA DE INSCRIÇÃO WEBPUSH (O ELO PERDIDO)
+# ==============================================================================
+@main_bp.route('/api/push/subscribe', methods=['POST'])
+@login_required
+def push_subscribe():
+    """Recebe a permissão do telemóvel e guarda no banco para futuros disparos."""
+    try:
+        sub_info = request.get_json()
+        if not sub_info:
+            return jsonify({'success': False, 'error': 'Dados inválidos'}), 400
+            
+        endpoint = sub_info.get('endpoint')
+        keys = sub_info.get('keys', {})
+        p256dh = keys.get('p256dh')
+        auth = keys.get('auth')
+        
+        if not endpoint or not p256dh or not auth:
+            return jsonify({'success': False, 'error': 'Chaves criptográficas ausentes'}), 400
+            
+        # Verifica se este telemóvel já está registado
+        existente = PushSubscription.query.filter_by(endpoint=endpoint).first()
+        if existente:
+            # Se já existir, apenas atualizamos para o utilizador atual (caso tenha trocado de conta)
+            existente.user_id = current_user.id
+            db.session.commit()
+        else:
+            # Cria a nova subscrição
+            nova_sub = PushSubscription(
+                user_id=current_user.id,
+                endpoint=endpoint,
+                p256dh=p256dh,
+                auth=auth
+            )
+            db.session.add(nova_sub)
+            db.session.commit()
+            
+        print(f"[WEBPUSH] Dispositivo registado com sucesso para o user: {current_user.real_name}")
+        return jsonify({'success': True})
+        
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
 

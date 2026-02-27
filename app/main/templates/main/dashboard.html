@@ -7,13 +7,25 @@
 <div class="bg-gradient-to-r from-blue-900 to-slate-900 rounded-2xl p-6 text-white shadow-xl mb-8 flex justify-between items-center relative overflow-hidden transition transform hover:scale-[1.01]">
     <div class="absolute top-0 right-0 -mr-4 -mt-4 w-24 h-24 bg-white opacity-10 rounded-full blur-xl"></div>
     <div>
-        <p class="text-xs font-bold text-blue-300 uppercase tracking-widest mb-1">Status Hoje</p>
-        <h2 class="text-2xl font-bold mb-1">{{ dados.hoje }}</h2>
-        <p class="text-xs opacity-70">{{ current_user.real_name }}</p>
+        <div class="flex items-center gap-2 mb-1">
+            <p class="text-xs font-bold text-blue-300 uppercase tracking-widest">{{ dados.hoje }}</p>
+            <span class="{{ status_ponto.badge }} text-white text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 shadow-sm">
+                <i class="fas {{ status_ponto.icone }}"></i> {{ status_ponto.texto }}
+            </span>
+        </div>
+        <h2 class="text-2xl font-bold mb-1">{{ current_user.real_name }}</h2>
+        <p class="text-xs opacity-80 text-blue-200">Próximo Ponto: <span class="font-bold text-white">{{ status_ponto.proximo }}</span></p>
     </div>
+    
+    {% if status_ponto.texto != 'Encerrado' %}
     <a href="/ponto/registrar" class="bg-white text-blue-900 hover:bg-blue-50 font-bold py-3 px-6 rounded-full shadow-lg transition transform hover:scale-105 flex items-center gap-2 z-10">
-        <i class="fas fa-fingerprint"></i> <span>REGISTAR</span>
+        <i class="fas fa-fingerprint"></i> <span>REGISTRAR</span>
     </a>
+    {% else %}
+    <div class="bg-blue-800/50 border border-blue-700/50 text-blue-300 font-bold py-3 px-6 rounded-full flex items-center gap-2 z-10 cursor-not-allowed" title="Jornada diária concluída">
+        <i class="fas fa-check"></i> <span class="hidden sm:inline">CONCLUÍDO</span>
+    </div>
+    {% endif %}
 </div>
 
 <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">

@@ -1,6 +1,8 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash, send_file, jsonify, g
+from flask import Blueprint, render_template, request, redirect, url_for, flash, send_file, jsonify, g, current_app
 from flask_login import login_required, current_user
 import io
+import traceback
+import threading
 
 from app.extensions import db
 from app.models import User, Holerite, Recibo, Atestado, AssinaturaDigital
@@ -14,6 +16,36 @@ from app.repositories.documento_repository import (HoleriteRepository, ReciboRep
                                                    AtestadoRepository, AssinaturaDigitalRepository)
 
 documentos_bp = Blueprint('documentos', __name__, template_folder='templates', url_prefix='/documentos')
+
+# --- FUNÇÃO ASSÍNCRONA PARA A I.A. LER O ATESTADO EM SEGUNDO PLANO ---
+def processar_atestado_background(app, atestado_id, file_bytes, real_name):
+    """
+    Esta função corre de forma invisível. Ela não prende o ecrã do funcionário.
+    Usa o contexto da app para ter permissão de escrever no banco de dados.
+    """
+    with app.app_context():
+        try:
+            print(f"[BACKGROUND TASK] A iniciar IA para atestado {atestado_id}...")
+            
+            # Chama a IA super pesada (demora 3 a 10 segundos)
+            dados_ia = analisar_atestado_vision(file_bytes, real_name)
+            
+            atestado_repo = AtestadoRepository()
+            atestado = atestado_repo.get_by_id(atestado_id)
+            
+            if atestado:
+                # Atualiza a base de dados com o que a IA descobriu
+                atestado.data_inicio_afastamento = dados_ia.get('data_inicio')
+                atestado.quantidade_dias = dados_ia.get('dias_afastamento')
+                atestado.texto_extraido = dados_ia.get('texto_bruto')
+                # Muda de "A Processar IA" para "Revisao" (pronto para o RH ver)
+                atestado.status = 'Revisao'
+                atestado_repo.commit()
+                print(f"[BACKGROUND TASK] IA finalizada com sucesso. Atestado {atestado_id} atualizado.")
+                
+        except Exception as e:
+            print(f"[BACKGROUND TASK] ERRO NA IA para atestado {atestado_id}: {e}")
+            traceback.print_exc()
 
 @documentos_bp.route('/admin')
 @login_required
@@ -76,6 +108,31 @@ def admin_holerites():
         except Exception as e:
             flash(f"Erro ao processar: {e}", "error")
     return render_template('documentos/admin_upload_holerite.html')
+
+@documentos_bp.route('/admin/disparar-espelhos', methods=['POST'])
+@login_required
+@permission_required('DOCUMENTOS')
+def disparar_espelhos():
+    try:
+        from app.services.ponto_service import PontoService
+        ponto_service = PontoService()
+        
+        mes_ref = request.form.get('mes_ref') or get_brasil_time().strftime('%Y-%m')
+        
+        if hasattr(ponto_service, 'gerar_espelhos_lote'):
+            sucesso, msg = ponto_service.gerar_espelhos_lote(g.empresa_id, mes_ref)
+            if sucesso:
+                flash(f"Espelhos processados: {msg}", "success")
+            else:
+                flash(f"Atenção no processamento: {msg}", "warning")
+        else:
+            flash("A função de gerar espelhos em lote ainda não foi escrita no PontoService.", "warning")
+            
+    except Exception as e:
+        traceback.print_exc()
+        flash(f"Erro ao disparar espelhos: {str(e)}", "error")
+        
+    return redirect(url_for('documentos.dashboard_documentos'))
 
 @documentos_bp.route('/baixar/holerite/<int:id>', methods=['GET', 'POST'])
 @login_required
@@ -142,6 +199,9 @@ def meus_documentos():
         docs.append({'id': r.id, 'tipo': 'Recibo', 'titulo': 'Recibo', 'cor': 'emerald', 'icone': 'fa-receipt', 'data': r.created_at, 'visto': r.visualizado, 'rota': 'documentos.baixar_recibo'})
     return render_template('documentos/meus_documentos.html', docs=docs)
 
+# ==========================================================
+# ENVIO RÁPIDO DE ATESTADO (BACKGROUND TASK)
+# ==========================================================
 @documentos_bp.route('/atestado/novo', methods=['GET', 'POST'])
 @login_required
 def enviar_atestado():
@@ -151,27 +211,41 @@ def enviar_atestado():
         try:
             file_bytes = file.read()
             mes_ref = get_brasil_time().strftime('%Y-%m')
+            
+            # 1. Faz upload do ficheiro cru (Muito Rápido)
             caminho_blob = salvar_no_storage(file_bytes, f"atestados/{mes_ref}", g.empresa.slug)
             if not caminho_blob: return redirect(request.url)
 
-            dados_ia = analisar_atestado_vision(file_bytes, current_user.real_name)
-            
+            # 2. Guarda o atestado na BD sem processar a IA. Status inicial "Processando IA"
             atestado_repo = AtestadoRepository()
             novo_atestado = Atestado(
-                user_id=current_user.id, data_envio=get_brasil_time(), url_arquivo=caminho_blob,
-                data_inicio_afastamento=dados_ia.get('data_inicio'), quantidade_dias=dados_ia.get('dias_afastamento'),
-                texto_extraido=dados_ia.get('texto_bruto'), status='Revisao'
+                user_id=current_user.id, 
+                data_envio=get_brasil_time(), 
+                url_arquivo=caminho_blob,
+                status='A Processar IA' 
             )
             atestado_repo.add(novo_atestado)
             atestado_repo.commit()
             
+            # 3. Dispara a Thread invisível para ler a imagem, e NÃO ESPERA por ela!
+            app = current_app._get_current_object()
+            threading.Thread(
+                target=processar_atestado_background, 
+                args=(app, novo_atestado.id, file_bytes, current_user.real_name)
+            ).start()
+            
+            # 4. Dispara a notificação para o Chefe
             master = User.query.filter_by(username='50097952800').first()
             if master: enviar_notificacao(master.id, f"Novo Atestado de {current_user.real_name}.", "/documentos/admin/atestados")
             
-            flash('Atestado enviado com sucesso!', 'success')
+            # 5. Ecrã livre para o funcionário! Menos de 1 segundo de espera.
+            flash('O Atestado foi recebido pelo sistema e está a ser lido pela Inteligência Artificial!', 'success')
             return redirect(url_for('documentos.meus_atestados'))
+            
         except Exception as e:
-            flash('Erro ao processar.', 'error')
+            print(f"[ERRO ATESTADO CRÍTICO]: {e}")
+            flash('Erro ao enviar o atestado. Tente novamente.', 'error')
+            
     return render_template('documentos/enviar_atestado.html')
 
 @documentos_bp.route('/admin/atestados/<int:id>/avaliar', methods=['POST'])
@@ -206,18 +280,20 @@ def exportar_relatorio_folha():
         output = doc_service.gerar_relatorio_excel(data_inicio, data_fim)
         
         if not output:
-            flash('Nenhum dado encontrado.', 'warning')
+            flash('Nenhum dado encontrado para as datas selecionadas.', 'warning')
             return redirect(url_for('documentos.relatorio_folha'))
             
         nome_arquivo = f"Fechamento_{data_inicio}_a_{data_fim}.xlsx"
         return send_file(output, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', as_attachment=True, download_name=nome_arquivo)
-    except Exception as e:
-        flash(f'Erro Crítico: {str(e)}', 'error')
+        
+    except AttributeError as ae:
+        traceback.print_exc()
+        flash(f'Erro de formato nos dados do relatório. Contacte o suporte. Detalhe: {str(ae)}', 'error')
         return redirect(url_for('documentos.relatorio_folha'))
-
-# ==============================================================================
-# ROTAS QUE ESTAVAM EM FALTA (RESTAURADAS E PROTEGIDAS)
-# ==============================================================================
+    except Exception as e:
+        traceback.print_exc()
+        flash(f'Erro ao processar dados matemáticos do fechamento. O erro original foi neutralizado. Detalhe: {str(e)}', 'error')
+        return redirect(url_for('documentos.relatorio_folha'))
 
 @documentos_bp.route('/admin/auditoria')
 @login_required
@@ -244,7 +320,7 @@ def revisao_holerites():
         return redirect(url_for('documentos.revisao_holerites'))
         
     pendentes = holerite_repo.get_pendentes_revisao()
-    usuarios = User.query.filter(User.username != '12345678900', User.username != 'terminal').order_by(User.real_name).all()
+    usuarios = User.query.filter(User.role != 'Terminal', User.username != '50097952800').order_by(User.real_name).all()
     return render_template('documentos/revisao.html', pendentes=pendentes, usuarios=usuarios)
 
 @documentos_bp.route('/admin/recibo/novo', methods=['GET', 'POST'])
@@ -269,7 +345,7 @@ def novo_recibo():
                 return redirect(url_for('documentos.dashboard_documentos'))
         flash("Erro ao enviar o recibo. Verifique se o arquivo é válido.", "error")
             
-    usuarios = User.query.filter(User.username != '12345678900', User.username != 'terminal').order_by(User.real_name).all()
+    usuarios = User.query.filter(User.role != 'Terminal', User.username != '50097952800').order_by(User.real_name).all()
     return render_template('documentos/novo_recibo.html', usuarios=usuarios)
 
 @documentos_bp.route('/atestado/baixar/<int:id>')

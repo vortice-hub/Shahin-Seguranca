@@ -77,35 +77,18 @@
                     <td class="px-6 py-4 text-right flex items-center justify-end gap-2">
                         
                         {% if solic.observacao %}
-                        <button onclick="alert('Observação do Funcionário:\n\n{{ solic.observacao }}')" class="text-slate-400 hover:text-blue-500 p-2 rounded transition" title="Ler Observação">
+                        <button onclick="abrirModalNota('{{ solic.user.real_name }}', '{{ solic.observacao }}')" class="text-slate-400 hover:text-blue-500 p-2 rounded transition" title="Ler Observação">
                             <i class="fas fa-comment-dots text-lg"></i>
                         </button>
                         {% endif %}
 
                         {% if solic.status == 'Pendente' %}
-                            <form action="{{ url_for('ponto.gestao_ausencias') }}" method="POST" class="inline" onsubmit="return confirm('Ao aprovar, o sistema preencherá o espelho de ponto deste funcionário automaticamente. Confirmar?');">
-                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                                <input type="hidden" name="solicitacao_id" value="{{ solic.id }}"/>
-                                <input type="hidden" name="acao" value="aprovar"/>
-                                <button type="submit" class="text-white bg-emerald-500 hover:bg-emerald-600 px-3 py-1.5 rounded transition text-xs font-bold" title="Aprovar">Aprovar</button>
-                            </form>
-                            
-                            <form action="{{ url_for('ponto.gestao_ausencias') }}" method="POST" class="inline" onsubmit="return confirm('Deseja recusar este pedido?');">
-                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                                <input type="hidden" name="solicitacao_id" value="{{ solic.id }}"/>
-                                <input type="hidden" name="acao" value="recusar"/>
-                                <button type="submit" class="text-white bg-red-500 hover:bg-red-600 px-3 py-1.5 rounded transition text-xs font-bold" title="Recusar">Recusar</button>
-                            </form>
-                        
+                            <button onclick="abrirModalAcao('aprovar', {{ solic.id }}, 'Ao aprovar, o sistema preencherá o espelho de ponto deste funcionário automaticamente.')" class="text-white bg-emerald-500 hover:bg-emerald-600 px-3 py-1.5 rounded transition text-xs font-bold shadow-sm" title="Aprovar">Aprovar</button>
+                            <button onclick="abrirModalAcao('recusar', {{ solic.id }}, 'Tem certeza que deseja recusar este pedido de ausência?')" class="text-white bg-red-500 hover:bg-red-600 px-3 py-1.5 rounded transition text-xs font-bold shadow-sm" title="Recusar">Recusar</button>
                         {% elif solic.status == 'Aprovado' %}
-                            <form action="{{ url_for('ponto.gestao_ausencias') }}" method="POST" class="inline" onsubmit="return confirm('PERIGO: Isso vai CANCELAR as férias aprovadas e restaurar os dias devidos no espelho de ponto do funcionário. Continuar?');">
-                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                                <input type="hidden" name="solicitacao_id" value="{{ solic.id }}"/>
-                                <input type="hidden" name="acao" value="remover"/>
-                                <button type="submit" class="text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 px-3 py-1.5 rounded transition text-xs font-bold flex items-center gap-1" title="Revogar Férias">
-                                    <i class="fas fa-trash-alt"></i> Revogar
-                                </button>
-                            </form>
+                            <button onclick="abrirModalAcao('remover', {{ solic.id }}, 'PERIGO: Isso vai CANCELAR as férias aprovadas e restaurar os dias devidos no espelho de ponto do funcionário.')" class="text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 px-3 py-1.5 rounded transition text-xs font-bold flex items-center gap-1" title="Revogar Férias">
+                                <i class="fas fa-trash-alt"></i> Revogar
+                            </button>
                         {% endif %}
                     </td>
                 </tr>
@@ -116,5 +99,83 @@
         </table>
     </div>
 </div>
+
+<div id="modalAcao" class="fixed inset-0 z-[999] bg-slate-900/60 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 transform transition-all">
+        <div class="flex items-center gap-4 mb-4">
+            <div id="modalAcaoIcone" class="w-12 h-12 rounded-full flex items-center justify-center text-xl bg-blue-100 text-blue-600">
+                <i class="fas fa-question"></i>
+            </div>
+            <div>
+                <h3 id="modalAcaoTitulo" class="text-xl font-bold text-slate-800">Confirmar Ação</h3>
+                <p id="modalAcaoDesc" class="text-sm text-slate-500 mt-1">Deseja prosseguir?</p>
+            </div>
+        </div>
+        
+        <form action="{{ url_for('ponto.gestao_ausencias') }}" method="POST" class="mt-6 flex justify-end gap-3">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <input type="hidden" name="solicitacao_id" id="inputModalSolicitacaoId" value=""/>
+            <input type="hidden" name="acao" id="inputModalAcao" value=""/>
+            
+            <button type="button" onclick="fecharModal('modalAcao')" class="px-5 py-2.5 rounded-lg font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition">Cancelar</button>
+            <button type="submit" id="btnModalConfirma" class="px-5 py-2.5 rounded-lg font-bold text-white transition shadow-lg">Confirmar</button>
+        </form>
+    </div>
+</div>
+
+<div id="modalNota" class="fixed inset-0 z-[999] bg-slate-900/60 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 transform transition-all">
+        <h3 class="text-sm font-bold text-slate-400 uppercase tracking-widest mb-1">Nota do Funcionário</h3>
+        <h4 id="notaFuncNome" class="text-lg font-bold text-slate-800 mb-4">---</h4>
+        <div class="bg-slate-50 border border-slate-200 rounded-lg p-4 text-slate-700 italic text-sm mb-6">
+            "<span id="notaFuncTexto"></span>"
+        </div>
+        <button onclick="fecharModal('modalNota')" class="w-full px-5 py-3 rounded-lg font-bold text-white bg-blue-600 hover:bg-blue-700 transition shadow-lg">Entendido</button>
+    </div>
+</div>
+
+<script>
+    function abrirModalAcao(acao, id, descricao) {
+        document.getElementById('inputModalSolicitacaoId').value = id;
+        document.getElementById('inputModalAcao').value = acao;
+        document.getElementById('modalAcaoDesc').innerText = descricao;
+        
+        const icone = document.getElementById('modalAcaoIcone');
+        const titulo = document.getElementById('modalAcaoTitulo');
+        const btn = document.getElementById('btnModalConfirma');
+        
+        if (acao === 'aprovar') {
+            icone.className = "w-12 h-12 rounded-full flex items-center justify-center text-xl bg-emerald-100 text-emerald-600";
+            icone.innerHTML = '<i class="fas fa-check"></i>';
+            titulo.innerText = "Aprovar Férias";
+            btn.className = "px-5 py-2.5 rounded-lg font-bold text-white transition shadow-lg bg-emerald-600 hover:bg-emerald-700";
+            btn.innerText = "Aprovar e Lançar";
+        } else if (acao === 'recusar') {
+            icone.className = "w-12 h-12 rounded-full flex items-center justify-center text-xl bg-amber-100 text-amber-600";
+            icone.innerHTML = '<i class="fas fa-times"></i>';
+            titulo.innerText = "Recusar Pedido";
+            btn.className = "px-5 py-2.5 rounded-lg font-bold text-white transition shadow-lg bg-amber-500 hover:bg-amber-600";
+            btn.innerText = "Recusar";
+        } else if (acao === 'remover') {
+            icone.className = "w-12 h-12 rounded-full flex items-center justify-center text-xl bg-red-100 text-red-600";
+            icone.innerHTML = '<i class="fas fa-exclamation-triangle"></i>';
+            titulo.innerText = "Revogar Férias";
+            btn.className = "px-5 py-2.5 rounded-lg font-bold text-white transition shadow-lg bg-red-600 hover:bg-red-700";
+            btn.innerText = "Sim, Revogar";
+        }
+        
+        document.getElementById('modalAcao').classList.remove('hidden');
+    }
+
+    function abrirModalNota(nome, nota) {
+        document.getElementById('notaFuncNome').innerText = nome;
+        document.getElementById('notaFuncTexto').innerText = nota;
+        document.getElementById('modalNota').classList.remove('hidden');
+    }
+
+    function fecharModal(id) {
+        document.getElementById(id).classList.add('hidden');
+    }
+</script>
 {% endblock %}
 
