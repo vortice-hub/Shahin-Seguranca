@@ -1,67 +1,72 @@
 import face_recognition
-import numpy as np
 import io
+import os
+import uuid
 from PIL import Image
 import traceback
 
 class FaceService:
-    def _limpar_e_converter_imagem(self, image_bytes):
+    def _salvar_e_carregar_imagem(self, image_bytes):
         """
-        LAVAGEM SUPREMA: Cria uma nova matriz limpa do zero e cola a foto do usuário por cima.
-        Isso destrói metadados corrompidos, fundos transparentes e erros de strides (fragmentação na RAM).
-        Adicionado um log extremo para debug.
+        BYPASS SUPREMO: Como a instalação do dlib no servidor recusa matrizes perfeitas da RAM,
+        nós usamos o Pillow para garantir que a imagem não tem canal Alpha,
+        salvamos a imagem LIMPA fisicamente no disco e obrigamos a IA a lê-la do disco.
         """
-        print(f"[DEBUG I.A.] Iniciando processamento da imagem.")
-        print(f"[DEBUG I.A.] Tamanho recebido na rede: {len(image_bytes)} bytes.")
+        print(f"[DEBUG I.A.] Iniciando processamento da imagem (Bypass de Disco).")
+        print(f"[DEBUG I.A.] Tamanho recebido: {len(image_bytes)} bytes.")
+        
+        temp_filename = f"/tmp/biometria_{uuid.uuid4().hex}.jpg"
         
         try:
-            # 1. Abre os bytes com o Pillow apenas para extrair a foto
+            # 1. Abre a imagem original
             img_stream = io.BytesIO(image_bytes)
             imagem_original = Image.open(img_stream)
-            print(f"[DEBUG I.A.] Imagem original aberta com sucesso. Formato inicial: {imagem_original.format}, Modo de Cor: {imagem_original.mode}, Resolução: {imagem_original.size}")
-
-            # 2. Força a remoção de canais Alpha (Transparência) se existirem
-            if imagem_original.mode in ('RGBA', 'LA') or (imagem_original.mode == 'P' and 'transparency' in imagem_original.info):
-                print("[DEBUG I.A.] Imagem possui canal Alpha/Transparência. Removendo...")
-                fundo_branco = Image.new('RGB', imagem_original.size, (255, 255, 255))
-                fundo_branco.paste(imagem_original, mask=imagem_original.split()[3]) # Cola usando a máscara alpha
-                imagem_limpa = fundo_branco
+            
+            # 2. Força a conversão para RGB puro (mata transparências e metadados lixo)
+            if imagem_original.mode != 'RGB':
+                print(f"[DEBUG I.A.] Convertendo imagem de {imagem_original.mode} para RGB.")
+                if imagem_original.mode in ('RGBA', 'LA') or (imagem_original.mode == 'P' and 'transparency' in imagem_original.info):
+                    fundo_branco = Image.new('RGB', imagem_original.size, (255, 255, 255))
+                    fundo_branco.paste(imagem_original, mask=imagem_original.split()[-1])
+                    imagem_limpa = fundo_branco
+                else:
+                    imagem_limpa = imagem_original.convert('RGB')
             else:
-                # Mesmo que já pareça RGB, força a conversão para garantir
-                imagem_limpa = imagem_original.convert('RGB')
-                
-            print(f"[DEBUG I.A.] Imagem padronizada para modo de cor: {imagem_limpa.mode}")
+                imagem_limpa = imagem_original
 
-            # 3. Converte para Matriz NumPY com tipo de dado exato de 8-bits
-            matriz_suja = np.array(imagem_limpa, dtype=np.uint8)
-            print(f"[DEBUG I.A.] Matriz NumPy criada. Formato dos bits: {matriz_suja.dtype}. Dimensões do array: {matriz_suja.shape}")
-
-            # 4. A BALA DE PRATA: Força a realocação da memória para ser contígua.
-            matriz_perfeita = np.ascontiguousarray(matriz_suja)
+            # 3. Salva a imagem limpa e perfeita no disco físico do servidor
+            imagem_limpa.save(temp_filename, format="JPEG", quality=100)
+            print(f"[DEBUG I.A.] Imagem limpa salva fisicamente em: {temp_filename}")
             
-            # Validação do log
-            print(f"[DEBUG I.A.] A matriz é contígua na memória RAM? {'Sim (Perfeita)' if matriz_perfeita.flags['C_CONTIGUOUS'] else 'Não (Perigo)'}")
-            print(f"[DEBUG I.A.] Fim do pré-processamento. Entregando matriz ao dlib (C++).")
-
-            return matriz_perfeita
+            # 4. A BALA DE PRATA: O motor C++ é forçado a ler do disco, evitando os bugs de RAM
+            print("[DEBUG I.A.] Solicitando leitura pelo motor C++ (face_recognition.load_image_file)")
+            image_array = face_recognition.load_image_file(temp_filename)
             
+            print("[DEBUG I.A.] Motor C++ engoliu a imagem com sucesso.")
+            return image_array
+
         except Exception as e:
-            print(f"[ERRO CRÍTICO I.A.] Falha durante a limpeza da imagem: {e}")
+            print(f"[ERRO CRÍTICO I.A.] Falha durante o processamento de disco: {e}")
             traceback.print_exc()
-            raise ValueError("Ocorreu um erro ao reconstruir os pixels da imagem.")
+            raise ValueError("Ocorreu um erro ao preparar a imagem para a Inteligência Artificial.")
+            
+        finally:
+            # 5. Destrói o arquivo físico para não lotar o servidor, independentemente de dar erro ou não
+            if os.path.exists(temp_filename):
+                os.remove(temp_filename)
+                print(f"[DEBUG I.A.] Ficheiro temporário {temp_filename} apagado da raiz.")
 
     def cadastrar_face(self, image_bytes):
         """
-        Lê a foto de cadastro em formato binário nativo, valida as regras e extrai o mapa do rosto.
+        Lê a foto de cadastro, valida as regras e extrai o mapa do rosto.
         Retorna: (sucesso, dados/mensagem)
         """
         try:
-            # Substituímos a leitura crua pela nossa nova função de "Lavagem Suprema"
-            image_array = self._limpar_e_converter_imagem(image_bytes)
+            image_array = self._salvar_e_carregar_imagem(image_bytes)
             
             # Encontra todos os rostos na imagem
             face_locations = face_recognition.face_locations(image_array)
-            print(f"[DEBUG I.A.] Dlib conseguiu ler a matriz e encontrou {len(face_locations)} rostos.")
+            print(f"[DEBUG I.A.] Dlib encontrou {len(face_locations)} rosto(s) na imagem.")
             
             # Regras de Negócio e Anti-Fraude
             if len(face_locations) == 0:
@@ -78,7 +83,7 @@ class FaceService:
                 
             # O .tolist() é necessário para conseguirmos salvar o array no banco de dados como JSON
             encoding_list = face_encodings[0].tolist()
-            print("[DEBUG I.A.] Extração do vetor de 128 pontos concluída com sucesso.")
+            print("[DEBUG I.A.] Extração matemática dos 128 pontos concluída com sucesso.")
             
             return True, {
                 "encoding": encoding_list,
@@ -95,18 +100,16 @@ class FaceService:
         Retorna: (user_id do funcionário reconhecido ou None)
         """
         try:
-            # Também aplicamos a "Lavagem Suprema" no terminal para garantir
-            image_array = self._limpar_e_converter_imagem(image_bytes)
+            image_array = self._salvar_e_carregar_imagem(image_bytes)
             
             # Acha o rosto na foto do terminal
             face_locations = face_recognition.face_locations(image_array)
             
             if len(face_locations) != 1:
-                return None # Ignora se não houver exatamente uma pessoa na frente do tablet
+                return None 
                 
             unknown_encoding = face_recognition.face_encodings(image_array, face_locations)[0]
             
-            # Prepara a lista de comparação apenas com funcionários desta empresa que já têm biometria
             known_encodings = []
             known_user_ids = []
             
@@ -116,19 +119,18 @@ class FaceService:
                     known_user_ids.append(user.id)
                     
             if not known_encodings:
-                return None # Ninguém na empresa tem biometria cadastrada
+                return None 
                 
             # --- OTIMIZAÇÃO VETORIAL ---
             face_distances = face_recognition.face_distance(known_encodings, unknown_encoding)
             
-            # Encontra o índice matemático com a menor distância (o rosto mais parecido)
             best_match_index = np.argmin(face_distances)
             
             # Tolerância otimizada para portarias (0.60)
             if face_distances[best_match_index] < 0.60:
                 return known_user_ids[best_match_index]
                 
-            return None # Rosto não reconhecido com a precisão exigida
+            return None
             
         except Exception as e:
             print(f"Erro no FaceService (Reconhecimento): {e}")
