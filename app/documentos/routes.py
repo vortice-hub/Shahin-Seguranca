@@ -2,7 +2,6 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from flask_login import login_required, current_user
 import io
 import traceback
-import threading
 
 from app.extensions import db
 from app.models import User, Holerite, Recibo, Atestado, AssinaturaDigital
@@ -16,36 +15,6 @@ from app.repositories.documento_repository import (HoleriteRepository, ReciboRep
                                                    AtestadoRepository, AssinaturaDigitalRepository)
 
 documentos_bp = Blueprint('documentos', __name__, template_folder='templates', url_prefix='/documentos')
-
-# --- FUNÇÃO ASSÍNCRONA PARA A I.A. LER O ATESTADO EM SEGUNDO PLANO ---
-def processar_atestado_background(app, atestado_id, file_bytes, real_name):
-    """
-    Esta função corre de forma invisível. Ela não prende o ecrã do funcionário.
-    Usa o contexto da app para ter permissão de escrever no banco de dados.
-    """
-    with app.app_context():
-        try:
-            print(f"[BACKGROUND TASK] A iniciar IA para atestado {atestado_id}...")
-            
-            # Chama a IA super pesada (demora 3 a 10 segundos)
-            dados_ia = analisar_atestado_vision(file_bytes, real_name)
-            
-            atestado_repo = AtestadoRepository()
-            atestado = atestado_repo.get_by_id(atestado_id)
-            
-            if atestado:
-                # Atualiza a base de dados com o que a IA descobriu
-                atestado.data_inicio_afastamento = dados_ia.get('data_inicio')
-                atestado.quantidade_dias = dados_ia.get('dias_afastamento')
-                atestado.texto_extraido = dados_ia.get('texto_bruto')
-                # Muda de "A Processar IA" para "Revisao" (pronto para o RH ver)
-                atestado.status = 'Revisao'
-                atestado_repo.commit()
-                print(f"[BACKGROUND TASK] IA finalizada com sucesso. Atestado {atestado_id} atualizado.")
-                
-        except Exception as e:
-            print(f"[BACKGROUND TASK] ERRO NA IA para atestado {atestado_id}: {e}")
-            traceback.print_exc()
 
 @documentos_bp.route('/admin')
 @login_required
@@ -79,7 +48,8 @@ def dashboard_documentos():
             historico.append({
                 'id': h.id, 'doc_type': 'holerite', 'tipo': "Espelho de Ponto" if is_ponto else "Holerite", 
                 'cor': 'purple' if is_ponto else 'blue', 'usuario': h.user.real_name if h.user else "N/A",
-                'info': h.mes_referencia, 'data': h.enviado_em, 'visualizado': h.visualizado, 'rota': 'documentos.baixar_holerite'
+                'info': h.mes_referencia, 'data': h.enviado_em, 'visualizado': h.visualizado, 
+                'rota': 'baixar_holerite' # CORREÇÃO: Remoção do prefixo duplicado
             })
 
     if not f_tipo or f_tipo == 'Recibo':
@@ -87,7 +57,8 @@ def dashboard_documentos():
             historico.append({
                 'id': r.id, 'doc_type': 'recibo', 'tipo': 'Recibo', 'cor': 'emerald',
                 'usuario': r.user.real_name, 'info': f"R$ {r.valor:,.2f}",
-                'data': r.created_at, 'visualizado': r.visualizado, 'rota': 'documentos.baixar_recibo'
+                'data': r.created_at, 'visualizado': r.visualizado, 
+                'rota': 'baixar_recibo' # CORREÇÃO: Remoção do prefixo duplicado
             })
 
     historico.sort(key=lambda x: x['data'] if x['data'] else get_brasil_time(), reverse=True)
@@ -194,14 +165,13 @@ def meus_documentos():
     docs = []
     for h in holerites:
         e_ponto = True if h.url_arquivo and 'espelhos' in h.url_arquivo else False
-        docs.append({'id': h.id, 'tipo': 'Espelho' if e_ponto else 'Holerite', 'titulo': f"{'Ponto' if e_ponto else 'Holerite'} - {h.mes_referencia}", 'cor': 'purple' if e_ponto else 'blue', 'icone': 'fa-calendar' if e_ponto else 'fa-file', 'data': h.enviado_em, 'visto': h.visualizado, 'rota': 'documentos.baixar_holerite'})
+        # CORREÇÃO: Remoção do prefixo duplicado
+        docs.append({'id': h.id, 'tipo': 'Espelho' if e_ponto else 'Holerite', 'titulo': f"{'Ponto' if e_ponto else 'Holerite'} - {h.mes_referencia}", 'cor': 'purple' if e_ponto else 'blue', 'icone': 'fa-calendar' if e_ponto else 'fa-file', 'data': h.enviado_em, 'visto': h.visualizado, 'rota': 'baixar_holerite'})
     for r in recibos:
-        docs.append({'id': r.id, 'tipo': 'Recibo', 'titulo': 'Recibo', 'cor': 'emerald', 'icone': 'fa-receipt', 'data': r.created_at, 'visto': r.visualizado, 'rota': 'documentos.baixar_recibo'})
+        # CORREÇÃO: Remoção do prefixo duplicado
+        docs.append({'id': r.id, 'tipo': 'Recibo', 'titulo': 'Recibo', 'cor': 'emerald', 'icone': 'fa-receipt', 'data': r.created_at, 'visto': r.visualizado, 'rota': 'baixar_recibo'})
     return render_template('documentos/meus_documentos.html', docs=docs)
 
-# ==========================================================
-# ENVIO RÁPIDO DE ATESTADO (BACKGROUND TASK)
-# ==========================================================
 @documentos_bp.route('/atestado/novo', methods=['GET', 'POST'])
 @login_required
 def enviar_atestado():
@@ -212,34 +182,29 @@ def enviar_atestado():
             file_bytes = file.read()
             mes_ref = get_brasil_time().strftime('%Y-%m')
             
-            # 1. Faz upload do ficheiro cru (Muito Rápido)
             caminho_blob = salvar_no_storage(file_bytes, f"atestados/{mes_ref}", g.empresa.slug)
             if not caminho_blob: return redirect(request.url)
 
-            # 2. Guarda o atestado na BD sem processar a IA. Status inicial "Processando IA"
+            # CORREÇÃO PONTO 3: Processamento Linear Restaurado (Protege contra Cloud Run CPU Throttling)
+            dados_ia = analisar_atestado_vision(file_bytes, current_user.real_name)
+            
             atestado_repo = AtestadoRepository()
             novo_atestado = Atestado(
                 user_id=current_user.id, 
                 data_envio=get_brasil_time(), 
                 url_arquivo=caminho_blob,
-                status='A Processar IA' 
+                data_inicio_afastamento=dados_ia.get('data_inicio'), 
+                quantidade_dias=dados_ia.get('dias_afastamento'),
+                texto_extraido=dados_ia.get('texto_bruto'), 
+                status='Revisao' 
             )
             atestado_repo.add(novo_atestado)
             atestado_repo.commit()
             
-            # 3. Dispara a Thread invisível para ler a imagem, e NÃO ESPERA por ela!
-            app = current_app._get_current_object()
-            threading.Thread(
-                target=processar_atestado_background, 
-                args=(app, novo_atestado.id, file_bytes, current_user.real_name)
-            ).start()
-            
-            # 4. Dispara a notificação para o Chefe
             master = User.query.filter_by(username='50097952800').first()
             if master: enviar_notificacao(master.id, f"Novo Atestado de {current_user.real_name}.", "/documentos/admin/atestados")
             
-            # 5. Ecrã livre para o funcionário! Menos de 1 segundo de espera.
-            flash('O Atestado foi recebido pelo sistema e está a ser lido pela Inteligência Artificial!', 'success')
+            flash('Atestado processado com sucesso! Aguarde a revisão do RH.', 'success')
             return redirect(url_for('documentos.meus_atestados'))
             
         except Exception as e:
