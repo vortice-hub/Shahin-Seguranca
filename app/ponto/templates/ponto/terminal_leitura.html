@@ -166,12 +166,14 @@
         statusLabel.innerText = "Analisando Rosto...";
         statusLabel.className = "text-blue-400";
 
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        // --- A MÁGICA FRONT-END ---
+        // Pinta fundo de branco antes da foto
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
         isProcessing = true;
 
-        // --- MÁGICA: Blob Nativo em vez de Base64 ---
         canvas.toBlob(async (blob) => {
             const formData = new FormData();
             formData.append('image', blob, 'terminal_capture.jpg');
@@ -179,7 +181,7 @@
             try {
                 const res = await fetch('/ponto/api/reconhecer-facial', {
                     method: 'POST',
-                    headers: { 'X-CSRFToken': '{{ csrf_token() }}' }, // Sem Content-Type fixo
+                    headers: { 'X-CSRFToken': '{{ csrf_token() }}' },
                     body: formData
                 });
                 const data = await res.json();

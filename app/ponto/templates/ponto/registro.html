@@ -138,17 +138,22 @@
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
             
-            context.clearRect(0, 0, canvas.width, canvas.height);
+            // --- A MÁGICA FRONT-END ---
+            // Força a pintura do fundo de branco sólido antes de desenhar a foto.
+            // Elimina qualquer metadado de transparência que os browsers mobile injetam.
+            context.fillStyle = '#FFFFFF';
+            context.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Desenha a foto por cima do fundo branco
             context.drawImage(video, 0, 0, canvas.width, canvas.height);
             
             if (stream) stream.getTracks().forEach(track => track.stop());
             document.getElementById('step-camera').classList.add('hidden');
             document.getElementById('step-loading').classList.remove('hidden');
 
-            // --- A MÁGICA ACONTECE AQUI: Cria um arquivo nativo (Blob) em vez de Base64 ---
+            // Cria um arquivo nativo (Blob)
             canvas.toBlob(async (blob) => {
                 const formData = new FormData();
-                // Anexa a imagem como se fosse um upload de arquivo real com nome 'image'
                 formData.append('image', blob, 'biometria.jpg');
 
                 try {
@@ -156,7 +161,6 @@
                         method: 'POST',
                         headers: {
                             'X-CSRFToken': '{{ csrf_token() }}'
-                            // Nota: NÃO colocamos Content-Type. O navegador cria automaticamente o boundary do multipart/form-data.
                         },
                         body: formData
                     });
