@@ -21,12 +21,20 @@ class PontoService:
         registros = self.reg_repo.get_by_user_and_date(user_id, data_ref)
         meta = user.carga_horaria if user.carga_horaria else 528
         
+        # --- CÉREBRO DE ESCALAS ---
         if user.escala == '5x2' and data_ref.weekday() >= 5: 
             meta = 0
         elif user.escala == '12x36' and user.data_inicio_escala:
             dias_diff = (data_ref - user.data_inicio_escala).days
             if dias_diff % 2 != 0: meta = 0
             else: meta = 720
+        elif user.escala == '6x1' and user.data_inicio_escala:
+            # Matemática 6x1: Um ciclo tem 7 dias. A folga é o 7º dia (índice 6).
+            dias_diff = (data_ref - user.data_inicio_escala).days
+            if dias_diff % 7 == 6: meta = 0
+        elif user.escala == 'Personalizado':
+            # Se for personalizado, assume a carga configurada ou permite ajuste flexível
+            pass
                 
         trab = 0
         for i in range(0, len(registros), 2):
@@ -71,6 +79,9 @@ class PontoService:
         elif user.escala == '12x36' and user.data_inicio_escala:
             if (data_obj - user.data_inicio_escala).days % 2 != 0: 
                 return True, "Dia de folga (Escala 12x36)."
+        elif user.escala == '6x1' and user.data_inicio_escala:
+            if (data_obj - user.data_inicio_escala).days % 7 == 6:
+                return True, "Dia de folga (Escala 6x1)."
         return False, ""
 
     def determinar_proxima_batida(self, user_id, data_obj):

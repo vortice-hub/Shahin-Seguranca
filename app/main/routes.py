@@ -23,16 +23,21 @@ def dashboard():
 
     hoje = get_brasil_time().date()
 
+    # Dados Basicos
     dados = {
         'hoje': hoje.strftime('%d/%m/%Y'),
         'doc_pendentes': 0,
         'nome_empresa': g.empresa.nome if hasattr(g, 'empresa') and g.empresa else "Vortice SaaS"
     }
 
+    # Contagem de documentos nao lidos pelo utilizador
     docs_h = Holerite.query.filter_by(user_id=current_user.id, visualizado=False).count()
     docs_r = Recibo.query.filter_by(user_id=current_user.id, visualizado=False).count()
     dados['doc_pendentes'] = docs_h + docs_r
 
+    # ==========================================
+    # LÓGICA DO DASHBOARD DE PONTO DINÂMICO
+    # ==========================================
     ultimo_ponto = PontoRegistro.query.filter_by(
         user_id=current_user.id, 
         data_registro=hoje
@@ -69,6 +74,7 @@ def dashboard():
                 'proximo': 'Jornada Concluída'
             }
 
+    # Dados Administrativos
     admin_stats = {}
     
     if has_permission('USUARIOS'):
@@ -80,34 +86,49 @@ def dashboard():
 
     return render_template('main/dashboard.html', dados=dados, admin=admin_stats, status_ponto=status_ponto)
 
-
+# ==============================================================================
+# ⚙️ SERVICE WORKER (ESCOPO GLOBAL PARA PWA)
+# ==============================================================================
 @main_bp.route('/sw.js')
 def service_worker():
+    """Serve o Service Worker na raiz para dar permissão global ao PWA."""
     response = make_response(send_from_directory(os.path.join(current_app.root_path, 'static'), 'service-worker.js'))
     response.headers['Content-Type'] = 'application/javascript'
     response.headers['Service-Worker-Allowed'] = '/'
     return response
 
+# ==============================================================================
+# 🚀 CDN INTERNA VORTICE (PLANO B: BURLA BLOQUEIOS DE DOMÍNIO)
+# ==============================================================================
 @main_bp.route('/cdn/logos/<slug>')
 def serve_logo(slug):
+    """Busca a logo privada no GCS e serve como se fosse estática."""
     bucket_name = os.environ.get('VORTICE_BUCKET', 'vortice-assets')
     icone_padrao = '/static/icons/vortice-icon.png'
+    
     try:
         client = storage.Client()
         bucket = client.bucket(bucket_name)
+        
         blobs = list(bucket.list_blobs(prefix=f"{slug}/logo/logo_{slug}."))
-        if not blobs: return redirect(icone_padrao)
+        
+        if not blobs:
+            return redirect(icone_padrao)
+            
         blob = blobs[0]
         image_data = blob.download_as_bytes()
+        
         return Response(image_data, mimetype=blob.content_type)
     except Exception as e:
+        print(f"Erro ao servir logo segura via CDN: {e}")
         return redirect(icone_padrao)
 
 # ==============================================================================
-# 📱 PWA WHITE-LABEL: Manifesto Dinamico (CORREÇÃO PONTO 1)
+# 📱 PWA WHITE-LABEL: Manifesto Dinamico (CORREÇÃO PONTOS 1 E 3)
 # ==============================================================================
 @main_bp.route('/manifest.json')
 def dynamic_manifest():
+    """Gera o manifesto do PWA dinamicamente."""
     slug = request.args.get('slug')
     empresa_contexto = None
 
@@ -121,8 +142,8 @@ def dynamic_manifest():
     icon_url = "/static/icons/vortice-icon.png"
     theme_color = "#0f172a"
     
-    # Ao abrir a App instalada, envia o utilizador diretamente para o login da empresa dele
-    url_inicial = f"/login/{slug}" if slug else "/"
+    # Redireciona logo para o login correto do inquilino (Impede "amnésia" do sistema)
+    url_inicial = f"/login/{slug}" if slug else "/login"
     
     if empresa_contexto:
         app_name = empresa_contexto.nome
@@ -140,14 +161,13 @@ def dynamic_manifest():
         ],
         "start_url": url_inicial,
         "display": "standalone",
+        "scope": "/",  # <--- MAGIA: Prende o navegador no ecrã inteiro sem mostrar URL
         "theme_color": theme_color,
         "background_color": "#ffffff"
     }
     return jsonify(manifest)
 
-# ==============================================================================
-# --- ROTAS AJAX DO SININHO DE NOTIFICACOES (CORREÇÃO PONTO 6) ---
-# ==============================================================================
+# --- ROTAS AJAX DO SININHO DE NOTIFICACOES ---
 @main_bp.route('/api/notificacoes', methods=['GET'])
 @login_required
 def buscar_notificacoes():
@@ -156,7 +176,14 @@ def buscar_notificacoes():
     
     lista = []
     for n in notifs:
-        lista.append({'id': n.id, 'mensagem': n.mensagem, 'link': n.link, 'lida': n.lida, 'tempo': n.data_criacao.strftime('%d/%m %H:%M')})
+        lista.append({
+            'id': n.id,
+            'mensagem': n.mensagem,
+            'link': n.link,
+            'lida': n.lida,
+            'tempo': n.data_criacao.strftime('%d/%m %H:%M')
+        })
+        
     return jsonify({'nao_lidas': nao_lidas, 'itens': lista})
 
 @main_bp.route('/api/notificacoes/ler/<int:notif_id>', methods=['POST'])
@@ -169,7 +196,7 @@ def ler_notificacao(notif_id):
         return jsonify({'success': True})
     return jsonify({'success': False}), 404
 
-# NOVA ROTA: LER TODAS AS NOTIFICAÇÕES
+# CORREÇÃO PONTO 6: ROTAS QUE FALTAVAM PARA LER TUDO E LIMPAR
 @main_bp.route('/api/notificacoes/ler_todas', methods=['POST'])
 @login_required
 def ler_todas_notificacoes():
@@ -177,11 +204,10 @@ def ler_todas_notificacoes():
         Notificacao.query.filter_by(user_id=current_user.id, lida=False).update({'lida': True})
         db.session.commit()
         return jsonify({'success': True})
-    except:
+    except Exception as e:
         db.session.rollback()
-        return jsonify({'success': False}), 500
+        return jsonify({'success': False, 'error': str(e)}), 500
 
-# NOVA ROTA: LIMPAR TODO O HISTÓRICO
 @main_bp.route('/api/notificacoes/limpar', methods=['POST'])
 @login_required
 def limpar_notificacoes():
@@ -189,10 +215,11 @@ def limpar_notificacoes():
         Notificacao.query.filter_by(user_id=current_user.id).delete()
         db.session.commit()
         return jsonify({'success': True})
-    except:
+    except Exception as e:
         db.session.rollback()
-        return jsonify({'success': False}), 500
+        return jsonify({'success': False, 'error': str(e)}), 500
 
+# --- API DE ANALYTICS (Padrão Multi-Tenant) ---
 @main_bp.route('/api/analytics', methods=['GET'])
 @login_required
 def api_analytics():
@@ -220,7 +247,10 @@ def api_analytics():
             risco_faltas.append(faltas)
             risco_extras.append(round(extras_min / 60, 1))
 
-        saidas = db.session.query(User.departamento, func.sum(HistoricoSaida.quantidade)).join(User, User.real_name == HistoricoSaida.colaborador).filter(HistoricoSaida.data_entrega >= primeiro_dia_mes, User.empresa_id == g.empresa_id).group_by(User.departamento).all()
+        saidas = db.session.query(User.departamento, func.sum(HistoricoSaida.quantidade))\
+            .join(User, User.real_name == HistoricoSaida.colaborador)\
+            .filter(HistoricoSaida.data_entrega >= primeiro_dia_mes, User.empresa_id == g.empresa_id)\
+            .group_by(User.departamento).all()
         custos_labels = [s[0] or 'Geral' for s in saidas]
         custos_data = [s[1] for s in saidas]
 
@@ -235,31 +265,108 @@ def api_analytics():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+# --- MIGRACOES E UTILITARIOS ---
+@main_bp.route('/vortice-migrar')
+def vortice_migrar():
+    try:
+        db.create_all()
+        tabelas = ['users', 'pre_cadastros', 'itens_estoque', 'historico_entrada', 'historico_saida',
+                   'holerites', 'recibos', 'assinaturas_digitais', 'ponto_registros', 'ponto_resumos',
+                   'ponto_ajustes', 'atestados', 'periodos_aquisitivos', 'solicitacoes_ausencia',
+                   'solicitacoes_uniforme', 'notificacoes', 'push_subscriptions']
+        
+        for tabela in tabelas:
+            try:
+                db.session.execute(text(f"ALTER TABLE {tabela} ADD COLUMN IF NOT EXISTS empresa_id INTEGER REFERENCES empresas(id) ON DELETE CASCADE;"))
+                db.session.execute(text(f"ALTER TABLE {tabela} ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP;"))
+                db.session.execute(text(f"ALTER TABLE {tabela} ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITHOUT TIME ZONE;"))
+                db.session.execute(text(f"ALTER TABLE {tabela} ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP WITHOUT TIME ZONE;"))
+            except: pass
+        db.session.commit()
 
+        cliente_shahin = Empresa.query.filter_by(slug='shahin').first()
+        if not cliente_shahin:
+            cliente_shahin = Empresa(
+                nome='LA SHAHIN SERVICOS DE SEGURANCA', 
+                slug='shahin', 
+                plano='Enterprise', 
+                ativa=True,
+                features_json={"ponto": True, "documentos": True, "estoque": True},
+                config_json={"cor_primaria": "#2563eb", "cor_hover": "#1d4ed8"}
+            )
+            db.session.add(cliente_shahin)
+            db.session.commit()
+            
+        return "Migracao SaaS e infraestrutura de auditoria concluidas!"
+    except Exception as e:
+        db.session.rollback()
+        return f"Erro na migracao: {str(e)}"
+
+@main_bp.route('/migrar-rbac')
+def migrar_rbac():
+    try:
+        db.create_all()
+        db.session.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS cargo_id INTEGER REFERENCES roles(id) ON DELETE SET NULL;"))
+        db.session.commit()
+        return "Motor RBAC Inicializado!"
+    except Exception as e:
+        db.session.rollback()
+        return f"Erro: {str(e)}"
+
+@main_bp.route('/semear-permissoes')
+def semear_permissoes():
+    from app.models import Permission
+    permissoes_padrao = [
+        {'codigo': 'PONTO', 'nome': 'Gestão de Ponto (Aprovar/Editar)', 'modulo': 'RH'},
+        {'codigo': 'DOCUMENTOS', 'nome': 'Gestão de Documentos (Atestados/Holerites)', 'modulo': 'RH'},
+        {'codigo': 'ESTOQUE', 'nome': 'Gestão de Uniformes e EPIs', 'modulo': 'Logística'},
+        {'codigo': 'USUARIOS', 'nome': 'Gerir Utilizadores e Acessos', 'modulo': 'Administração'}
+    ]
+    try:
+        for p in permissoes_padrao:
+            if not Permission.query.filter_by(codigo=p['codigo']).first():
+                db.session.add(Permission(codigo=p['codigo'], nome=p['nome'], modulo=p['modulo']))
+        db.session.commit()
+        return "Permissões Semeada!"
+    except Exception as e:
+        db.session.rollback()
+        return f"Erro: {str(e)}"
+
+# ==============================================================================
+# 🔔 ROTA DE INSCRIÇÃO WEBPUSH
+# ==============================================================================
 @main_bp.route('/api/push/subscribe', methods=['POST'])
 @login_required
 def push_subscribe():
     try:
         sub_info = request.get_json()
-        if not sub_info: return jsonify({'success': False, 'error': 'Dados inválidos'}), 400
+        if not sub_info:
+            return jsonify({'success': False, 'error': 'Dados inválidos'}), 400
             
         endpoint = sub_info.get('endpoint')
         keys = sub_info.get('keys', {})
         p256dh = keys.get('p256dh')
         auth = keys.get('auth')
         
-        if not endpoint or not p256dh or not auth: return jsonify({'success': False, 'error': 'Chaves criptográficas ausentes'}), 400
+        if not endpoint or not p256dh or not auth:
+            return jsonify({'success': False, 'error': 'Chaves criptográficas ausentes'}), 400
             
         existente = PushSubscription.query.filter_by(endpoint=endpoint).first()
         if existente:
             existente.user_id = current_user.id
             db.session.commit()
         else:
-            nova_sub = PushSubscription(user_id=current_user.id, endpoint=endpoint, p256dh=p256dh, auth=auth)
+            nova_sub = PushSubscription(
+                user_id=current_user.id,
+                endpoint=endpoint,
+                p256dh=p256dh,
+                auth=auth
+            )
             db.session.add(nova_sub)
             db.session.commit()
             
         return jsonify({'success': True})
+        
     except Exception as e:
         traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500

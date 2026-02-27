@@ -34,139 +34,134 @@ def login(slug=None):
         raw_input = request.form.get('username', '').strip()
         password = request.form.get('password')
         
-        # LÓGICA HÍBRIDA: Se o input contiver letras, procura como texto cru (Terminal)
-        # Caso contrário, remove pontos e traços assumindo que é CPF
-        if re.search('[a-zA-Z]', raw_input):
-            user = User.query.filter_by(username=raw_input.lower()).first()
-        else:
-            cpf_limpo = raw_input.replace('.', '').replace('-', '')
-            user = User.query.filter_by(username=cpf_limpo).first()
-
-        # Fallback legado de segurança
+        # Limpa pontuação se for CPF
+        username = re.sub(r'[^0-9a-zA-Z]', '', raw_input)
+        
+        user = User.query.filter_by(username=username).first()
         if not user:
-            user = User.query.filter_by(username=raw_input).first()
-
+            # Tenta por CPF
+            user = User.query.filter_by(cpf=username).first()
+            
         if user and user.check_password(password):
-            # Validação de Segurança Multi-Tenant no Login
-            if not getattr(user, 'empresa_id', None):
-                flash('Acesso Bloqueado: O seu utilizador não possui vínculo com nenhum cliente.', 'error')
+            # Se o login foi por slug, verifica se o user pertence a essa empresa
+            if slug and user.empresa_id != empresa_login.id and user.role != 'Master':
+                flash('Acesso negado: Utilizador não pertence a esta empresa.', 'error')
                 return redirect(url_for('auth.login', slug=slug))
-
-            # Trava para garantir que o funcionário acesse apenas o seu portal
-            if empresa_login and user.empresa_id != empresa_login.id:
-                flash(f'Acesso Negado: O seu utilizador não pertence ao cliente {empresa_login.nome}.', 'error')
-                return redirect(url_for('auth.login', slug=slug))
-
-            login_user(user)
-            if user.is_first_access: 
-                return redirect(url_for('auth.primeiro_acesso'))
-            return redirect(url_for('main.dashboard'))
-        
-        flash('CPF, Terminal ou senha inválidos.', 'error')
-        
+                
+            login_user(user, remember=True)
+            next_page = request.args.get('next')
+            return redirect(next_page or url_for('main.dashboard'))
+        else:
+            flash('Utilizador ou senha incorretos.', 'error')
+            
     return render_template('auth/login.html', empresa_login=empresa_login)
 
 @auth_bp.route('/logout')
 @login_required
 def logout():
-    """Encerra a sessão e redireciona para o login da empresa específica."""
-    # Capturamos o slug antes de destruir a sessão do usuário
-    empresa_slug = None
-    if hasattr(g, 'empresa') and g.empresa:
-        empresa_slug = g.empresa.slug
-    elif current_user.is_authenticated and current_user.empresa_id:
-        empresa = Empresa.query.get(current_user.empresa_id)
-        if empresa:
-            empresa_slug = empresa.slug
-
+    # Guarda a empresa antes de apagar a sessão para não perder a cor/logo
+    slug = g.empresa.slug if hasattr(g, 'empresa') and g.empresa else None
     logout_user()
-    flash("Sessão encerrada com sucesso.", "success")
-    
-    # Redirecionamento inteligente para manter o contexto white-label
-    if empresa_slug:
-        return redirect(url_for('auth.login', slug=empresa_slug))
+    if slug:
+        return redirect(url_for('auth.login', slug=slug))
     return redirect(url_for('auth.login'))
 
 @auth_bp.route('/primeiro-acesso', methods=['GET', 'POST'])
 @login_required
 def primeiro_acesso():
-    if not current_user.is_first_access: 
+    if not current_user.is_first_access:
         return redirect(url_for('main.dashboard'))
-    
+        
     if request.method == 'POST':
         nova_senha = request.form.get('nova_senha')
         confirmacao = request.form.get('confirmacao')
         
-        if nova_senha == confirmacao:
-            current_user.set_password(nova_senha)
-            current_user.is_first_access = False
-            db.session.commit()
-            flash('Senha atualizada com sucesso!', 'success')
-            return redirect(url_for('main.dashboard'))
-        flash('As senhas não coincidem.', 'error')
+        if nova_senha != confirmacao:
+            flash('As senhas não coincidem. Tente novamente.', 'error')
+            return redirect(url_for('auth.primeiro_acesso'))
+            
+        if len(nova_senha) < 6:
+            flash('A senha deve ter pelo menos 6 caracteres.', 'error')
+            return redirect(url_for('auth.primeiro_acesso'))
+            
+        current_user.set_password(nova_senha)
+        current_user.is_first_access = False
+        
+        # --- CEREBRO: Guarda o slug ANTES de fazer logout ---
+        slug = g.empresa.slug if hasattr(g, 'empresa') and g.empresa else None
+        
+        db.session.commit()
+        logout_user()
+        flash('Senha registada com sucesso! Faça o login para continuar.', 'success')
+        
+        # --- Redirecionamento Inteligente para o portal correto ---
+        if slug:
+            return redirect(url_for('auth.login', slug=slug))
+        return redirect(url_for('auth.login'))
         
     return render_template('auth/primeiro_acesso.html')
-
-@auth_bp.route('/cadastrar', methods=['GET', 'POST'])
+    
+@auth_bp.route('/auto-cadastro', methods=['GET', 'POST'])
 def auto_cadastro():
-    if request.method == 'GET': 
-        return render_template('auth/auto_cadastro.html', step=1)
+    if current_user.is_authenticated:
+        return redirect(url_for('main.dashboard'))
+        
+    step = request.args.get('step', 1, type=int)
+    cpf = request.args.get('cpf', '')
     
     if request.method == 'POST':
-        cpf_input = request.form.get('cpf', '')
-        cpf = re.sub(r'\D', '', cpf_input)
-        
-        pre = PreCadastro.query.filter_by(cpf=cpf).first()
+        cpf_input = request.form.get('cpf', '').replace('.', '').replace('-', '').strip()
+        pre = PreCadastro.query.filter_by(cpf=cpf_input).first()
         
         if not pre:
-            if User.query.filter_by(cpf=cpf).first():
-                flash('Este CPF já possui um cadastro ativo.', 'warning')
-                return redirect(url_for('auth.login'))
-            flash('CPF não autorizado para cadastro. Entre em contato com o RH.', 'error')
+            flash('CPF não encontrado no sistema. Contacte os Recursos Humanos.', 'error')
             return redirect(url_for('auth.auto_cadastro'))
             
-        password = request.form.get('password')
-        confirm_password = request.form.get('confirm_password')
+        email = request.form.get('email')
+        senha = request.form.get('senha')
+        confirma = request.form.get('confirmacao')
         
-        if password:
-            if password != confirm_password:
-                flash('As senhas não coincidem. Tente novamente.', 'error')
-                return render_template('auth/auto_cadastro.html', step=2, cpf=cpf, nome=pre.nome_previsto)
-                
-            gestor_id_final = None
-            if pre.cpf_gestor:
-                gestor_encontrado = User.query.filter_by(cpf=pre.cpf_gestor, empresa_id=pre.empresa_id).first()
-                if gestor_encontrado:
-                    gestor_id_final = gestor_encontrado.id
+        if not email or not senha:
+            return redirect(url_for('auth.auto_cadastro', step=2, cpf=cpf_input))
             
-            novo_user = User(
-                username=cpf, 
-                password_hash=generate_password_hash(password), 
-                real_name=pre.nome_previsto, 
-                role=pre.cargo, 
-                cpf=cpf, 
-                salario=pre.salario, 
-                razao_social_empregadora=pre.razao_social, 
-                cnpj_empregador=pre.cnpj, 
-                data_admissao=pre.data_admissao,
-                carga_horaria=pre.carga_horaria,
-                tempo_intervalo=pre.tempo_intervalo,
-                inicio_jornada_ideal=pre.inicio_jornada_ideal,
-                escala=pre.escala, 
-                data_inicio_escala=pre.data_inicio_escala,
-                departamento=pre.departamento,
-                gestor_id=gestor_id_final,
-                is_first_access=False,
-                empresa_id=pre.empresa_id
-            )
+        if senha != confirma:
+            flash('Senhas não coincidem.', 'error')
+            return redirect(url_for('auth.auto_cadastro', step=2, cpf=cpf_input))
             
-            db.session.add(novo_user)
-            db.session.delete(pre) 
-            db.session.commit()
-            
-            return render_template('auth/auto_cadastro_sucesso.html', username=cpf, nome=pre.nome_previsto)
-        else:
+        novo_user = User(
+            username=cpf_input,
+            cpf=cpf_input,
+            email=email,
+            real_name=pre.nome_previsto,
+            role=pre.cargo,
+            departamento=pre.departamento,
+            gestor_id=pre.gestor_id,
+            salario=pre.salario,
+            razao_social_empregadora=pre.razao_social,
+            cnpj_empregador=pre.cnpj,
+            data_admissao=pre.data_admissao,
+            carga_horaria=pre.carga_horaria,
+            tempo_intervalo=pre.tempo_intervalo,
+            inicio_jornada_ideal=pre.inicio_jornada_ideal,
+            escala=pre.escala,
+            data_inicio_escala=pre.data_inicio_escala,
+            is_first_access=False,
+            empresa_id=pre.empresa_id
+        )
+        novo_user.set_password(senha)
+        
+        db.session.add(novo_user)
+        db.session.delete(pre) 
+        db.session.commit()
+        
+        return render_template('auth/auto_cadastro_sucesso.html', username=cpf_input, nome=pre.nome_previsto)
+        
+    if step == 2 and cpf:
+        pre = PreCadastro.query.filter_by(cpf=cpf).first()
+        if pre:
             return render_template('auth/auto_cadastro.html', step=2, cpf=cpf, nome=pre.nome_previsto)
+            
+    return render_template('auth/auto_cadastro.html', step=1)
 
 @auth_bp.route('/esqueci-senha', methods=['GET', 'POST'])
 def esqueci_senha():
@@ -183,12 +178,22 @@ def esqueci_senha():
             senha_temporaria = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
             user.set_password(senha_temporaria)
             user.is_first_access = True
+            
+            # Puxa a empresa do user para redirecionar corretamente
+            slug = None
+            if user.empresa_id:
+                empresa = Empresa.query.get(user.empresa_id)
+                if empresa: slug = empresa.slug
+                
             db.session.commit()
             
             flash(f'ACESSO RECUPERADO! Sua senha temporária é: {senha_temporaria}', 'success')
+            
+            if slug:
+                return redirect(url_for('auth.login', slug=slug))
             return redirect(url_for('auth.login'))
         else:
-            flash('Dados divergentes. Verifique o seu CPF e Data de Admissão.', 'error')
+            flash('Dados não conferem. Verifique o CPF e a Data de Admissão.', 'error')
             
     return render_template('auth/esqueci_senha.html')
 
