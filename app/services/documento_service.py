@@ -154,9 +154,15 @@ class DocumentoService:
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
             df.to_excel(writer, index=False, sheet_name='Fechamento Folha')
             worksheet = writer.sheets['Fechamento Folha']
+            
+            # --- CORREÇÃO PONTO 5: CÁLCULO BLINDADO DE LARGURA DE COLUNA ---
             for i, col in enumerate(df.columns):
-                max_len = max(df[col].astype(str).map(len).max(), len(col)) + 2
-                worksheet.column_dimensions[chr(65 + i)].width = max_len
+                # Usamos uma "List Comprehension" para forçar que todos os itens na coluna,
+                # e o próprio nome da coluna, sejam lidos estritamente como texto (str).
+                larguras = [len(str(v)) for v in df[col].values] + [len(str(col))]
+                max_len = max(larguras) + 2
+                # Limita a largura máxima para não gerar colunas bizarras
+                worksheet.column_dimensions[chr(65 + i)].width = min(max_len, 50)
 
         output.seek(0)
         return output

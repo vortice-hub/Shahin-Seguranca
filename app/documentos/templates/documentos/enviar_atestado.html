@@ -1,6 +1,19 @@
 {% extends 'base.html' %}
 {% block content %}
-<div class="max-w-md mx-auto bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mt-8">
+<div class="max-w-md mx-auto bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mt-8 relative" id="container-principal">
+    
+    <div id="loading-overlay" class="hidden absolute inset-0 z-50 bg-white/95 backdrop-blur-sm flex flex-col items-center justify-center">
+        <i class="fas fa-robot text-6xl text-blue-600 mb-6 animate-bounce"></i>
+        <h3 class="text-2xl font-black text-slate-800 tracking-tight">A Analisar Atestado...</h3>
+        <p class="text-sm text-slate-500 mt-2 text-center px-8 font-medium">A nossa Inteligência Artificial está a ler o documento e a extrair os dias de repouso.</p>
+        <p class="text-[10px] text-blue-500 font-bold uppercase tracking-widest mt-6 animate-pulse">Por favor, não feche esta página</p>
+        <div class="mt-4 w-40 h-2 bg-slate-100 rounded-full overflow-hidden">
+            <div class="h-full bg-blue-600 rounded-full relative" style="width: 100%">
+                <div class="absolute inset-0 bg-white/30 animate-[shimmer_1s_infinite]"></div>
+            </div>
+        </div>
+    </div>
+
     <div class="bg-blue-600 p-6 text-center">
         <div class="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-3 text-white">
             <i class="fas fa-file-medical text-3xl"></i>
@@ -31,24 +44,25 @@
     </div>
 </div>
 
+<style>
+    @keyframes shimmer {
+        0% { transform: translateX(-100%); }
+        100% { transform: translateX(100%); }
+    }
+</style>
+
 <script>
     document.addEventListener('DOMContentLoaded', function() {
         const form = document.getElementById('form-atestado');
+        const overlay = document.getElementById('loading-overlay');
         const btnSubmit = document.getElementById('btn-submit-atestado');
-        const iconSubmit = document.getElementById('icon-submit');
-        const textSubmit = document.getElementById('text-submit');
 
         form.addEventListener('submit', function() {
-            // Desabilita o botão para evitar múltiplos envios
+            // Mostra o belíssimo ecrã de carregamento para a IA
+            overlay.classList.remove('hidden');
+            
+            // Impede cliques duplos
             btnSubmit.disabled = true;
-            btnSubmit.classList.remove('hover:bg-blue-700');
-            btnSubmit.classList.add('opacity-75', 'cursor-not-allowed');
-
-            // Troca o ícone para um spinner rodando
-            iconSubmit.className = 'fas fa-spinner fa-spin';
-
-            // Altera o texto exatamente como solicitado
-            textSubmit.innerText = 'Enviando atestado, aguarde...';
         });
     });
 </script>

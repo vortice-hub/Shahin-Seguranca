@@ -3,6 +3,21 @@
 <link href="https://cdn.jsdelivr.net/npm/tom-select@2.2.2/dist/css/tom-select.css" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/tom-select@2.2.2/dist/js/tom-select.complete.min.js"></script>
 
+<style>
+    /* Correção visual para garantir que o menu da biblioteca não fique escondido sob a caixa */
+    .ts-dropdown {
+        z-index: 1000 !important;
+        border-radius: 0 0 10px 10px;
+        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+    }
+    .ts-control {
+        border-radius: 10px;
+        padding: 12px 16px;
+        font-size: 0.875rem;
+        border-color: #cbd5e1;
+    }
+</style>
+
 <div class="max-w-2xl mx-auto">
     <div class="flex items-center justify-between mb-6">
         <h2 class="text-xl font-bold text-slate-800">Gerar Recibo de Pagamento</h2>
@@ -18,10 +33,10 @@
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
 
             <div>
-                <label class="label-pro">Selecione o Funcionário</label>
-                <select name="user_id" id="userSelect" class="w-full" onchange="carregarDadosUser(this.value)" required>
-                    <option value="">Digite para pesquisar...</option>
-                    {% for u in users %}
+                <label class="label-pro">Selecione o Funcionário (Digite o Nome para Pesquisar)</label>
+                <select name="user_id" id="userSelect" class="w-full" placeholder="Clique e comece a digitar..." autocomplete="off">
+                    <option value="">Clique aqui e digite o nome...</option>
+                    {% for u in usuarios %}
                     <option value="{{ u.id }}">{{ u.real_name }}</option>
                     {% endfor %}
                 </select>
@@ -81,16 +96,21 @@
 </div>
 
 <script>
-    // Inicializa o TomSelect para pesquisa
-    new TomSelect("#userSelect",{
+    // Inicialização Blindada do TomSelect
+    new TomSelect("#userSelect", {
         create: false,
+        maxOptions: 100, // Garante que a lista não é cortada prematuramente
         sortField: {
             field: "text",
             direction: "asc"
         },
-        placeholder: "Digite o nome do funcionário...",
+        render: {
+            no_results: function(data, escape) {
+                return '<div class="no-results text-slate-400 p-2 text-sm">Nenhum funcionário encontrado...</div>';
+            }
+        },
         onChange: function(value) {
-            carregarDadosUser(value);
+            if(value) carregarDadosUser(value);
         }
     });
 
