@@ -36,18 +36,21 @@ def registrar_ponto():
 @login_required
 @csrf.exempt
 def cadastrar_biometria():
-    """Recebe a foto do celular do funcionário, processa a I.A. e salva no Bucket."""
+    """Recebe a foto do celular do funcionário (como Ficheiro Nativo), processa a I.A. e salva no Bucket."""
     if current_user.role == 'Terminal': return jsonify({'error': 'Acesso negado'}), 403
     
-    data = request.json
-    if not data or 'image' not in data: 
+    # ALTERAÇÃO ALTERNATIVA 2: Recebe um ficheiro real em vez de JSON Base64
+    if 'image' not in request.files: 
         return jsonify({'error': 'Nenhuma imagem enviada'}), 400
+        
+    file = request.files['image']
+    raw_bytes = file.read()
 
     face_service = FaceService()
-    sucesso, resultado = face_service.cadastrar_face(data['image'])
+    sucesso, resultado = face_service.cadastrar_face(raw_bytes)
 
     if not sucesso:
-        return jsonify({'success': False, 'error': resultado}) # Retorna o motivo da recusa (ex: Mais de um rosto)
+        return jsonify({'success': False, 'error': resultado})
 
     try:
         empresa = Empresa.query.get(current_user.empresa_id)
@@ -86,19 +89,22 @@ def terminal_scanner():
 @login_required
 @csrf.exempt
 def reconhecer_facial():
-    """Recebe a foto do Terminal e procura quem é o funcionário."""
+    """Recebe a foto do Terminal (Ficheiro Nativo) e procura quem é o funcionário."""
     if current_user.role != 'Terminal' and current_user.role != 'Master':
         return jsonify({'error': 'Acesso negado.'}), 403
 
-    data = request.json
-    if not data or 'image' not in data: 
+    # ALTERAÇÃO ALTERNATIVA 2: Recebe ficheiro real
+    if 'image' not in request.files: 
         return jsonify({'error': 'Nenhuma imagem enviada'}), 400
+        
+    file = request.files['image']
+    raw_bytes = file.read()
 
     # Busca apenas os funcionários da mesma empresa do Terminal
     usuarios_empresa = User.query.filter_by(empresa_id=current_user.empresa_id).all()
 
     face_service = FaceService()
-    user_id = face_service.reconhecer_face(data['image'], usuarios_empresa)
+    user_id = face_service.reconhecer_face(raw_bytes, usuarios_empresa)
 
     if not user_id:
         return jsonify({'success': False, 'error': 'Rosto não reconhecido ou baixa similaridade.'})

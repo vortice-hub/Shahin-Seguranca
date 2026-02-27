@@ -68,13 +68,8 @@
         
         <video id="video-feed" autoplay playsinline class="absolute inset-0 w-full h-full object-cover transform scale-x-[-1]"></video>
         
-        <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[85vw] h-[65vh] md:w-[450px] md:h-[600px] border-4 border-dashed border-blue-400 rounded-[50%] z-20 pointer-events-none shadow-[0_0_0_9999px_rgba(0,0,0,0.85)] flex flex-col items-center justify-center">
-            <div class="w-[50%] h-[2px] bg-blue-400/50 absolute top-[35%]"></div>
-        </div>
-        
         <div class="absolute bottom-[100px] z-30 flex flex-col items-center w-full px-4 pointer-events-none">
-            <p class="text-white font-black text-sm bg-blue-600 px-6 py-3 rounded-full shadow-lg mb-2 text-center">Encaixe o rosto no formato</p>
-            <p class="text-white text-[11px] font-bold bg-black/60 px-4 py-1.5 rounded-full text-center tracking-wide">Aproxime ou afaste até preencher a linha</p>
+            <p class="text-white font-black text-sm bg-blue-600 px-6 py-3 rounded-full shadow-lg mb-2 text-center">Olhe diretamente para a câmara</p>
         </div>
 
         <div class="absolute bottom-0 left-0 w-full p-6 bg-gradient-to-t from-black/90 to-transparent z-50 pb-8">
@@ -138,7 +133,7 @@
             document.getElementById('step-rules').classList.remove('hidden');
         }
 
-        async function tirarFoto() {
+        function tirarFoto() {
             const context = canvas.getContext('2d');
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
@@ -146,33 +141,38 @@
             context.clearRect(0, 0, canvas.width, canvas.height);
             context.drawImage(video, 0, 0, canvas.width, canvas.height);
             
-            const imageDataBase64 = canvas.toDataURL('image/jpeg', 0.85);
-            
             if (stream) stream.getTracks().forEach(track => track.stop());
             document.getElementById('step-camera').classList.add('hidden');
             document.getElementById('step-loading').classList.remove('hidden');
 
-            try {
-                const response = await fetch('/ponto/api/cadastrar-biometria', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': '{{ csrf_token() }}'
-                    },
-                    body: JSON.stringify({ image: imageDataBase64 })
-                });
+            // --- A MÁGICA ACONTECE AQUI: Cria um arquivo nativo (Blob) em vez de Base64 ---
+            canvas.toBlob(async (blob) => {
+                const formData = new FormData();
+                // Anexa a imagem como se fosse um upload de arquivo real com nome 'image'
+                formData.append('image', blob, 'biometria.jpg');
 
-                const data = await response.json();
+                try {
+                    const response = await fetch('/ponto/api/cadastrar-biometria', {
+                        method: 'POST',
+                        headers: {
+                            'X-CSRFToken': '{{ csrf_token() }}'
+                            // Nota: NÃO colocamos Content-Type. O navegador cria automaticamente o boundary do multipart/form-data.
+                        },
+                        body: formData
+                    });
 
-                if (data.success) {
-                    try { Toastify({ text: "Biometria Ativada! 🎉", duration: 3000, style: { background: "#10b981" } }).showToast(); } catch(e){}
-                    setTimeout(() => { window.location.reload(); }, 1500); 
-                } else {
-                    mostrarErroCustomizado(data.error);
+                    const data = await response.json();
+
+                    if (data.success) {
+                        try { Toastify({ text: "Biometria Ativada! 🎉", duration: 3000, style: { background: "#10b981" } }).showToast(); } catch(e){}
+                        setTimeout(() => { window.location.reload(); }, 1500); 
+                    } else {
+                        mostrarErroCustomizado(data.error);
+                    }
+                } catch (err) {
+                    mostrarErroCustomizado("Erro de conexão com o servidor. Verifique a internet e tente novamente.");
                 }
-            } catch (err) {
-                mostrarErroCustomizado("Erro de conexão com o servidor. Verifique a internet e tente novamente.");
-            }
+            }, 'image/jpeg', 0.85); // Qualidade JPEG em 85%
         }
 
         function mostrarErroCustomizado(mensagem) {

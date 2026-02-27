@@ -68,12 +68,8 @@
         
         <video id="video-feed" autoplay playsinline muted></video>
         
-        <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[85vw] h-[65vh] md:w-[450px] md:h-[600px] border-4 border-dashed border-white/50 rounded-[50%] z-20 pointer-events-none shadow-[0_0_0_9999px_rgba(0,0,0,0.7)] flex flex-col items-center justify-center transition-all duration-300">
-            <div class="w-[50%] h-[2px] bg-white/30 absolute top-[35%]"></div>
-        </div>
-        
         <div class="absolute bottom-8 w-full flex justify-center z-30 pointer-events-none">
-            <p class="text-white text-[10px] font-black bg-black/70 px-5 py-2 rounded-full tracking-widest uppercase border border-white/10 shadow-lg">Encaixe o rosto no oval</p>
+            <p class="text-white text-[10px] font-black bg-black/70 px-5 py-2 rounded-full tracking-widest uppercase border border-white/10 shadow-lg">Olhe diretamente para a câmara</p>
         </div>
 
         <div id="scanner-line"></div>
@@ -163,7 +159,7 @@
         });
     }
 
-    async function capturarEAnalisar() {
+    function capturarEAnalisar() {
         if (isProcessing) return;
 
         container.className = "analyzing";
@@ -173,43 +169,49 @@
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-        const base64Image = canvas.toDataURL('image/jpeg', 0.8);
         isProcessing = true;
 
-        try {
-            const res = await fetch('/ponto/api/reconhecer-facial', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token() }}' },
-                body: JSON.stringify({ image: base64Image })
-            });
-            const data = await res.json();
+        // --- MÁGICA: Blob Nativo em vez de Base64 ---
+        canvas.toBlob(async (blob) => {
+            const formData = new FormData();
+            formData.append('image', blob, 'terminal_capture.jpg');
 
-            if (data.success) {
-                container.className = "success";
-                statusLabel.innerText = "Reconhecido!";
-                statusLabel.className = "text-emerald-400";
-                
-                tocarBeep();
-                userAlvoId = data.user_id;
-                document.getElementById('lbl-nome-func').innerText = data.nome;
-                document.getElementById('lbl-tipo-ponto').innerText = `A Registrar ${data.tipo}`;
-                document.getElementById('lbl-hora-func').innerText = data.hora;
-                document.getElementById('modal-confirmacao').classList.add('active');
-            } else {
+            try {
+                const res = await fetch('/ponto/api/reconhecer-facial', {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': '{{ csrf_token() }}' }, // Sem Content-Type fixo
+                    body: formData
+                });
+                const data = await res.json();
+
+                if (data.success) {
+                    container.className = "success";
+                    statusLabel.innerText = "Reconhecido!";
+                    statusLabel.className = "text-emerald-400";
+                    
+                    tocarBeep();
+                    userAlvoId = data.user_id;
+                    document.getElementById('lbl-nome-func').innerText = data.nome;
+                    document.getElementById('lbl-tipo-ponto').innerText = `A Registrar ${data.tipo}`;
+                    document.getElementById('lbl-hora-func').innerText = data.hora;
+                    document.getElementById('modal-confirmacao').classList.add('active');
+                } else {
+                    container.className = "searching";
+                    statusLabel.innerText = "Aguardando Rosto...";
+                    statusLabel.className = "text-yellow-500";
+                    
+                    if (data.error === "Rosto não reconhecido ou baixa similaridade.") {
+                        registrarFalha();
+                    } else {
+                        isProcessing = false;
+                    }
+                }
+            } catch (e) {
+                isProcessing = false;
                 container.className = "searching";
                 statusLabel.innerText = "Aguardando Rosto...";
-                statusLabel.className = "text-yellow-500";
-                
-                if (data.error === "Rosto não reconhecido ou baixa similaridade.") {
-                    registrarFalha();
-                } else {
-                    isProcessing = false;
-                }
             }
-        } catch (e) {
-            isProcessing = false;
-            container.className = "searching";
-        }
+        }, 'image/jpeg', 0.8);
     }
 
     async function confirmarPonto() {

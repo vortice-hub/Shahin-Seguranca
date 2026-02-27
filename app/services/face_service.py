@@ -1,44 +1,23 @@
 import face_recognition
 import numpy as np
-import base64
-import os
-import uuid
+import io
 
 class FaceService:
-    def _decode_base64_image(self, base64_str):
-        """Converte a string base64 do frontend num ficheiro físico temporário para garantir leitura perfeita da IA."""
-        if ',' in base64_str:
-            base64_str = base64_str.split(',')[1]
-            
-        img_data = base64.b64decode(base64_str)
-        
-        # 1. Cria um nome de ficheiro único na pasta de ficheiros temporários do Linux (Google Cloud)
-        temp_filename = f"/tmp/face_{uuid.uuid4().hex}.jpg"
-        
-        try:
-            # 2. Guarda a imagem fisicamente no disco. Isso força a recriação perfeita dos bits.
-            with open(temp_filename, "wb") as f:
-                f.write(img_data)
-            
-            # 3. A BALA DE PRATA: O dlib (C++) foi desenhado para ler ficheiros físicos. 
-            # Ele abre o ficheiro recém-criado sem nenhum erro de "Unsupported image type".
-            image_array = face_recognition.load_image_file(temp_filename)
-            
-            return image_array, img_data
-            
-        finally:
-            # 4. Independentemente de dar erro ou sucesso, apagamos o ficheiro imediatamente 
-            # para não encher o disco do servidor.
-            if os.path.exists(temp_filename):
-                os.remove(temp_filename)
+    def _load_image_from_bytes(self, image_bytes):
+        """Lê os bytes brutos do ficheiro nativo e converte para o formato da IA."""
+        # Envolvemos os bytes num ficheiro em memória. 
+        # O dlib/face_recognition lida perfeitamente com isto porque é um ficheiro real (sem Base64 corrompido)
+        image_stream = io.BytesIO(image_bytes)
+        image_array = face_recognition.load_image_file(image_stream)
+        return image_array
 
-    def cadastrar_face(self, base64_image):
+    def cadastrar_face(self, image_bytes):
         """
-        Lê a foto de cadastro, valida as regras e extrai o mapa do rosto.
+        Lê a foto de cadastro em formato binário nativo, valida as regras e extrai o mapa do rosto.
         Retorna: (sucesso, dados/mensagem)
         """
         try:
-            image_array, raw_bytes = self._decode_base64_image(base64_image)
+            image_array = self._load_image_from_bytes(image_bytes)
             
             # Encontra todos os rostos na imagem
             face_locations = face_recognition.face_locations(image_array)
@@ -61,20 +40,20 @@ class FaceService:
             
             return True, {
                 "encoding": encoding_list,
-                "image_bytes": raw_bytes
+                "image_bytes": image_bytes
             }
             
         except Exception as e:
             print(f"Erro no FaceService (Cadastro): {e}")
             return False, "Erro ao processar a imagem. Tente novamente."
 
-    def reconhecer_face(self, base64_image, usuarios_empresa):
+    def reconhecer_face(self, image_bytes, usuarios_empresa):
         """
-        Compara a foto tirada no Terminal com os mapas salvos no banco de dados usando busca vetorizada otimizada.
+        Compara a foto nativa tirada no Terminal com os mapas salvos no banco de dados.
         Retorna: (user_id do funcionário reconhecido ou None)
         """
         try:
-            image_array, _ = self._decode_base64_image(base64_image)
+            image_array = self._load_image_from_bytes(image_bytes)
             
             # Acha o rosto na foto do terminal
             face_locations = face_recognition.face_locations(image_array)
