@@ -1,7 +1,9 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, send_file, jsonify, g, current_app
 from flask_login import login_required, current_user
 import io
+import os
 import traceback
+from google.cloud import storage
 
 from app.extensions import db
 from app.models import User, Holerite, Recibo, Atestado, AssinaturaDigital
@@ -49,7 +51,7 @@ def dashboard_documentos():
                 'id': h.id, 'doc_type': 'holerite', 'tipo': "Espelho de Ponto" if is_ponto else "Holerite", 
                 'cor': 'purple' if is_ponto else 'blue', 'usuario': h.user.real_name if h.user else "N/A",
                 'info': h.mes_referencia, 'data': h.enviado_em, 'visualizado': h.visualizado, 
-                'rota': 'baixar_holerite' # CORREÇÃO: Remoção do prefixo duplicado
+                'rota': 'baixar_holerite' 
             })
 
     if not f_tipo or f_tipo == 'Recibo':
@@ -58,7 +60,7 @@ def dashboard_documentos():
                 'id': r.id, 'doc_type': 'recibo', 'tipo': 'Recibo', 'cor': 'emerald',
                 'usuario': r.user.real_name, 'info': f"R$ {r.valor:,.2f}",
                 'data': r.created_at, 'visualizado': r.visualizado, 
-                'rota': 'baixar_recibo' # CORREÇÃO: Remoção do prefixo duplicado
+                'rota': 'baixar_recibo' 
             })
 
     historico.sort(key=lambda x: x['data'] if x['data'] else get_brasil_time(), reverse=True)
@@ -165,10 +167,8 @@ def meus_documentos():
     docs = []
     for h in holerites:
         e_ponto = True if h.url_arquivo and 'espelhos' in h.url_arquivo else False
-        # CORREÇÃO: Remoção do prefixo duplicado
         docs.append({'id': h.id, 'tipo': 'Espelho' if e_ponto else 'Holerite', 'titulo': f"{'Ponto' if e_ponto else 'Holerite'} - {h.mes_referencia}", 'cor': 'purple' if e_ponto else 'blue', 'icone': 'fa-calendar' if e_ponto else 'fa-file', 'data': h.enviado_em, 'visto': h.visualizado, 'rota': 'baixar_holerite'})
     for r in recibos:
-        # CORREÇÃO: Remoção do prefixo duplicado
         docs.append({'id': r.id, 'tipo': 'Recibo', 'titulo': 'Recibo', 'cor': 'emerald', 'icone': 'fa-receipt', 'data': r.created_at, 'visto': r.visualizado, 'rota': 'baixar_recibo'})
     return render_template('documentos/meus_documentos.html', docs=docs)
 
@@ -185,7 +185,6 @@ def enviar_atestado():
             caminho_blob = salvar_no_storage(file_bytes, f"atestados/{mes_ref}", g.empresa.slug)
             if not caminho_blob: return redirect(request.url)
 
-            # CORREÇÃO PONTO 3: Processamento Linear Restaurado (Protege contra Cloud Run CPU Throttling)
             dados_ia = analisar_atestado_vision(file_bytes, current_user.real_name)
             
             atestado_repo = AtestadoRepository()
@@ -350,4 +349,50 @@ def gestao_atestados():
 @permission_required('DOCUMENTOS')
 def relatorio_folha():
     return render_template('documentos/relatorio_folha.html')
+
+# ==============================================================================
+# 🗑️ ROTA DE EXCLUSÃO DE DOCUMENTOS (A CORREÇÃO DO ERRO 500)
+# ==============================================================================
+@documentos_bp.route('/admin/excluir/<doc_type>/<int:id>', methods=['POST'])
+@login_required
+@permission_required('DOCUMENTOS')
+def excluir_documento(doc_type, id):
+    try:
+        doc = None
+        if doc_type == 'holerite':
+            repo = HoleriteRepository()
+            doc = repo.get_by_id(id)
+        elif doc_type == 'recibo':
+            repo = ReciboRepository()
+            doc = repo.get_by_id(id)
+        else:
+            flash('Tipo de documento inválido.', 'error')
+            return redirect(url_for('documentos.dashboard_documentos'))
+
+        if doc:
+            # 1. Tenta apagar fisicamente o PDF no Google Cloud Storage (Para não gerar custos)
+            if doc.url_arquivo:
+                try:
+                    bucket_name = os.environ.get('VORTICE_BUCKET', 'vortice-assets')
+                    client = storage.Client()
+                    bucket = client.bucket(bucket_name)
+                    blob = bucket.blob(doc.url_arquivo)
+                    if blob.exists():
+                        blob.delete()
+                except Exception as gcs_error:
+                    print(f"Aviso: Não foi possível apagar arquivo do Storage: {gcs_error}")
+            
+            # 2. Apaga o registo do Banco de Dados
+            db.session.delete(doc)
+            db.session.commit()
+            flash('Documento excluído com sucesso e espaço na nuvem libertado!', 'success')
+        else:
+            flash('Documento não encontrado.', 'error')
+            
+    except Exception as e:
+        traceback.print_exc()
+        db.session.rollback()
+        flash(f'Erro ao excluir: {str(e)}', 'error')
+        
+    return redirect(url_for('documentos.dashboard_documentos'))
 
