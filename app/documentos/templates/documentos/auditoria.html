@@ -1,123 +1,152 @@
 {% extends 'base.html' %}
 {% block content %}
-<div class="mb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+<div class="mb-8 flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
     <div>
-        <h2 class="text-2xl font-bold text-slate-800">Auditoria de Recebimento</h2>
-        <p class="text-sm text-slate-500">Controlo de conformidade e assinaturas digitais por colaborador.</p>
-    </div>
-    <div class="relative w-full md:w-80">
-        <input type="text" id="userSearch" onkeyup="searchUsers()" placeholder="Pesquisar funcionário pelo nome..." 
-               class="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 pl-11 text-sm focus:ring-2 focus:ring-blue-500 outline-none transition shadow-sm">
-        <i class="fas fa-search absolute left-4 top-3.5 text-slate-400"></i>
+        <h2 class="text-2xl font-bold text-slate-800">Auditoria e Assinaturas</h2>
+        <p class="text-sm text-slate-500">Controle legal de leitura e pendências de documentos.</p>
     </div>
 </div>
 
-<div class="space-y-3" id="usersList">
-    {% for item in auditores %}
-    <div class="user-item bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm transition hover:shadow-md" data-name="{{ item.user.real_name.lower() }}">
-        <!-- Cabeçalho (Accordion Toggle) -->
-        <button onclick="toggleAccordion('box-{{ item.user.id }}')" 
-                class="w-full px-6 py-5 flex items-center justify-between hover:bg-slate-50/80 transition group">
-            <div class="flex items-center gap-4">
-                <div class="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center text-slate-500 font-bold border-2 border-white shadow-inner">
-                    {{ item.user.real_name[:1].upper() }}
-                </div>
-                <div class="text-left">
-                    <div class="font-bold text-slate-800 text-base group-hover:text-blue-600 transition">{{ item.user.real_name }}</div>
-                    <div class="text-[10px] text-slate-400 uppercase tracking-widest font-bold flex items-center gap-2">
-                        <span>CPF: {{ item.user.cpf }}</span>
-                        <span class="text-slate-200">|</span>
-                        <span>{{ item.user.role }}</span>
-                    </div>
-                </div>
-            </div>
-            <div class="flex items-center gap-6">
-                <div class="hidden md:block text-right">
-                    <div class="text-[10px] text-slate-400 uppercase font-bold">Total Assinado</div>
-                    <div class="font-mono font-bold text-slate-700">{{ item.total }} docs</div>
-                </div>
-                <i class="fas fa-chevron-down text-slate-300 transition-transform duration-300 text-lg" id="icon-box-{{ item.user.id }}"></i>
-            </div>
+<div class="border-b border-slate-200 mb-6">
+    <nav class="-mb-px flex space-x-8" aria-label="Tabs">
+        <button onclick="switchTab('assinados')" id="tab-assinados" class="tab-btn active border-blue-500 text-blue-600 whitespace-nowrap py-4 px-1 border-b-2 font-bold text-sm transition flex items-center gap-2">
+            <i class="fas fa-check-double"></i> Documentos Assinados
         </button>
-
-        <!-- Painel de Detalhes -->
-        <div id="box-{{ item.user.id }}" class="hidden border-t border-slate-100 bg-slate-50/30">
-            {% if item.assinaturas %}
-            <div class="p-2">
-                <div class="overflow-x-auto rounded-lg border border-slate-100">
-                    <table class="w-full text-left text-sm">
-                        <thead class="bg-slate-100/50 text-[10px] text-slate-500 uppercase font-bold">
-                            <tr>
-                                <th class="px-6 py-3">Tipo</th>
-                                <th class="px-6 py-3">Referência do Documento</th>
-                                <th class="px-6 py-3">Data/Hora Assinatura</th>
-                                <th class="px-6 py-3 text-right">Certificado Forense</th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-slate-100 bg-white">
-                            {% for a in item.assinaturas %}
-                            <tr class="hover:bg-blue-50/50 transition">
-                                <td class="px-6 py-4">
-                                    <span class="px-2 py-1 rounded text-[10px] font-bold uppercase tracking-tight
-                                        {% if a.tipo == 'Holerite' %} bg-blue-50 text-blue-600 
-                                        {% elif a.tipo == 'Recibo' %} bg-emerald-50 text-emerald-600 
-                                        {% else %} bg-purple-50 text-purple-600 {% endif %}">
-                                        {{ a.tipo }}
-                                    </span>
-                                </td>
-                                <td class="px-6 py-4">
-                                    <div class="font-bold text-slate-700">{{ a.referencia }}</div>
-                                    <div class="text-[9px] text-slate-400 font-mono">IP: {{ a.ip }}</div>
-                                </td>
-                                <td class="px-6 py-4 text-slate-600">
-                                    <div class="font-medium">{{ a.data.strftime('%d/%m/%Y') }}</div>
-                                    <div class="text-xs text-slate-400">{{ a.data.strftime('%H:%M:%S') }}</div>
-                                </td>
-                                <td class="px-6 py-4 text-right">
-                                    <a href="/documentos/admin/auditoria/certificado/{{ a.id }}" target="_blank" 
-                                       class="inline-flex items-center gap-2 bg-white border border-slate-200 text-slate-700 hover:bg-slate-900 hover:text-white hover:border-slate-900 px-4 py-2 rounded-lg font-bold text-xs transition shadow-sm">
-                                        <i class="fas fa-file-signature text-blue-500"></i> Baixar Comprovante
-                                    </a>
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-            {% else %}
-            <div class="px-6 py-12 text-center text-slate-400 bg-white">
-                <i class="fas fa-comment-slash text-3xl mb-3 opacity-20"></i>
-                <p class="text-sm">Este colaborador ainda não possui registos de assinatura digital.</p>
-                <p class="text-[10px] uppercase mt-1">O sistema aguarda o primeiro download de documento.</p>
-            </div>
+        <button onclick="switchTab('pendentes')" id="tab-pendentes" class="tab-btn border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition flex items-center gap-2">
+            <i class="fas fa-clock"></i> Pendentes de Assinatura
+            {% if pendentes|length > 0 %}
+            <span class="bg-red-500 text-white py-0.5 px-2.5 rounded-full text-xs font-black shadow-sm badge-pop">{{ pendentes|length }}</span>
             {% endif %}
+        </button>
+    </nav>
+</div>
+
+<div id="content-assinados" class="tab-content block animate-fade-in">
+    <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-10">
+        <div class="overflow-x-auto">
+            <table class="w-full text-left text-sm text-slate-600">
+                <thead class="bg-slate-50 text-[10px] uppercase text-slate-400 font-bold border-b border-slate-100">
+                    <tr>
+                        <th class="px-6 py-4">Data/Hora da Assinatura</th>
+                        <th class="px-6 py-4">Colaborador</th>
+                        <th class="px-6 py-4">Documento</th>
+                        <th class="px-6 py-4 text-center">IP Registado</th>
+                        <th class="px-6 py-4 text-right">Hash Criptográfico</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                    {% for a in assinaturas %}
+                    <tr class="hover:bg-slate-50 transition">
+                        <td class="px-6 py-4 whitespace-nowrap text-xs font-medium text-slate-500">
+                            <i class="fas fa-lock text-emerald-500 mr-1"></i> {{ a.data_assinatura.strftime('%d/%m/%Y %H:%M') }}
+                        </td>
+                        <td class="px-6 py-4 font-bold text-slate-800">{{ a.user.real_name if a.user else 'Desconhecido' }}</td>
+                        <td class="px-6 py-4">
+                            <span class="bg-blue-50 text-blue-600 px-2.5 py-1 rounded text-[10px] font-black uppercase tracking-wider border border-blue-100">
+                                {{ a.documento_tipo }}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4 text-center text-xs font-mono text-slate-400">{{ a.ip_address }}</td>
+                        <td class="px-6 py-4 text-right">
+                            <span class="text-[10px] font-mono text-slate-500 bg-slate-100 px-2.5 py-1.5 rounded truncate max-w-[150px] inline-block border border-slate-200 cursor-help" title="{{ a.hash_assinatura }}">
+                                {{ a.hash_assinatura[:15] }}...
+                            </span>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="5" class="px-6 py-16 text-center">
+                            <div class="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                                <i class="fas fa-file-signature text-2xl text-slate-300"></i>
+                            </div>
+                            <span class="text-slate-500 font-medium text-sm">Nenhuma assinatura digital registada até ao momento.</span>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
         </div>
     </div>
-    {% endfor %}
 </div>
 
-<script>
-    function toggleAccordion(id) {
-        const content = document.getElementById(id);
-        const icon = document.getElementById('icon-' + id);
-        content.classList.toggle('hidden');
-        icon.classList.toggle('rotate-180');
-    }
+<div id="content-pendentes" class="tab-content hidden animate-fade-in">
+    <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-10">
+        <div class="overflow-x-auto">
+            <table class="w-full text-left text-sm text-slate-600">
+                <thead class="bg-amber-50 text-[10px] uppercase text-amber-700 font-bold border-b border-amber-100">
+                    <tr>
+                        <th class="px-6 py-4">Enviado Em</th>
+                        <th class="px-6 py-4">Colaborador Pendente</th>
+                        <th class="px-6 py-4">Tipo de Documento</th>
+                        <th class="px-6 py-4">Referência / Valor</th>
+                        <th class="px-6 py-4 text-right">Status</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                    {% for p in pendentes %}
+                    <tr class="hover:bg-amber-50/40 transition group">
+                        <td class="px-6 py-4 whitespace-nowrap text-xs font-medium text-slate-500">
+                            {{ p.data_envio.strftime('%d/%m/%Y %H:%M') if p.data_envio else 'N/A' }}
+                        </td>
+                        <td class="px-6 py-4 font-bold text-slate-800 flex items-center gap-2">
+                            <div class="w-6 h-6 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-xs">
+                                <i class="fas fa-user"></i>
+                            </div>
+                            {{ p.user.real_name if p.user else 'Desconhecido' }}
+                        </td>
+                        <td class="px-6 py-4">
+                            <span class="bg-slate-100 text-slate-600 px-2.5 py-1 rounded text-[10px] font-black uppercase tracking-wider border border-slate-200">
+                                {{ p.tipo }}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4 text-sm font-bold text-slate-600">{{ p.ref }}</td>
+                        <td class="px-6 py-4 text-right">
+                            <span class="text-amber-500 font-bold text-[10px] uppercase flex items-center justify-end gap-1">
+                                <i class="fas fa-hourglass-half fa-spin-pulse"></i> Aguardando Leitura
+                            </span>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="5" class="px-6 py-20 text-center">
+                            <div class="w-20 h-20 bg-emerald-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                                <i class="fas fa-check-circle text-3xl text-emerald-400"></i>
+                            </div>
+                            <h3 class="text-lg font-bold text-slate-800 mb-1">Tudo em dia!</h3>
+                            <span class="text-slate-500 font-medium text-sm">Neste momento, não há nenhum documento pendente de assinatura.</span>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
 
-    function searchUsers() {
-        let input = document.getElementById('userSearch').value.toLowerCase();
-        let items = document.getElementsByClassName('user-item');
-        for (let i = 0; i < items.length; i++) {
-            let name = items[i].getAttribute('data-name');
-            if (name.includes(input)) {
-                items[i].style.display = "";
-            } else {
-                items[i].style.display = "none";
-            }
-        }
+<style>
+    .animate-fade-in { animation: fadeIn 0.3s ease-in-out; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+</style>
+
+<script>
+    function switchTab(tabId) {
+        // Esconde todos os paineis
+        document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+        
+        // Faz reset visual a todos os botões
+        document.querySelectorAll('.tab-btn').forEach(el => {
+            el.classList.remove('border-blue-500', 'text-blue-600', 'font-bold', 'active');
+            el.classList.add('border-transparent', 'text-slate-500', 'font-medium');
+        });
+
+        // Mostra o painel correto
+        document.getElementById('content-' + tabId).classList.remove('hidden');
+        
+        // Pinta o botão selecionado
+        const activeBtn = document.getElementById('tab-' + tabId);
+        activeBtn.classList.remove('border-transparent', 'text-slate-500', 'font-medium');
+        activeBtn.classList.add('border-blue-500', 'text-blue-600', 'font-bold', 'active');
     }
 </script>
 {% endblock %}
-
 

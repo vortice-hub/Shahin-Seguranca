@@ -2,7 +2,7 @@ from flask import render_template, redirect, url_for, jsonify, request, g, Respo
 from flask_login import login_required, current_user
 from app.extensions import db
 from app.models import User, PontoAjuste, Recibo, Holerite, PreCadastro, Notificacao, PontoResumo, PontoRegistro, HistoricoSaida, PushSubscription, Empresa
-from app.utils import get_brasil_time, has_permission
+from app.utils import get_brasil_time, has_permission, time_to_minutes
 from datetime import timedelta
 from sqlalchemy import func, text
 import traceback
@@ -23,21 +23,16 @@ def dashboard():
 
     hoje = get_brasil_time().date()
 
-    # Dados Basicos
     dados = {
         'hoje': hoje.strftime('%d/%m/%Y'),
         'doc_pendentes': 0,
         'nome_empresa': g.empresa.nome if hasattr(g, 'empresa') and g.empresa else "Vortice SaaS"
     }
 
-    # Contagem de documentos nao lidos pelo utilizador
     docs_h = Holerite.query.filter_by(user_id=current_user.id, visualizado=False).count()
     docs_r = Recibo.query.filter_by(user_id=current_user.id, visualizado=False).count()
     dados['doc_pendentes'] = docs_h + docs_r
 
-    # ==========================================
-    # LÓGICA DO DASHBOARD DE PONTO DINÂMICO
-    # ==========================================
     ultimo_ponto = PontoRegistro.query.filter_by(
         user_id=current_user.id, 
         data_registro=hoje
@@ -74,7 +69,6 @@ def dashboard():
                 'proximo': 'Jornada Concluída'
             }
 
-    # Dados Administrativos
     admin_stats = {}
     
     if has_permission('USUARIOS'):
@@ -86,49 +80,30 @@ def dashboard():
 
     return render_template('main/dashboard.html', dados=dados, admin=admin_stats, status_ponto=status_ponto)
 
-# ==============================================================================
-# ⚙️ SERVICE WORKER (ESCOPO GLOBAL PARA PWA)
-# ==============================================================================
 @main_bp.route('/sw.js')
 def service_worker():
-    """Serve o Service Worker na raiz para dar permissão global ao PWA."""
     response = make_response(send_from_directory(os.path.join(current_app.root_path, 'static'), 'service-worker.js'))
     response.headers['Content-Type'] = 'application/javascript'
     response.headers['Service-Worker-Allowed'] = '/'
     return response
 
-# ==============================================================================
-# 🚀 CDN INTERNA VORTICE (PLANO B: BURLA BLOQUEIOS DE DOMÍNIO)
-# ==============================================================================
 @main_bp.route('/cdn/logos/<slug>')
 def serve_logo(slug):
-    """Busca a logo privada no GCS e serve como se fosse estática."""
     bucket_name = os.environ.get('VORTICE_BUCKET', 'vortice-assets')
     icone_padrao = '/static/icons/vortice-icon.png'
-    
     try:
         client = storage.Client()
         bucket = client.bucket(bucket_name)
-        
         blobs = list(bucket.list_blobs(prefix=f"{slug}/logo/logo_{slug}."))
-        
-        if not blobs:
-            return redirect(icone_padrao)
-            
+        if not blobs: return redirect(icone_padrao)
         blob = blobs[0]
         image_data = blob.download_as_bytes()
-        
         return Response(image_data, mimetype=blob.content_type)
     except Exception as e:
-        print(f"Erro ao servir logo segura via CDN: {e}")
         return redirect(icone_padrao)
 
-# ==============================================================================
-# 📱 PWA WHITE-LABEL: Manifesto Dinamico (CORREÇÃO PONTOS 1 E 3)
-# ==============================================================================
 @main_bp.route('/manifest.json')
 def dynamic_manifest():
-    """Gera o manifesto do PWA dinamicamente."""
     slug = request.args.get('slug')
     empresa_contexto = None
 
@@ -142,7 +117,6 @@ def dynamic_manifest():
     icon_url = "/static/icons/vortice-icon.png"
     theme_color = "#0f172a"
     
-    # Redireciona logo para o login correto do inquilino (Impede "amnésia" do sistema)
     url_inicial = f"/login/{slug}" if slug else "/login"
     
     if empresa_contexto:
@@ -161,29 +135,20 @@ def dynamic_manifest():
         ],
         "start_url": url_inicial,
         "display": "standalone",
-        "scope": "/",  # <--- MAGIA: Prende o navegador no ecrã inteiro sem mostrar URL
+        "scope": "/",
         "theme_color": theme_color,
         "background_color": "#ffffff"
     }
     return jsonify(manifest)
 
-# --- ROTAS AJAX DO SININHO DE NOTIFICACOES ---
 @main_bp.route('/api/notificacoes', methods=['GET'])
 @login_required
 def buscar_notificacoes():
     notifs = Notificacao.query.filter_by(user_id=current_user.id).order_by(Notificacao.data_criacao.desc()).limit(10).all()
     nao_lidas = Notificacao.query.filter_by(user_id=current_user.id, lida=False).count()
-    
     lista = []
     for n in notifs:
-        lista.append({
-            'id': n.id,
-            'mensagem': n.mensagem,
-            'link': n.link,
-            'lida': n.lida,
-            'tempo': n.data_criacao.strftime('%d/%m %H:%M')
-        })
-        
+        lista.append({'id': n.id, 'mensagem': n.mensagem, 'link': n.link, 'lida': n.lida, 'tempo': n.data_criacao.strftime('%d/%m %H:%M')})
     return jsonify({'nao_lidas': nao_lidas, 'itens': lista})
 
 @main_bp.route('/api/notificacoes/ler/<int:notif_id>', methods=['POST'])
@@ -196,7 +161,6 @@ def ler_notificacao(notif_id):
         return jsonify({'success': True})
     return jsonify({'success': False}), 404
 
-# CORREÇÃO PONTO 6: ROTAS QUE FALTAVAM PARA LER TUDO E LIMPAR
 @main_bp.route('/api/notificacoes/ler_todas', methods=['POST'])
 @login_required
 def ler_todas_notificacoes():
@@ -204,9 +168,9 @@ def ler_todas_notificacoes():
         Notificacao.query.filter_by(user_id=current_user.id, lida=False).update({'lida': True})
         db.session.commit()
         return jsonify({'success': True})
-    except Exception as e:
+    except:
         db.session.rollback()
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return jsonify({'success': False}), 500
 
 @main_bp.route('/api/notificacoes/limpar', methods=['POST'])
 @login_required
@@ -215,11 +179,10 @@ def limpar_notificacoes():
         Notificacao.query.filter_by(user_id=current_user.id).delete()
         db.session.commit()
         return jsonify({'success': True})
-    except Exception as e:
+    except:
         db.session.rollback()
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return jsonify({'success': False}), 500
 
-# --- API DE ANALYTICS (Padrão Multi-Tenant) ---
 @main_bp.route('/api/analytics', methods=['GET'])
 @login_required
 def api_analytics():
@@ -234,9 +197,11 @@ def api_analytics():
         sete_dias_atras = hoje - timedelta(days=6)
         primeiro_dia_mes = hoje.replace(day=1)
 
+        # 1. Raio-X de Hoje
         ponto_hoje = db.session.query(PontoResumo.status_dia, func.count(PontoResumo.id)).filter(PontoResumo.data_referencia == hoje, PontoResumo.empresa_id == g.empresa_id).group_by(PontoResumo.status_dia).all()
         raio_x = {status: qtd for status, qtd in ponto_hoje}
         
+        # 2. Risco Semanal
         dias_labels = [(sete_dias_atras + timedelta(days=i)).strftime('%d/%m') for i in range(7)]
         risco_faltas = []
         risco_extras = []
@@ -247,25 +212,48 @@ def api_analytics():
             risco_faltas.append(faltas)
             risco_extras.append(round(extras_min / 60, 1))
 
-        saidas = db.session.query(User.departamento, func.sum(HistoricoSaida.quantidade))\
-            .join(User, User.real_name == HistoricoSaida.colaborador)\
-            .filter(HistoricoSaida.data_entrega >= primeiro_dia_mes, User.empresa_id == g.empresa_id)\
-            .group_by(User.departamento).all()
+        # 3. Custos (Estoque)
+        saidas = db.session.query(User.departamento, func.sum(HistoricoSaida.quantidade)).join(User, User.real_name == HistoricoSaida.colaborador).filter(HistoricoSaida.data_entrega >= primeiro_dia_mes, User.empresa_id == g.empresa_id).group_by(User.departamento).all()
         custos_labels = [s[0] or 'Geral' for s in saidas]
         custos_data = [s[1] for s in saidas]
+
+        # 4. FASE 3: ESCUDO DE CONFORMIDADE (Matemática Real 100%)
+        total_holerites = db.session.query(Holerite).join(User).filter(Holerite.enviado_em >= primeiro_dia_mes, User.empresa_id == g.empresa_id).count()
+        lidos_holerites = db.session.query(Holerite).join(User).filter(Holerite.enviado_em >= primeiro_dia_mes, Holerite.visualizado == True, User.empresa_id == g.empresa_id).count()
+        total_recibos = db.session.query(Recibo).join(User).filter(Recibo.created_at >= primeiro_dia_mes, User.empresa_id == g.empresa_id).count()
+        lidos_recibos = db.session.query(Recibo).join(User).filter(Recibo.created_at >= primeiro_dia_mes, Recibo.visualizado == True, User.empresa_id == g.empresa_id).count()
+        
+        total_docs = total_holerites + total_recibos
+        docs_lidos = lidos_holerites + lidos_recibos
+        escudo_pct = int((docs_lidos / total_docs * 100)) if total_docs > 0 else 100
+
+        # 5. FASE 3: PONTUALIDADE (Matemática Real 100%)
+        pontos_hoje = [0, 0, 0] # [No Horário, Atraso Leve, Atraso Crítico]
+        users = User.query.filter_by(empresa_id=g.empresa_id).all()
+        for u in users:
+            if u.inicio_jornada_ideal:
+                entrada = PontoRegistro.query.filter(PontoRegistro.user_id==u.id, PontoRegistro.data_registro==hoje, PontoRegistro.tipo.ilike('%entrada%')).order_by(PontoRegistro.hora_registro.asc()).first()
+                if entrada:
+                    hora_ideal = time_to_minutes(u.inicio_jornada_ideal)
+                    hora_real = time_to_minutes(entrada.hora_registro)
+                    atraso = hora_real - hora_ideal
+                    
+                    if atraso <= 10: pontos_hoje[0] += 1
+                    elif atraso <= 30: pontos_hoje[1] += 1
+                    else: pontos_hoje[2] += 1
 
         return jsonify({
             'raio_x': raio_x,
             'risco': {'labels': dias_labels, 'faltas': risco_faltas, 'extras': risco_extras},
             'custos': {'labels': custos_labels, 'data': custos_data},
-            'escudo': 100,
-            'pontualidade': [10, 2, 1] 
+            'escudo': escudo_pct,
+            'pontualidade': pontos_hoje
         })
         
     except Exception as e:
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
-# --- MIGRACOES E UTILITARIOS ---
 @main_bp.route('/vortice-migrar')
 def vortice_migrar():
     try:
@@ -283,20 +271,6 @@ def vortice_migrar():
                 db.session.execute(text(f"ALTER TABLE {tabela} ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP WITHOUT TIME ZONE;"))
             except: pass
         db.session.commit()
-
-        cliente_shahin = Empresa.query.filter_by(slug='shahin').first()
-        if not cliente_shahin:
-            cliente_shahin = Empresa(
-                nome='LA SHAHIN SERVICOS DE SEGURANCA', 
-                slug='shahin', 
-                plano='Enterprise', 
-                ativa=True,
-                features_json={"ponto": True, "documentos": True, "estoque": True},
-                config_json={"cor_primaria": "#2563eb", "cor_hover": "#1d4ed8"}
-            )
-            db.session.add(cliente_shahin)
-            db.session.commit()
-            
         return "Migracao SaaS e infraestrutura de auditoria concluidas!"
     except Exception as e:
         db.session.rollback()
@@ -332,41 +306,30 @@ def semear_permissoes():
         db.session.rollback()
         return f"Erro: {str(e)}"
 
-# ==============================================================================
-# 🔔 ROTA DE INSCRIÇÃO WEBPUSH
-# ==============================================================================
 @main_bp.route('/api/push/subscribe', methods=['POST'])
 @login_required
 def push_subscribe():
     try:
         sub_info = request.get_json()
-        if not sub_info:
-            return jsonify({'success': False, 'error': 'Dados inválidos'}), 400
+        if not sub_info: return jsonify({'success': False, 'error': 'Dados inválidos'}), 400
             
         endpoint = sub_info.get('endpoint')
         keys = sub_info.get('keys', {})
         p256dh = keys.get('p256dh')
         auth = keys.get('auth')
         
-        if not endpoint or not p256dh or not auth:
-            return jsonify({'success': False, 'error': 'Chaves criptográficas ausentes'}), 400
+        if not endpoint or not p256dh or not auth: return jsonify({'success': False, 'error': 'Chaves criptográficas ausentes'}), 400
             
         existente = PushSubscription.query.filter_by(endpoint=endpoint).first()
         if existente:
             existente.user_id = current_user.id
             db.session.commit()
         else:
-            nova_sub = PushSubscription(
-                user_id=current_user.id,
-                endpoint=endpoint,
-                p256dh=p256dh,
-                auth=auth
-            )
+            nova_sub = PushSubscription(user_id=current_user.id, endpoint=endpoint, p256dh=p256dh, auth=auth)
             db.session.add(nova_sub)
             db.session.commit()
             
         return jsonify({'success': True})
-        
     except Exception as e:
         traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500

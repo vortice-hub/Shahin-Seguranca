@@ -23,6 +23,23 @@
     
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 
+    <style>
+        /* --- ANIMAÇÕES DE NOTIFICAÇÃO --- */
+        @keyframes bell-ring {
+            0%, 100% { transform: rotate(0deg); }
+            10%, 30%, 50%, 70%, 90% { transform: rotate(15deg); }
+            20%, 40%, 60%, 80% { transform: rotate(-15deg); }
+        }
+        .bell-ring { animation: bell-ring 1s ease-in-out; }
+        
+        @keyframes pop {
+            0% { transform: scale(0); }
+            80% { transform: scale(1.2); }
+            100% { transform: scale(1); }
+        }
+        .badge-pop { animation: pop 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+    </style>
+
     {% if g.empresa %}
     <style>
         :root {
@@ -103,7 +120,7 @@
         <span class="font-bold text-lg text-slate-800">{{ g.empresa.nome.split(' ')[0] if g.empresa else 'Vortice' }}</span>
         <button onclick="toggleNotificacoes()" class="relative text-slate-500 hover:text-blue-600 focus:outline-none w-8">
             <i class="fas fa-bell text-xl" id="bell-icon-mobile"></i>
-            <span id="badge-notif-mobile" class="hidden absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full border border-white">0</span>
+            <span id="badge-notif-mobile" class="hidden absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full border border-white shadow-md">0</span>
         </button>
     </div>
     <div id="overlay" onclick="toggleSidebar()" class="fixed inset-0 bg-black bg-opacity-50 z-40 hidden md:hidden"></div>
@@ -262,7 +279,7 @@
                 <div class="relative">
                     <button onclick="toggleNotificacoes()" class="relative text-slate-500 hover:text-blue-600 focus:outline-none transition group bg-white p-2.5 rounded-full border border-slate-200 shadow-sm hover:shadow">
                         <i class="fas fa-bell text-lg" id="bell-icon-desktop"></i>
-                        <span id="badge-notif-desktop" class="hidden absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full border border-white shadow-sm transition-transform scale-0">0</span>
+                        <span id="badge-notif-desktop" class="hidden absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full border border-white shadow-md">0</span>
                     </button>
                     
                     <div id="painel-notificacoes" class="hidden absolute right-0 mt-3 w-80 bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden transform origin-top-right transition-all">
@@ -325,7 +342,6 @@
 
     <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
     <script>
-        // Lógica do Modal de Confirmação 
         function confirmarAcao(mensagem, actionUrl) {
             document.getElementById('modal-mensagem').innerText = mensagem;
             document.getElementById('form-confirmacao').action = actionUrl;
@@ -346,7 +362,6 @@
             setTimeout(() => { modal.classList.add('hidden'); }, 200);
         }
 
-        // Lógica de Mensagens Flash e Notificações
         document.addEventListener('DOMContentLoaded', function() {
             document.querySelectorAll('[id^="flask-msg-"]').forEach(el => {
                 const msg = el.innerText;
@@ -359,11 +374,16 @@
 
             {% if current_user.is_authenticated and not current_user.is_first_access and not request.path.startswith('/vortice') %}
             buscarNotificacoes();
-            setInterval(buscarNotificacoes, 120000); 
+            // Heartbeat: Verifica de 30 em 30 segundos
+            setInterval(buscarNotificacoes, 30000); 
             {% endif %}
         });
 
-        // Funções de Notificação
+        // ==============================================================================
+        // 🔔 LÓGICA BLINDADA DO SINO DE NOTIFICAÇÕES (FRENTE 1)
+        // ==============================================================================
+        let lastQtdNotificacoes = parseInt(sessionStorage.getItem('notif_qtd')) || 0;
+
         async function buscarNotificacoes() {
             try {
                 const req = await fetch('/api/notificacoes');
@@ -378,17 +398,47 @@
             const iDesktop = document.getElementById('bell-icon-desktop');
             const bMobile = document.getElementById('badge-notif-mobile');
             const iMobile = document.getElementById('bell-icon-mobile');
+            
             if (qtd > 0) {
-                if(bDesktop) { bDesktop.innerText = qtd; bDesktop.classList.remove('hidden'); bDesktop.style.transform = 'scale(1)'; }
+                // Força a remoção do hidden para que a bolinha apareça
+                if(bDesktop) { bDesktop.innerText = qtd; bDesktop.classList.remove('hidden', 'scale-0'); }
                 if(bMobile) { bMobile.innerText = qtd; bMobile.classList.remove('hidden'); }
-                if(iDesktop) iDesktop.classList.add('bell-ring');
-                if(iMobile) iMobile.classList.add('bell-ring');
+                
+                // Se o número de notificações AUMENTOU, toca o sino e faz a bolinha saltar
+                if (qtd > lastQtdNotificacoes) {
+                    // Desktop Animation
+                    if(iDesktop) { 
+                        iDesktop.classList.remove('bell-ring'); 
+                        void iDesktop.offsetWidth; // Reflow force
+                        iDesktop.classList.add('bell-ring'); 
+                    }
+                    if(bDesktop) { 
+                        bDesktop.classList.remove('badge-pop'); 
+                        void bDesktop.offsetWidth; 
+                        bDesktop.classList.add('badge-pop'); 
+                    }
+
+                    // Mobile Animation
+                    if(iMobile) { 
+                        iMobile.classList.remove('bell-ring'); 
+                        void iMobile.offsetWidth; 
+                        iMobile.classList.add('bell-ring'); 
+                    }
+                    if(bMobile) { 
+                        bMobile.classList.remove('badge-pop'); 
+                        void bMobile.offsetWidth; 
+                        bMobile.classList.add('badge-pop'); 
+                    }
+                }
             } else {
-                if(bDesktop) { bDesktop.classList.add('hidden'); bDesktop.style.transform = 'scale(0)'; }
-                if(bMobile) bMobile.classList.add('hidden');
-                if(iDesktop) iDesktop.classList.remove('bell-ring');
-                if(iMobile) iMobile.classList.remove('bell-ring');
+                // Esconde a bolinha se não houver nada
+                if(bDesktop) { bDesktop.classList.add('hidden', 'scale-0'); bDesktop.classList.remove('badge-pop'); }
+                if(bMobile) { bMobile.classList.add('hidden'); bMobile.classList.remove('badge-pop'); }
             }
+            
+            // Guarda a quantidade atual para comparar na próxima batida do coração
+            lastQtdNotificacoes = qtd;
+            sessionStorage.setItem('notif_qtd', qtd);
         }
 
         function renderizarLista(itens) {
@@ -450,13 +500,10 @@
         // ==============================================================================
         // ⚙️ LÓGICA DO PWA E NOTIFICAÇÕES PUSH
         // ==============================================================================
-        
-        // --- INSTALAÇÃO DO PWA ---
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', function() {
                 navigator.serviceWorker.register('/sw.js').then(function(registration) {
                     console.log('ServiceWorker White-Label registado com sucesso!');
-                    // Após registar, verifica se o Push está ativo
                     verificarInscricaoPush();
                 }, function(err) {
                     console.log('Falha no registo do ServiceWorker:', err);
@@ -490,8 +537,6 @@
             deferredPrompt = null;
         });
 
-        // --- ATIVAÇÃO DE ALERTAS PUSH ---
-        
         const PUBLIC_VAPID_KEY = 'BLj7nNHVn8NIHL4lHkVOS03nYmMGdOQ4L4wO8_4H58oF0COavknccVgUUUfpClHhQegJjC9p6ZjFz3LH98Xupxo'; 
 
         function urlBase64ToUint8Array(base64String) {
@@ -507,13 +552,11 @@
 
         async function verificarInscricaoPush() {
             if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
-            
             try {
                 const registration = await navigator.serviceWorker.ready;
                 const subscription = await registration.pushManager.getSubscription();
                 const btnContainer = document.getElementById('push-subscribe-container');
                 
-                // Se NÃO tem inscrição e o utilizador NÃO bloqueou as notificações, mostra o botão
                 if (!subscription && Notification.permission !== 'denied') {
                     if(btnContainer) btnContainer.classList.remove('hidden');
                 }
@@ -523,14 +566,11 @@
         async function ativarAlertas() {
             try {
                 const registration = await navigator.serviceWorker.ready;
-                
-                // 1. Pede a inscrição encriptada usando a chave pública
                 const subscription = await registration.pushManager.subscribe({
                     userVisibleOnly: true,
                     applicationServerKey: urlBase64ToUint8Array(PUBLIC_VAPID_KEY)
                 });
 
-                // 2. Envia a assinatura para o nosso backend gravar (rota /api/push/subscribe)
                 const response = await fetch('/api/push/subscribe', {
                     method: 'POST',
                     headers: {
@@ -556,7 +596,6 @@
             }
         }
 
-        // Liga a função ao clique do botão
         const pushBtn = document.getElementById('push-subscribe-btn');
         if(pushBtn) {
             pushBtn.addEventListener('click', ativarAlertas);

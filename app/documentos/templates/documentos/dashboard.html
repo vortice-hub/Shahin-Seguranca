@@ -14,12 +14,19 @@
         {% endif %}
         
         <a href="{{ url_for('documentos.admin_holerites') }}" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg shadow-sm text-xs transition flex items-center gap-2">
-            <i class="fas fa-upload"></i> Importar PDF
+            <i class="fas fa-file-invoice-dollar"></i> Enviar Holerite em Massa
         </a>
         
         <a href="{{ url_for('documentos.novo_recibo') }}" class="bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-2 px-4 rounded-lg shadow-sm text-xs transition flex items-center gap-2">
-            <i class="fas fa-plus"></i> Gerar Recibo
+            <i class="fas fa-receipt"></i> Gerar Recibo
         </a>
+
+        <form action="{{ url_for('documentos.disparar_espelhos') }}" method="POST" class="inline" onsubmit="return confirm('Deseja gerar e disparar os espelhos de ponto para todos os funcionários?');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <button type="submit" class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg shadow-sm text-xs transition flex items-center gap-2">
+                <i class="fas fa-user-clock"></i> Enviar Espelhos de Ponto
+            </button>
+        </form>
     </div>
 </div>
 

@@ -54,7 +54,28 @@ def baixar_bytes_storage(caminho_blob):
         print(f"Erro ao baixar do Storage: {e}")
         return None
 
-# Função legada mantida para compatibilidade, mas não será usada preferencialmente
-def gerar_url_assinada(caminho_blob):
-    return None
+def excluir_do_storage(caminho_blob):
+    """
+    Remove definitivamente um ficheiro do Google Cloud Storage.
+    Impede que a empresa pague por armazenamento de documentos apagados (ex: atestados recusados).
+    """
+    if not caminho_blob:
+        return False
+        
+    try:
+        client = storage.Client()
+        bucket = client.bucket(get_bucket_name())
+        blob = bucket.blob(caminho_blob)
+        
+        if blob.exists():
+            blob.delete()
+            print(f"[STORAGE LIMPEZA] O ficheiro {caminho_blob} foi fulminado com sucesso.")
+            return True
+        else:
+            print(f"[STORAGE AVISO] O ficheiro {caminho_blob} já não existia na nuvem.")
+            return False
+            
+    except Exception as e:
+        print(f"Erro CRÍTICO ao excluir do Storage: {e}")
+        return False
 

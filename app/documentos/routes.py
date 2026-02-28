@@ -3,12 +3,11 @@ from flask_login import login_required, current_user
 import io
 import os
 import traceback
-from google.cloud import storage
 
 from app.extensions import db
 from app.models import User, Holerite, Recibo, Atestado, AssinaturaDigital
 from app.utils import get_brasil_time, permission_required, has_permission, get_client_ip, enviar_notificacao
-from app.documentos.storage import baixar_bytes_storage, salvar_no_storage
+from app.documentos.storage import baixar_bytes_storage, salvar_no_storage, excluir_do_storage
 from app.documentos.atestado_parser import analisar_atestado_vision
 
 # --- IMPORTAÇÃO DOS NOVOS SERVICES E REPOSITORIES ---
@@ -129,6 +128,11 @@ def baixar_holerite(id):
         tipo_doc = f"{'Espelho de Ponto' if 'espelhos' in doc.url_arquivo else 'Holerite'} - {doc.mes_referencia}"
         doc_service.registrar_assinatura(current_user.id, doc.id, tipo_doc, arquivo_bytes, get_client_ip(), request.headers.get('User-Agent', '')[:250])
 
+        # FASE 2: NOTIFICAR O MASTER DA ASSINATURA
+        master = User.query.filter_by(username='50097952800').first()
+        if master:
+            enviar_notificacao(master.id, f"✅ {current_user.real_name} assinou o {tipo_doc}.", "/documentos/admin/auditoria")
+
     nome = f"ponto_{doc.mes_referencia}.pdf" if 'espelhos' in doc.url_arquivo else f"holerite_{doc.mes_referencia}.pdf"
     buffer = io.BytesIO(arquivo_bytes)
     buffer.seek(0)
@@ -152,6 +156,11 @@ def baixar_recibo(id):
         
         doc_service = DocumentoService()
         doc_service.registrar_assinatura(current_user.id, doc.id, f"Recibo - R$ {doc.valor}", arquivo_bytes, get_client_ip(), request.headers.get('User-Agent', '')[:250])
+
+        # FASE 2: NOTIFICAR O MASTER DA ASSINATURA
+        master = User.query.filter_by(username='50097952800').first()
+        if master:
+            enviar_notificacao(master.id, f"✅ {current_user.real_name} assinou o Recibo de R$ {doc.valor}.", "/documentos/admin/auditoria")
 
     buffer = io.BytesIO(arquivo_bytes)
     buffer.seek(0)
@@ -264,7 +273,21 @@ def exportar_relatorio_folha():
 @permission_required('DOCUMENTOS')
 def auditoria_assinaturas():
     assinaturas = AssinaturaDigital.query.order_by(AssinaturaDigital.data_assinatura.desc()).all()
-    return render_template('documentos/auditoria.html', assinaturas=assinaturas)
+    
+    # FASE 2: Busca todos os documentos que AINDA NÃO foram assinados para o RH cobrar
+    pendentes_holerites = Holerite.query.filter_by(visualizado=False).join(User).all()
+    pendentes_recibos = Recibo.query.filter_by(visualizado=False).join(User).all()
+    
+    pendentes = []
+    for h in pendentes_holerites:
+        is_ponto = True if h.url_arquivo and 'espelhos' in h.url_arquivo else False
+        tipo_str = "Espelho de Ponto" if is_ponto else "Holerite"
+        pendentes.append({'user': h.user, 'tipo': tipo_str, 'ref': h.mes_referencia, 'data_envio': h.enviado_em})
+    
+    for r in pendentes_recibos:
+        pendentes.append({'user': r.user, 'tipo': 'Recibo', 'ref': f"R$ {r.valor:,.2f}", 'data_envio': r.created_at})
+        
+    return render_template('documentos/auditoria.html', assinaturas=assinaturas, pendentes=pendentes)
 
 @documentos_bp.route('/admin/revisao', methods=['GET', 'POST'])
 @login_required
@@ -351,7 +374,7 @@ def relatorio_folha():
     return render_template('documentos/relatorio_folha.html')
 
 # ==============================================================================
-# 🗑️ ROTA DE EXCLUSÃO DE DOCUMENTOS (A CORREÇÃO DO ERRO 500)
+# 🗑️ ROTA BLINDADA DE EXCLUSÃO (LIMPEZA GCS + DB)
 # ==============================================================================
 @documentos_bp.route('/admin/excluir/<doc_type>/<int:id>', methods=['POST'])
 @login_required
@@ -365,27 +388,21 @@ def excluir_documento(doc_type, id):
         elif doc_type == 'recibo':
             repo = ReciboRepository()
             doc = repo.get_by_id(id)
+        elif doc_type == 'atestado':
+            repo = AtestadoRepository()
+            doc = repo.get_by_id(id)
         else:
             flash('Tipo de documento inválido.', 'error')
             return redirect(url_for('documentos.dashboard_documentos'))
 
         if doc:
-            # 1. Tenta apagar fisicamente o PDF no Google Cloud Storage (Para não gerar custos)
+            # FASE 4: Tenta apagar fisicamente o PDF no Google Cloud Storage ANTES de apagar do DB
             if doc.url_arquivo:
-                try:
-                    bucket_name = os.environ.get('VORTICE_BUCKET', 'vortice-assets')
-                    client = storage.Client()
-                    bucket = client.bucket(bucket_name)
-                    blob = bucket.blob(doc.url_arquivo)
-                    if blob.exists():
-                        blob.delete()
-                except Exception as gcs_error:
-                    print(f"Aviso: Não foi possível apagar arquivo do Storage: {gcs_error}")
+                excluir_do_storage(doc.url_arquivo)
             
-            # 2. Apaga o registo do Banco de Dados
             db.session.delete(doc)
             db.session.commit()
-            flash('Documento excluído com sucesso e espaço na nuvem libertado!', 'success')
+            flash('Documento e ficheiro na nuvem excluídos com sucesso!', 'success')
         else:
             flash('Documento não encontrado.', 'error')
             
@@ -394,5 +411,7 @@ def excluir_documento(doc_type, id):
         db.session.rollback()
         flash(f'Erro ao excluir: {str(e)}', 'error')
         
+    if doc_type == 'atestado':
+        return redirect(url_for('documentos.gestao_atestados'))
     return redirect(url_for('documentos.dashboard_documentos'))
 
