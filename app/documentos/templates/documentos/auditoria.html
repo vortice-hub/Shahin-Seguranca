@@ -48,8 +48,8 @@
                         </td>
                         <td class="px-6 py-4 text-center text-xs font-mono text-slate-400">{{ a.ip_address }}</td>
                         <td class="px-6 py-4 text-right">
-                            <span class="text-[10px] font-mono text-slate-500 bg-slate-100 px-2.5 py-1.5 rounded truncate max-w-[150px] inline-block border border-slate-200 cursor-help" title="{{ a.hash_assinatura }}">
-                                {{ a.hash_assinatura[:15] }}...
+                            <span class="text-[10px] font-mono text-slate-500 bg-slate-100 px-2.5 py-1.5 rounded truncate max-w-[150px] inline-block border border-slate-200 cursor-help" title="{{ a.hash_arquivo }}">
+                                {{ a.hash_arquivo[:15] }}...
                             </span>
                         </td>
                     </tr>
@@ -130,19 +130,12 @@
 
 <script>
     function switchTab(tabId) {
-        // Esconde todos os paineis
         document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
-        
-        // Faz reset visual a todos os botões
         document.querySelectorAll('.tab-btn').forEach(el => {
             el.classList.remove('border-blue-500', 'text-blue-600', 'font-bold', 'active');
             el.classList.add('border-transparent', 'text-slate-500', 'font-medium');
         });
-
-        // Mostra o painel correto
         document.getElementById('content-' + tabId).classList.remove('hidden');
-        
-        // Pinta o botão selecionado
         const activeBtn = document.getElementById('tab-' + tabId);
         activeBtn.classList.remove('border-transparent', 'text-slate-500', 'font-medium');
         activeBtn.classList.add('border-blue-500', 'text-blue-600', 'font-bold', 'active');

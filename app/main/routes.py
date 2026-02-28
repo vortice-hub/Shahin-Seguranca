@@ -71,12 +71,15 @@ def dashboard():
 
     admin_stats = {}
     
+    # -------------------------------------------------------------------------
+    # CORREÇÃO DO MISTÉRIO DOS 5 EFETIVOS (Trava Multi-Tenant Adicionada)
+    # -------------------------------------------------------------------------
     if has_permission('USUARIOS'):
-        admin_stats['total_users'] = User.query.filter(User.username != '12345678900', User.username != 'terminal').count()
-        admin_stats['pendentes_cadastro'] = PreCadastro.query.count()
+        admin_stats['total_users'] = User.query.filter(User.username != '12345678900', User.username != 'terminal', User.empresa_id == g.empresa_id).count()
+        admin_stats['pendentes_cadastro'] = PreCadastro.query.filter_by(empresa_id=g.empresa_id).count()
 
     if has_permission('PONTO'):
-        admin_stats['ajustes_pendentes'] = PontoAjuste.query.filter_by(status='Pendente').count()
+        admin_stats['ajustes_pendentes'] = PontoAjuste.query.filter_by(status='Pendente', empresa_id=g.empresa_id).count()
 
     return render_template('main/dashboard.html', dados=dados, admin=admin_stats, status_ponto=status_ponto)
 
@@ -197,11 +200,9 @@ def api_analytics():
         sete_dias_atras = hoje - timedelta(days=6)
         primeiro_dia_mes = hoje.replace(day=1)
 
-        # 1. Raio-X de Hoje
         ponto_hoje = db.session.query(PontoResumo.status_dia, func.count(PontoResumo.id)).filter(PontoResumo.data_referencia == hoje, PontoResumo.empresa_id == g.empresa_id).group_by(PontoResumo.status_dia).all()
         raio_x = {status: qtd for status, qtd in ponto_hoje}
         
-        # 2. Risco Semanal
         dias_labels = [(sete_dias_atras + timedelta(days=i)).strftime('%d/%m') for i in range(7)]
         risco_faltas = []
         risco_extras = []
@@ -212,12 +213,10 @@ def api_analytics():
             risco_faltas.append(faltas)
             risco_extras.append(round(extras_min / 60, 1))
 
-        # 3. Custos (Estoque)
         saidas = db.session.query(User.departamento, func.sum(HistoricoSaida.quantidade)).join(User, User.real_name == HistoricoSaida.colaborador).filter(HistoricoSaida.data_entrega >= primeiro_dia_mes, User.empresa_id == g.empresa_id).group_by(User.departamento).all()
         custos_labels = [s[0] or 'Geral' for s in saidas]
         custos_data = [s[1] for s in saidas]
 
-        # 4. FASE 3: ESCUDO DE CONFORMIDADE (Matemática Real 100%)
         total_holerites = db.session.query(Holerite).join(User).filter(Holerite.enviado_em >= primeiro_dia_mes, User.empresa_id == g.empresa_id).count()
         lidos_holerites = db.session.query(Holerite).join(User).filter(Holerite.enviado_em >= primeiro_dia_mes, Holerite.visualizado == True, User.empresa_id == g.empresa_id).count()
         total_recibos = db.session.query(Recibo).join(User).filter(Recibo.created_at >= primeiro_dia_mes, User.empresa_id == g.empresa_id).count()
@@ -227,8 +226,7 @@ def api_analytics():
         docs_lidos = lidos_holerites + lidos_recibos
         escudo_pct = int((docs_lidos / total_docs * 100)) if total_docs > 0 else 100
 
-        # 5. FASE 3: PONTUALIDADE (Matemática Real 100%)
-        pontos_hoje = [0, 0, 0] # [No Horário, Atraso Leve, Atraso Crítico]
+        pontos_hoje = [0, 0, 0] 
         users = User.query.filter_by(empresa_id=g.empresa_id).all()
         for u in users:
             if u.inicio_jornada_ideal:
