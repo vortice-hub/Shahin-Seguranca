@@ -11,100 +11,81 @@
     {% set perms = current_user.permissions or "" %}
 {% endif %}
 
-<div class="mb-8 flex flex-col md:flex-row justify-between items-start md:items-end gap-4 bg-gradient-to-r from-[var(--primary-color,#2563eb)] to-indigo-700 p-8 rounded-2xl shadow-xl text-white relative overflow-hidden">
-    <div class="absolute -right-10 -top-10 opacity-10">
-        <i class="fas fa-chart-pie text-9xl"></i>
-    </div>
-    <div class="relative z-10">
-        <div class="text-[10px] uppercase tracking-widest font-bold text-blue-200 mb-1 flex items-center gap-2">
-            <i class="far fa-calendar-alt"></i> {{ dados.hoje }}
-        </div>
-        <h2 class="text-3xl font-black mb-1 tracking-tight">Olá, {{ current_user.real_name.split()[0] }}!</h2>
-        <p class="text-blue-100 text-sm max-w-lg">Bem-vindo(a) ao portal corporativo da <strong class="text-white">{{ dados.nome_empresa }}</strong>. O seu resumo operacional está atualizado.</p>
-    </div>
+<div class="mb-10 animate-fade-in">
+    <p class="text-xs font-bold text-brand tracking-widest uppercase mb-2">{{ dados.hoje }}</p>
+    <h1 class="text-3xl md:text-4xl font-black text-slate-800 tracking-tight">Bom dia, {{ current_user.real_name.split()[0] }}</h1>
+    <p class="text-slate-500 font-medium mt-1 text-sm">Bem-vindo(a) ao seu espaço operacional na <strong class="text-slate-700">{{ dados.nome_empresa }}</strong>.</p>
 </div>
 
-<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12 animate-fade-in" style="animation-delay: 0.1s; animation-fill-mode: both;">
     
-    <div class="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm relative overflow-hidden group hover:shadow-md transition">
-        <div class="absolute top-0 right-0 w-24 h-24 bg-blue-50 rounded-bl-full -mr-4 -mt-4 transition-transform group-hover:scale-110"></div>
+    <div class="glass-panel p-6 relative overflow-hidden group flex flex-col justify-between min-h-[160px]">
         <div class="flex justify-between items-start relative z-10">
             <div>
-                <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Relógio de Ponto</p>
-                <h3 class="text-xl font-black text-slate-800">{{ status_ponto.texto }}</h3>
-                <p class="text-xs text-slate-500 font-medium mt-1">Status atual da jornada</p>
+                <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Ponto</p>
+                <h3 class="text-lg font-black text-slate-800 leading-tight">{{ status_ponto.texto }}</h3>
             </div>
-            <div class="w-12 h-12 rounded-xl {{ status_ponto.badge }} text-white flex items-center justify-center text-xl shadow-sm">
+            <div class="w-10 h-10 rounded-full {{ status_ponto.badge | replace('bg-', 'bg-opacity-10 text-') | replace('500', '600') }} flex items-center justify-center text-lg shadow-sm">
                 <i class="fas {{ status_ponto.icone }}"></i>
             </div>
         </div>
-        <div class="mt-5 pt-4 border-t border-slate-100">
-            <a href="/ponto/registrar" class="text-[11px] font-bold text-blue-600 hover:text-blue-800 uppercase flex items-center justify-between group-hover:pl-1 transition-all">
-                <span>AÇÃO: Registar {{ status_ponto.proximo }}</span>
-                <i class="fas fa-arrow-right"></i>
+        <div class="mt-4 relative z-10">
+            <a href="/ponto/registrar" class="btn-primary w-full !py-2.5 text-xs">
+                Registar {{ status_ponto.proximo }}
             </a>
         </div>
     </div>
 
-    <div class="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm relative overflow-hidden group hover:shadow-md transition">
-        <div class="absolute top-0 right-0 w-24 h-24 bg-purple-50 rounded-bl-full -mr-4 -mt-4 transition-transform group-hover:scale-110"></div>
+    <div class="glass-panel p-6 relative overflow-hidden group flex flex-col justify-between min-h-[160px]">
         <div class="flex justify-between items-start relative z-10">
             <div>
-                <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Meus Documentos</p>
-                <h3 class="text-xl font-black text-slate-800">{{ dados.doc_pendentes }} Pendentes</h3>
-                <p class="text-xs text-slate-500 font-medium mt-1">Aguardam assinatura</p>
+                <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Documentos</p>
+                <h3 class="text-lg font-black text-slate-800 leading-tight">{{ dados.doc_pendentes }} Pendentes</h3>
             </div>
-            <div class="w-12 h-12 rounded-xl {% if dados.doc_pendentes > 0 %}bg-red-500 animate-pulse{% else %}bg-purple-500{% endif %} text-white flex items-center justify-center text-xl shadow-sm">
+            <div class="w-10 h-10 rounded-full {% if dados.doc_pendentes > 0 %}bg-red-50 text-red-600 animate-pulse{% else %}bg-slate-50 text-slate-400{% endif %} flex items-center justify-center text-lg shadow-sm">
                 <i class="fas fa-file-signature"></i>
             </div>
         </div>
-        <div class="mt-5 pt-4 border-t border-slate-100">
-            <a href="/documentos/meus-documentos" class="text-[11px] font-bold text-purple-600 hover:text-purple-800 uppercase flex items-center justify-between group-hover:pl-1 transition-all">
-                <span>AÇÃO: Assinar Documentos</span>
-                <i class="fas fa-arrow-right"></i>
+        <div class="mt-4 relative z-10">
+            <a href="/documentos/meus-documentos" class="btn-glass w-full justify-center !py-2.5 text-xs">
+                Assinar Pendências
             </a>
         </div>
     </div>
 
     {% if has_permission('PONTO') %}
-    <div class="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm relative overflow-hidden group hover:shadow-md transition">
-        <div class="absolute top-0 right-0 w-24 h-24 bg-amber-50 rounded-bl-full -mr-4 -mt-4 transition-transform group-hover:scale-110"></div>
+    <div class="glass-panel p-6 relative overflow-hidden group flex flex-col justify-between min-h-[160px]">
         <div class="flex justify-between items-start relative z-10">
             <div>
-                <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1"><i class="fas fa-shield-alt text-amber-500"></i> RH / Gestão</p>
-                <h3 class="text-xl font-black text-slate-800">{{ admin.ajustes_pendentes }} Ajustes</h3>
-                <p class="text-xs text-slate-500 font-medium mt-1">Esperam Aprovação</p>
+                <p class="text-[10px] font-bold text-amber-500 uppercase tracking-wider mb-1">Aprovações</p>
+                <h3 class="text-lg font-black text-slate-800 leading-tight">{{ admin.ajustes_pendentes }} Ajustes</h3>
             </div>
-            <div class="w-12 h-12 rounded-xl bg-amber-500 text-white flex items-center justify-center text-xl shadow-sm">
+            <div class="w-10 h-10 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center text-lg shadow-sm">
                 <i class="fas fa-balance-scale"></i>
             </div>
         </div>
-        <div class="mt-5 pt-4 border-t border-slate-100">
-            <a href="/admin/solicitacoes" class="text-[11px] font-bold text-amber-600 hover:text-amber-800 uppercase flex items-center justify-between group-hover:pl-1 transition-all">
-                <span>AÇÃO: Avaliar Ajustes</span>
-                <i class="fas fa-arrow-right"></i>
+        <div class="mt-4 relative z-10">
+            <a href="/admin/solicitacoes" class="btn-glass w-full justify-center !py-2.5 text-xs !text-amber-600 hover:!bg-amber-100">
+                Revisar Agora
             </a>
         </div>
     </div>
     {% endif %}
 
     {% if has_permission('USUARIOS') %}
-    <div class="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm relative overflow-hidden group hover:shadow-md transition">
-        <div class="absolute top-0 right-0 w-24 h-24 bg-emerald-50 rounded-bl-full -mr-4 -mt-4 transition-transform group-hover:scale-110"></div>
+    <div class="glass-panel p-6 relative overflow-hidden group flex flex-col justify-between min-h-[160px]">
         <div class="flex justify-between items-start relative z-10">
             <div>
-                <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1"><i class="fas fa-shield-alt text-emerald-500"></i> ADM / Efetivo</p>
-                <h3 class="text-xl font-black text-slate-800">{{ admin.total_users }} Ativos</h3>
-                <p class="text-xs text-slate-500 font-medium mt-1">{{ admin.pendentes_cadastro }} Cadastros Pendentes</p>
+                <p class="text-[10px] font-bold text-emerald-500 uppercase tracking-wider mb-1">Efetivo</p>
+                <h3 class="text-lg font-black text-slate-800 leading-tight">{{ admin.total_users }} Ativos</h3>
             </div>
-            <div class="w-12 h-12 rounded-xl bg-emerald-500 text-white flex items-center justify-center text-xl shadow-sm">
+            <div class="w-10 h-10 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center text-lg shadow-sm">
                 <i class="fas fa-users-cog"></i>
             </div>
         </div>
-        <div class="mt-5 pt-4 border-t border-slate-100">
-            <a href="/admin/usuarios" class="text-[11px] font-bold text-emerald-600 hover:text-emerald-800 uppercase flex items-center justify-between group-hover:pl-1 transition-all">
-                <span>AÇÃO: Gerir Pessoal</span>
-                <i class="fas fa-arrow-right"></i>
+        <div class="mt-4 relative z-10">
+            <a href="/admin/usuarios" class="btn-glass w-full justify-center !py-2.5 text-xs !text-emerald-600 hover:!bg-emerald-100">
+                Gerir Equipe
             </a>
         </div>
     </div>
@@ -112,28 +93,28 @@
 </div>
 
 {% if is_master %}
-<div class="mb-8">
-    <div class="flex items-center gap-2 mb-4">
-        <div class="w-8 h-8 rounded-lg bg-slate-800 text-white flex items-center justify-center shadow-sm">
-            <i class="fas fa-satellite-dish"></i>
+<div class="mb-8 animate-fade-in" style="animation-delay: 0.2s; animation-fill-mode: both;">
+    <div class="flex items-center gap-3 mb-6">
+        <div class="w-8 h-8 rounded-full bg-brand/10 text-brand flex items-center justify-center shadow-sm">
+            <i class="fas fa-chart-pie text-sm"></i>
         </div>
-        <h3 class="text-lg font-black text-slate-800 tracking-tight">Business Intelligence</h3>
-        <span class="bg-blue-100 text-blue-700 text-[9px] font-bold uppercase px-2 py-1 rounded ml-2">Visão Executiva</span>
+        <h3 class="text-xl font-black text-slate-800 tracking-tight">Business Intelligence</h3>
+        <span class="bg-brand/10 text-brand text-[9px] font-bold uppercase px-2 py-0.5 rounded-full ml-1">Executivo</span>
     </div>
     
-    <div id="loading-bi" class="bg-white rounded-2xl border border-slate-200 p-12 text-center shadow-sm">
-        <i class="fas fa-circle-notch fa-spin text-4xl text-blue-500 mb-4"></i>
-        <h4 class="text-slate-800 font-bold">A processar Inteligência de Negócio...</h4>
-        <p class="text-slate-500 text-sm mt-1">A cruzar dados de Ponto, Estoque e Documentos.</p>
+    <div id="loading-bi" class="glass-panel p-16 text-center">
+        <i class="fas fa-circle-notch fa-spin text-4xl text-brand mb-4 opacity-50"></i>
+        <h4 class="text-slate-800 font-bold">A processar dados da {{ dados.nome_empresa }}...</h4>
+        <p class="text-slate-500 text-sm mt-1">A cruzar métricas de Ponto, Estoque e Documentos.</p>
     </div>
 
-    <div id="content-bi" class="hidden grid grid-cols-1 md:grid-cols-3 gap-6">
+    <div id="content-bi" class="hidden grid grid-cols-1 lg:grid-cols-3 gap-6">
         
-        <div class="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm flex flex-col col-span-1 md:col-span-2 relative overflow-hidden">
+        <div class="glass-panel p-6 flex flex-col col-span-1 lg:col-span-2">
             <div class="flex justify-between items-start mb-6">
                 <div>
-                    <h4 class="font-bold text-slate-800 flex items-center gap-2"><i class="fas fa-chart-area text-blue-500"></i> Risco Semanal de Folha</h4>
-                    <p class="text-xs text-slate-500 mt-1">Comparativo de Faltas (Qtd) vs Horas Extras (Horas).</p>
+                    <h4 class="font-bold text-slate-800 text-sm">Risco Semanal de Folha</h4>
+                    <p class="text-[11px] text-slate-400 mt-0.5">Faltas (Qtd) vs Horas Extras (Horas).</p>
                 </div>
             </div>
             <div class="flex-1 relative min-h-[250px]">
@@ -141,51 +122,51 @@
             </div>
         </div>
 
-        <div class="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm flex flex-col justify-between items-center relative overflow-hidden group">
+        <div class="glass-panel p-6 flex flex-col justify-between items-center text-center">
             <div class="w-full">
-                <h4 class="font-bold text-slate-800 text-center flex items-center justify-center gap-2 mb-1"><i class="fas fa-file-contract text-purple-500"></i> Escudo de Conformidade</h4>
-                <p class="text-[10px] text-slate-400 text-center uppercase tracking-widest font-bold mb-6">Assinaturas no Mês Atual</p>
+                <h4 class="font-bold text-slate-800 text-sm mb-1">Escudo de Conformidade</h4>
+                <p class="text-[10px] text-slate-400 uppercase tracking-widest font-bold mb-6">Assinaturas no Mês</p>
             </div>
-            <div class="relative w-40 h-40 flex items-center justify-center">
+            <div class="relative w-40 h-40 flex items-center justify-center my-4">
                 <svg class="w-full h-full transform -rotate-90">
-                    <circle cx="80" cy="80" r="70" stroke="currentColor" stroke-width="12" fill="transparent" class="text-slate-100" />
-                    <circle id="escudo-circle" cx="80" cy="80" r="70" stroke="currentColor" stroke-width="12" fill="transparent" stroke-dasharray="440" stroke-dashoffset="440" class="text-blue-500 transition-all duration-1000 ease-out drop-shadow-md" stroke-linecap="round" />
+                    <circle cx="80" cy="80" r="70" stroke="currentColor" stroke-width="8" fill="transparent" class="text-slate-100" />
+                    <circle id="escudo-circle" cx="80" cy="80" r="70" stroke="currentColor" stroke-width="8" fill="transparent" stroke-dasharray="440" stroke-dashoffset="440" class="text-brand transition-all duration-1000 ease-out" stroke-linecap="round" />
                 </svg>
                 <div class="absolute inset-0 flex flex-col items-center justify-center">
                     <span id="escudo-text" class="text-4xl font-black text-slate-800 tracking-tighter">0%</span>
-                    <i id="escudo-icon" class="fas fa-shield-check text-blue-500 mt-1"></i>
+                    <i id="escudo-icon" class="fas fa-shield-check text-brand mt-1 opacity-50"></i>
                 </div>
             </div>
-            <div class="w-full mt-6 bg-slate-50 p-3 rounded-xl border border-slate-100 text-center">
-                <p class="text-xs text-slate-600 font-medium">Meta Executiva: <strong class="text-slate-800">100%</strong></p>
+            <div class="w-full mt-auto">
+                <p class="text-[11px] text-slate-500 font-medium bg-slate-50 py-2 rounded-xl border border-slate-100">Meta Legal: <strong class="text-slate-800">100%</strong></p>
             </div>
         </div>
 
-        <div class="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm flex flex-col">
-            <h4 class="font-bold text-slate-800 mb-1 flex items-center gap-2"><i class="fas fa-box-open text-emerald-500"></i> Custo Logístico (Mês)</h4>
-            <p class="text-xs text-slate-500 mb-6">Volume de EPIs/Uniformes entregues por Departamento.</p>
-            <div class="flex-1 relative min-h-[220px]">
+        <div class="glass-panel p-6 flex flex-col">
+            <h4 class="font-bold text-slate-800 text-sm">Logística (Mês)</h4>
+            <p class="text-[11px] text-slate-400 mt-0.5 mb-6">Uniformes entregues por Departamento.</p>
+            <div class="flex-1 relative min-h-[200px]">
                 <canvas id="chartCustos"></canvas>
             </div>
         </div>
 
-        <div class="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm flex flex-col">
-            <h4 class="font-bold text-slate-800 mb-1 flex items-center gap-2"><i class="fas fa-clock text-amber-500"></i> Radar de Pontualidade</h4>
-            <p class="text-xs text-slate-500 mb-6">Dispersão de entradas de hoje (Ideal vs Real).</p>
-            <div class="flex-1 relative min-h-[220px]">
+        <div class="glass-panel p-6 flex flex-col">
+            <h4 class="font-bold text-slate-800 text-sm">Pontualidade</h4>
+            <p class="text-[11px] text-slate-400 mt-0.5 mb-6">Dispersão de entradas hoje.</p>
+            <div class="flex-1 relative min-h-[200px]">
                 <canvas id="chartPontualidade"></canvas>
             </div>
         </div>
 
-        <div class="bg-slate-800 rounded-2xl p-6 shadow-sm flex flex-col justify-center relative overflow-hidden text-white">
-            <div class="absolute -right-4 -bottom-4 opacity-10">
-                <i class="fas fa-bolt text-8xl"></i>
+        <div class="glass-panel p-6 flex flex-col bg-brand/5 border-brand/20 relative overflow-hidden">
+            <div class="absolute -right-6 -top-6 opacity-5">
+                <i class="fas fa-bolt text-9xl text-brand"></i>
             </div>
             <div class="relative z-10">
-                <h4 class="font-black text-xl mb-2">Raio-X Hoje</h4>
-                <div class="space-y-3 mt-4" id="raiox-container">
+                <h4 class="font-bold text-brand text-sm mb-1">Raio-X Hoje</h4>
+                <p class="text-[11px] text-brand/60 mb-6">Resumo de status diário.</p>
+                <div class="space-y-3" id="raiox-container">
                     </div>
-                <a href="/ponto/admin/controle-escala" class="mt-6 inline-block text-xs font-bold text-blue-300 hover:text-white uppercase tracking-wider transition">Ver Mapa Completo <i class="fas fa-arrow-right ml-1"></i></a>
             </div>
         </div>
 
@@ -202,9 +183,10 @@ document.addEventListener('DOMContentLoaded', async function() {
         document.getElementById('loading-bi').classList.add('hidden');
         document.getElementById('content-bi').classList.remove('hidden');
 
-        const gridCores = { border: '#f1f5f9', color: '#94a3b8' };
+        // Configuração de cores adaptada ao design clean
+        const gridColor = 'rgba(226, 232, 240, 0.6)';
+        const textColor = '#64748b';
         
-        // 1. Gráfico Risco Semanal (Agora mostra Horas em vez de Minutos Crutos)
         const ctxRisco = document.getElementById('chartRisco').getContext('2d');
         new Chart(ctxRisco, {
             type: 'line',
@@ -212,31 +194,30 @@ document.addEventListener('DOMContentLoaded', async function() {
                 labels: data.risco.labels,
                 datasets: [
                     {
-                        label: 'Faltas Injustificadas (Qtd)',
+                        label: 'Faltas (Qtd)',
                         data: data.risco.faltas,
                         borderColor: '#ef4444', backgroundColor: '#ef4444',
-                        borderWidth: 3, tension: 0.4, yAxisID: 'y'
+                        borderWidth: 2, tension: 0.4, yAxisID: 'y', pointRadius: 3
                     },
                     {
-                        label: 'Horas Extras (Horas)',
+                        label: 'Extras (Horas)',
                         data: data.risco.extras,
                         borderColor: '#eab308', backgroundColor: 'rgba(234, 179, 8, 0.1)',
-                        borderWidth: 3, tension: 0.4, fill: true, yAxisID: 'y1'
+                        borderWidth: 2, tension: 0.4, fill: true, yAxisID: 'y1', pointRadius: 3
                     }
                 ]
             },
             options: {
                 responsive: true, maintainAspectRatio: false,
-                plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, boxWidth: 8, font: { family: "'Inter', sans-serif", size: 11 } } } },
+                plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, boxWidth: 6, font: { size: 10 } } } },
                 scales: {
-                    x: { grid: { display: false }, ticks: { color: gridCores.color, font: { family: "'Inter', sans-serif", size: 10 } } },
-                    y: { type: 'linear', display: true, position: 'left', title: { display: true, text: 'Qtd Faltas', color: gridCores.color, font: {size: 10} }, border: { dash: [4, 4] }, grid: { color: gridCores.border } },
-                    y1: { type: 'linear', display: true, position: 'right', title: { display: true, text: 'Qtd Horas', color: gridCores.color, font: {size: 10} }, grid: { drawOnChartArea: false } }
+                    x: { grid: { display: false }, ticks: { color: textColor, font: { size: 9 } } },
+                    y: { type: 'linear', display: true, position: 'left', grid: { color: gridColor, drawBorder: false }, ticks: { color: textColor, font: { size: 9 } } },
+                    y1: { type: 'linear', display: true, position: 'right', grid: { drawOnChartArea: false }, ticks: { color: textColor, font: { size: 9 } } }
                 }
             }
         });
 
-        // 2. Gráfico Custos Logísticos
         const ctxCustos = document.getElementById('chartCustos').getContext('2d');
         new Chart(ctxCustos, {
             type: 'doughnut',
@@ -244,89 +225,79 @@ document.addEventListener('DOMContentLoaded', async function() {
                 labels: data.custos.labels,
                 datasets: [{
                     data: data.custos.data,
-                    backgroundColor: ['#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#64748b'],
+                    backgroundColor: ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#64748b'],
                     borderWidth: 0, hoverOffset: 4
                 }]
             },
             options: {
                 responsive: true, maintainAspectRatio: false, cutout: '75%',
-                plugins: { legend: { position: 'right', labels: { usePointStyle: true, boxWidth: 6, font: { family: "'Inter', sans-serif", size: 10 } } } }
+                plugins: { legend: { position: 'right', labels: { usePointStyle: true, boxWidth: 6, font: { size: 10 } } } }
             }
         });
 
-        // 3. Radar de Pontualidade
         const ctxPont = document.getElementById('chartPontualidade').getContext('2d');
         new Chart(ctxPont, {
             type: 'polarArea',
             data: {
                 labels: ['No Horário', 'Atraso Leve', 'Atraso Crítico'],
                 datasets: [{
-                    label: 'Registos Hoje',
                     data: data.pontualidade,
-                    backgroundColor: 'rgba(59, 130, 246, 0.2)',
-                    borderColor: '#3b82f6',
-                    pointBackgroundColor: ['#10b981', '#f59e0b', '#ef4444'],
-                    borderWidth: 2
+                    backgroundColor: ['rgba(16, 185, 129, 0.6)', 'rgba(245, 158, 11, 0.6)', 'rgba(239, 68, 68, 0.6)'],
+                    borderWidth: 1, borderColor: '#ffffff'
                 }]
             },
             options: {
                 responsive: true, maintainAspectRatio: false,
-                scales: { r: { pointLabels: { font: { size: 10, family: "'Inter', sans-serif" } }, ticks: { display: false } } },
+                scales: { r: { pointLabels: { font: { size: 9 } }, ticks: { display: false }, grid: { color: gridColor } } },
                 plugins: { legend: { display: false } }
             }
         });
 
-        // 4. Animação do Escudo de Conformidade Legal
         const circle = document.getElementById('escudo-circle');
         const text = document.getElementById('escudo-text');
         const icon = document.getElementById('escudo-icon');
         const percent = data.escudo;
         
-        let corEscudo = '#10b981'; // Verde
+        let corEscudo = '#10b981'; // Emerald
         let iconeEscudo = 'fa-shield-check';
-        
-        if (percent < 75) { corEscudo = '#ef4444'; iconeEscudo = 'fa-shield-alt'; } // Vermelho
-        else if (percent < 90) { corEscudo = '#f59e0b'; iconeEscudo = 'fa-shield-alt'; } // Laranja
+        if (percent < 75) { corEscudo = '#ef4444'; iconeEscudo = 'fa-shield-alt'; } 
+        else if (percent < 90) { corEscudo = '#f59e0b'; iconeEscudo = 'fa-shield-alt'; }
 
         circle.style.color = corEscudo;
-        icon.className = `fas ${iconeEscudo} mt-1`;
+        icon.className = `fas ${iconeEscudo} mt-1 opacity-50`;
         icon.style.color = corEscudo;
 
         const offset = 440 - (440 * percent) / 100;
         setTimeout(() => { circle.style.strokeDashoffset = offset; }, 100);
         
         let count = 0;
-        const target = percent;
-        const duration = 1000; 
-        const interval = 20; 
-        const step = target / (duration / interval);
+        const step = percent / 50;
         const timer = setInterval(() => {
             count += step;
-            if (count >= target) { clearInterval(timer); text.innerText = Math.round(target) + '%'; } 
+            if (count >= percent) { clearInterval(timer); text.innerText = Math.round(percent) + '%'; } 
             else { text.innerText = Math.round(count) + '%'; }
-        }, interval);
+        }, 20);
 
-        // 5. Preencher Raio-X
         const raiox = document.getElementById('raiox-container');
         const rData = data.raio_x;
         const confRaiox = {
-            'OK': { cor: 'text-emerald-400', icone: 'fa-check-circle' },
-            'Falta': { cor: 'text-red-400', icone: 'fa-times-circle' },
-            'Incompleto': { cor: 'text-amber-400', icone: 'fa-exclamation-circle' },
-            'Hora Extra': { cor: 'text-blue-400', icone: 'fa-plus-circle' },
+            'OK': { cor: 'text-emerald-500', icone: 'fa-check-circle' },
+            'Falta': { cor: 'text-red-500', icone: 'fa-times-circle' },
+            'Incompleto': { cor: 'text-amber-500', icone: 'fa-exclamation-circle' },
+            'Hora Extra': { cor: 'text-brand', icone: 'fa-plus-circle' },
             'Folga': { cor: 'text-slate-400', icone: 'fa-bed' }
         };
         
         if (Object.keys(rData).length === 0) {
-            raiox.innerHTML = '<div class="text-slate-400 text-sm italic">Nenhum registo processado hoje.</div>';
+            raiox.innerHTML = '<div class="text-brand/50 text-xs italic">Nenhum registo processado.</div>';
         } else {
             let html = '';
             for (const [status, qtd] of Object.entries(rData)) {
-                const cfg = confRaiox[status] || { cor: 'text-white', icone: 'fa-info-circle' };
+                const cfg = confRaiox[status] || { cor: 'text-slate-500', icone: 'fa-info-circle' };
                 html += `
-                    <div class="flex justify-between items-center border-b border-slate-700 pb-2">
-                        <span class="text-sm font-medium flex items-center gap-2"><i class="fas ${cfg.icone} ${cfg.cor}"></i> ${status}</span>
-                        <span class="font-bold text-lg">${qtd}</span>
+                    <div class="flex justify-between items-center border-b border-brand/10 pb-2">
+                        <span class="text-xs font-bold text-slate-700 flex items-center gap-2"><i class="fas ${cfg.icone} ${cfg.cor}"></i> ${status}</span>
+                        <span class="font-black text-base text-slate-800">${qtd}</span>
                     </div>
                 `;
             }
@@ -334,12 +305,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         }
 
     } catch (e) {
-        console.error("Erro ao carregar B.I.", e);
-        document.getElementById('loading-bi').innerHTML = `
-            <i class="fas fa-exclamation-triangle text-4xl text-red-500 mb-4"></i>
-            <h4 class="text-slate-800 font-bold">Erro de Conexão</h4>
-            <p class="text-slate-500 text-sm mt-1">Não foi possível processar a Inteligência de Negócio. Tente recarregar a página.</p>
-        `;
+        document.getElementById('loading-bi').innerHTML = `<p class="text-red-500 text-sm">Erro de conexão com o B.I.</p>`;
     }
 });
 </script>

@@ -1,107 +1,133 @@
 {% extends 'base.html' %}
 {% block content %}
 <style>
-    .terminal-mode { position: fixed; inset: 0; background: #0f172a; z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; color: white; overflow: hidden; font-family: 'Inter', sans-serif; width: 100vw; height: 100vh; }
+    /* Estilos específicos para o modo Quiosque imersivo em ecrã inteiro */
+    .terminal-mode { position: fixed; inset: 0; background: #020617; z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; color: white; overflow: hidden; font-family: 'Inter', sans-serif; width: 100vw; height: 100vh; }
     
+    /* Padrão Glassmorphism Escuro para o Terminal */
+    .glass-terminal {
+        background: rgba(15, 23, 42, 0.6);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        border-radius: 2rem;
+    }
+
     #camera-container { 
         width: 100%; 
-        max-width: 600px; 
+        max-width: 500px; 
         position: relative; 
-        border-radius: 30px; 
         overflow: hidden; 
-        border: 8px solid #334155; 
         background: black; 
         transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-        box-shadow: 0 0 50px rgba(0,0,0,0.5);
+        box-shadow: 0 25px 50px -12px rgba(0,0,0,0.8);
     }
 
-    #camera-container.searching { border-color: #eab308; box-shadow: 0 0 30px rgba(234, 179, 8, 0.2); }
-    #camera-container.analyzing { border-color: #3b82f6; animation: pulse-blue 1.5s infinite; }
-    #camera-container.success { border-color: #10b981; }
-    #camera-container.error { border-color: #ef4444; }
+    #camera-container.searching { border-color: rgba(234, 179, 8, 0.5); box-shadow: 0 0 40px rgba(234, 179, 8, 0.15); }
+    #camera-container.analyzing { border-color: var(--primary-color, #3b82f6); animation: pulse-brand 1.5s infinite; }
+    #camera-container.success { border-color: #10b981; box-shadow: 0 0 50px rgba(16, 185, 129, 0.2); }
+    #camera-container.error { border-color: #ef4444; box-shadow: 0 0 50px rgba(239, 68, 68, 0.2); }
 
-    @keyframes pulse-blue {
-        0% { box-shadow: 0 0 0 0px rgba(59, 130, 246, 0.7); }
-        100% { box-shadow: 0 0 0 20px rgba(59, 130, 246, 0); }
+    @keyframes pulse-brand {
+        0% { box-shadow: 0 0 0 0px color-mix(in srgb, var(--primary-color) 40%, transparent); }
+        100% { box-shadow: 0 0 0 20px rgba(0, 0, 0, 0); }
     }
 
-    #video-feed { width: 100%; height: auto; transform: scaleX(-1); filter: contrast(1.1); }
+    #video-feed { width: 100%; height: auto; transform: scaleX(-1); filter: contrast(1.05); }
     
-    #scanner-line { position: absolute; top: 0; left: 0; width: 100%; height: 2px; background: rgba(59, 130, 246, 0.5); box-shadow: 0 0 15px #3b82f6; animation: scan 2.5s linear infinite; z-index: 30; display: none; }
+    #scanner-line { position: absolute; top: 0; left: 0; width: 100%; height: 2px; background: color-mix(in srgb, var(--primary-color) 80%, transparent); box-shadow: 0 0 20px var(--primary-color); animation: scan 2.5s cubic-bezier(0.4, 0, 0.2, 1) infinite; z-index: 30; display: none; }
     .searching #scanner-line, .analyzing #scanner-line { display: block; }
-    .analyzing #scanner-line { background: #3b82f6; height: 4px; animation-duration: 1s; }
+    .analyzing #scanner-line { background: var(--primary-color); height: 4px; animation-duration: 1s; }
 
     @keyframes scan { 0% { top: 0; } 100% { top: 100%; } }
 
     #status-label {
-        position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
-        padding: 8px 20px; background: rgba(15, 23, 42, 0.8); backdrop-filter: blur(10px);
+        position: absolute; top: 24px; left: 50%; transform: translateX(-50%);
+        padding: 8px 24px; background: rgba(0, 0, 0, 0.5); backdrop-filter: blur(8px);
         border-radius: 100px; font-size: 10px; font-weight: 900; letter-spacing: 2px;
-        text-transform: uppercase; z-index: 35; border: 1px solid rgba(255,255,255,0.1);
+        text-transform: uppercase; z-index: 35; border: 1px solid rgba(255,255,255,0.05);
     }
 
-    .overlay-modal { position: absolute; inset: 0; background: rgba(15, 23, 42, 0.98); z-index: 40; display: flex; flex-direction: column; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: all 0.3s; padding: 40px; text-align: center; }
+    .overlay-modal { position: absolute; inset: 0; background: rgba(2, 6, 23, 0.95); backdrop-filter: blur(10px); z-index: 40; display: flex; flex-direction: column; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: all 0.3s; padding: 40px; text-align: center; }
     .overlay-modal.active { opacity: 1; pointer-events: all; }
 
-    .btn-action { width: 100%; padding: 20px; font-weight: 800; font-size: 1.2rem; border-radius: 16px; transition: all 0.2s; }
-    .btn-sim { background: #10b981; color: white; box-shadow: 0 10px 20px rgba(16, 185, 129, 0.3); }
-    .btn-nao { background: rgba(239, 68, 68, 0.1); color: #ef4444; border: 2px solid #ef4444; margin-top: 15px; }
+    .btn-action { width: 100%; padding: 20px; font-weight: 800; font-size: 1.1rem; border-radius: 1.2rem; transition: all 0.2s; letter-spacing: 0.05em; }
+    .btn-sim { background: #10b981; color: white; box-shadow: 0 10px 25px rgba(16, 185, 129, 0.2); }
+    .btn-sim:active { transform: scale(0.96); }
+    .btn-nao { background: transparent; color: #ef4444; border: 2px solid rgba(239, 68, 68, 0.3); margin-top: 15px; }
 </style>
 
 <div id="kiosk-start-screen" class="fixed inset-0 bg-slate-900 z-[10000] flex flex-col items-center justify-center text-white w-screen h-screen">
-    <i class="fas fa-tablet-alt text-6xl text-blue-500 mb-6 animate-bounce"></i>
-    <h2 class="text-3xl font-black mb-2">{{ g.empresa.nome if g.empresa else 'Vortice' }}</h2>
-    <p class="text-slate-400 mb-8 font-medium">Terminal de Ponto Inteligente</p>
-    <button onclick="entrarModoQuiosque()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-5 px-10 rounded-2xl shadow-[0_10px_30px_rgba(37,99,235,0.4)] transition transform hover:scale-105 active:scale-95 text-xl flex items-center gap-3">
-        <i class="fas fa-play"></i> INICIAR TERMINAL
-    </button>
+    
+    <div class="absolute inset-0 overflow-hidden pointer-events-none">
+        <div class="absolute -top-[20%] -left-[10%] w-[70vw] h-[70vw] rounded-full bg-brand opacity-10 blur-[100px]"></div>
+        <div class="absolute -bottom-[20%] -right-[10%] w-[60vw] h-[60vw] rounded-full bg-purple-600 opacity-10 blur-[100px]"></div>
+    </div>
+
+    <div class="relative z-10 text-center flex flex-col items-center">
+        <div class="w-24 h-24 bg-white/5 backdrop-blur-xl rounded-3xl border border-white/10 flex items-center justify-center mb-8 shadow-2xl">
+            <i class="fas fa-tablet-alt text-4xl text-brand animate-pulse"></i>
+        </div>
+        <h2 class="text-4xl md:text-5xl font-black mb-3 tracking-tighter">{{ g.empresa.nome if g.empresa else 'Vortice' }}</h2>
+        <p class="text-slate-400 mb-12 font-medium tracking-wide uppercase text-sm">Terminal Biométrico V3</p>
+        
+        <button onclick="entrarModoQuiosque()" class="bg-brand hover:bg-brand-hover text-white font-bold py-5 px-12 rounded-2xl shadow-[0_10px_40px_color-mix(in_srgb,var(--primary-color)_40%,transparent)] transition-all transform hover:scale-105 active:scale-95 text-lg flex items-center gap-3">
+            <i class="fas fa-play text-sm"></i> INICIAR OPERAÇÃO
+        </button>
+    </div>
 </div>
 
 <div class="terminal-mode hidden" id="terminal-ui">
-    <div class="mb-8 text-center" id="header-terminal">
-        <h1 class="text-3xl font-black tracking-tighter text-white">{{ g.empresa.nome if g.empresa else 'Vortice' }}</h1>
-        <div class="h-1 w-12 bg-blue-500 mx-auto mt-2 rounded-full"></div>
+    
+    <div class="mb-10 text-center flex flex-col items-center" id="header-terminal">
+        <div class="bg-white/10 px-6 py-2 rounded-full backdrop-blur-md border border-white/5 mb-4">
+            <span class="text-xs font-black tracking-widest uppercase text-brand">Terminal Ativo</span>
+        </div>
+        <h1 class="text-2xl font-bold tracking-tight text-white/90">{{ g.empresa.nome if g.empresa else 'Vortice' }}</h1>
     </div>
     
-    <div id="camera-container" class="searching">
-        <div id="status-label" class="text-yellow-500">Aguardando Rosto...</div>
+    <div id="camera-container" class="glass-terminal searching">
+        <div id="status-label" class="text-yellow-400">Aguardando Rosto...</div>
         
-        <video id="video-feed" autoplay playsinline muted></video>
+        <video id="video-feed" autoplay playsinline muted class="rounded-[2rem]"></video>
         
         <div class="absolute bottom-8 w-full flex justify-center z-30 pointer-events-none">
-            <p class="text-white text-[10px] font-black bg-black/70 px-5 py-2 rounded-full tracking-widest uppercase border border-white/10 shadow-lg">Olhe diretamente para a câmara</p>
+            <p class="text-white text-[9px] font-black bg-black/50 backdrop-blur-md px-5 py-2.5 rounded-full tracking-widest uppercase border border-white/10 shadow-xl">Olhe para a câmara</p>
         </div>
 
         <div id="scanner-line"></div>
         <canvas id="canvas-frame" class="hidden"></canvas>
 
-        <div id="modal-confirmacao" class="overlay-modal">
-            <div class="text-blue-400 text-xs font-black mb-2 tracking-widest uppercase" id="lbl-tipo-ponto">Check-in</div>
-            <h2 class="text-4xl font-black text-white mb-1" id="lbl-nome-func">---</h2>
-            <p class="text-2xl text-slate-400 font-mono mb-10" id="lbl-hora-func">00:00</p>
+        <div id="modal-confirmacao" class="overlay-modal rounded-[2rem]">
+            <div class="w-16 h-16 rounded-full bg-brand/20 text-brand flex items-center justify-center text-2xl mb-4"><i class="fas fa-fingerprint"></i></div>
+            <div class="text-brand text-[10px] font-black mb-2 tracking-widest uppercase" id="lbl-tipo-ponto">Check-in</div>
+            <h2 class="text-3xl font-black text-white mb-1" id="lbl-nome-func">---</h2>
+            <p class="text-xl text-slate-400 font-mono mb-10" id="lbl-hora-func">00:00</p>
             <div class="w-full max-w-xs">
-                <button class="btn-action btn-sim" onclick="confirmarPonto()">CONFIRMAR PONTO</button>
+                <button class="btn-action btn-sim" onclick="confirmarPonto()">CONFIRMAR</button>
                 <button class="btn-action btn-nao" onclick="rejeitarPonto()">NÃO SOU EU</button>
             </div>
         </div>
 
-        <div id="modal-sucesso" class="overlay-modal" style="background: #064e3b;">
-            <div class="w-24 h-24 bg-emerald-500 rounded-full flex items-center justify-center mb-6 shadow-lg shadow-emerald-900/50">
+        <div id="modal-sucesso" class="overlay-modal rounded-[2rem]" style="background: rgba(6, 78, 59, 0.95);">
+            <div class="w-24 h-24 bg-emerald-500 rounded-full flex items-center justify-center mb-6 shadow-[0_0_50px_rgba(16,185,129,0.5)]">
                 <i class="fas fa-check text-4xl text-white"></i>
             </div>
-            <h2 class="text-3xl font-black text-white">REGISTRADO!</h2>
-            <p class="text-emerald-200 mt-2">Bom trabalho.</p>
+            <h2 class="text-3xl font-black text-white tracking-tight">REGISTRADO!</h2>
+            <p class="text-emerald-200 mt-2 font-medium">Tenha um excelente turno.</p>
         </div>
         
-        <div id="modal-erro" class="overlay-modal" style="background: #450a0a;">
-            <i class="fas fa-user-slash text-6xl text-red-500 mb-6"></i>
-            <h2 class="text-2xl font-black text-white">ACESSO NEGADO</h2>
-            <p class="text-red-300 mt-4 text-sm">Rosto não identificado.<br>Tente novamente em <span id="lbl-timer-erro">5</span>s.</p>
+        <div id="modal-erro" class="overlay-modal rounded-[2rem]" style="background: rgba(69, 10, 10, 0.95);">
+            <div class="w-24 h-24 bg-red-500/20 rounded-full flex items-center justify-center mb-6 border border-red-500/50">
+                <i class="fas fa-user-slash text-4xl text-red-500"></i>
+            </div>
+            <h2 class="text-2xl font-black text-white tracking-tight">ACESSO NEGADO</h2>
+            <p class="text-red-300 mt-4 text-sm font-medium">Rosto não identificado na base.<br>Tente novamente em <span id="lbl-timer-erro" class="font-black text-white">5</span>s.</p>
         </div>
     </div>
 
     <div class="mt-12 opacity-30 hover:opacity-100 transition z-50">
-        <button onclick="sairModoQuiosque()" class="text-[10px] font-bold text-slate-500 uppercase tracking-widest border-b border-slate-700 pb-1 cursor-pointer">Sair do Modo Terminal</button>
+        <button onclick="sairModoQuiosque()" class="text-[9px] font-bold text-slate-500 uppercase tracking-widest bg-white/5 px-4 py-2 rounded-full border border-white/5 cursor-pointer hover:bg-white/10 hover:text-white transition">Encerrar Sessão do Terminal</button>
     </div>
 </div>
 
@@ -162,12 +188,10 @@
     function capturarEAnalisar() {
         if (isProcessing) return;
 
-        container.className = "analyzing";
+        container.className = "glass-terminal analyzing";
         statusLabel.innerText = "Analisando Rosto...";
-        statusLabel.className = "text-blue-400";
+        statusLabel.className = "text-white"; // Adaptado pra cor brand pela div pai
 
-        // --- A MÁGICA FRONT-END ---
-        // Pinta fundo de branco antes da foto
         ctx.fillStyle = '#FFFFFF';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
@@ -187,8 +211,8 @@
                 const data = await res.json();
 
                 if (data.success) {
-                    container.className = "success";
-                    statusLabel.innerText = "Reconhecido!";
+                    container.className = "glass-terminal success";
+                    statusLabel.innerText = "Identificado!";
                     statusLabel.className = "text-emerald-400";
                     
                     tocarBeep();
@@ -198,9 +222,9 @@
                     document.getElementById('lbl-hora-func').innerText = data.hora;
                     document.getElementById('modal-confirmacao').classList.add('active');
                 } else {
-                    container.className = "searching";
+                    container.className = "glass-terminal searching";
                     statusLabel.innerText = "Aguardando Rosto...";
-                    statusLabel.className = "text-yellow-500";
+                    statusLabel.className = "text-yellow-400";
                     
                     if (data.error === "Rosto não reconhecido ou baixa similaridade.") {
                         registrarFalha();
@@ -210,7 +234,7 @@
                 }
             } catch (e) {
                 isProcessing = false;
-                container.className = "searching";
+                container.className = "glass-terminal searching";
                 statusLabel.innerText = "Aguardando Rosto...";
             }
         }, 'image/jpeg', 0.8);
@@ -244,8 +268,9 @@
     function resetSistema() {
         isProcessing = false;
         userAlvoId = null;
-        container.className = "searching";
+        container.className = "glass-terminal searching";
         statusLabel.innerText = "Aguardando Rosto...";
+        statusLabel.className = "text-yellow-400";
     }
 
     function registrarFalha() {
@@ -258,7 +283,7 @@
     }
 
     function bloquearTerminal() {
-        container.className = "error";
+        container.className = "glass-terminal error";
         document.getElementById('modal-erro').classList.add('active');
         let segundos = 5;
         const lblTimer = document.getElementById('lbl-timer-erro');

@@ -1,52 +1,64 @@
 {% extends 'base.html' %}
 {% block content %}
-<div class="mb-6">
-    <h2 class="text-2xl font-bold text-slate-800 flex items-center gap-2">
-        <i class="fas fa-plane-departure text-emerald-600"></i> Férias e Licenças
-    </h2>
-    <p class="text-sm text-slate-500 mt-1">Gerencie seu saldo de férias e envie solicitações ao RH.</p>
+<div class="mb-8 flex flex-col md:flex-row justify-between items-start md:items-end gap-4 animate-fade-in">
+    <div>
+        <h2 class="text-3xl font-black text-slate-800 tracking-tight">Férias e Licenças</h2>
+        <p class="text-sm text-slate-500 font-medium mt-1">Gira o seu saldo de descanso e envie solicitações.</p>
+    </div>
 </div>
 
 {% if current_user.data_admissao %}
-<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-    <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4 flex flex-col items-center justify-center text-center">
-        <span class="text-[10px] uppercase font-bold text-slate-400 mb-1">Dias de Direito</span>
-        <span class="text-2xl font-black text-blue-600" id="saldo_total">{{ dias_direito }}</span>
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10 animate-fade-in" style="animation-delay: 0.1s; animation-fill-mode: both;">
+    
+    <div class="glass-panel p-5 flex flex-col items-center justify-center text-center">
+        <div class="w-8 h-8 rounded-full bg-slate-50 text-slate-400 flex items-center justify-center mb-2 shadow-sm"><i class="fas fa-gift text-xs"></i></div>
+        <span class="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1">Direito Anual</span>
+        <span class="text-2xl font-black text-slate-700" id="saldo_total">{{ dias_direito }} <span class="text-xs font-bold opacity-50 uppercase">Dias</span></span>
     </div>
-    <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4 flex flex-col items-center justify-center text-center relative overflow-hidden">
+    
+    <div class="glass-panel p-5 flex flex-col items-center justify-center text-center relative overflow-hidden">
         {% if faltas > 5 %}<div class="absolute top-0 left-0 w-full h-1 bg-red-500"></div>{% endif %}
-        <span class="text-[10px] uppercase font-bold text-slate-400 mb-1">Faltas no Ano</span>
+        <div class="w-8 h-8 rounded-full {% if faltas > 5 %}bg-red-50 text-red-500{% else %}bg-slate-50 text-slate-400{% endif %} flex items-center justify-center mb-2 shadow-sm"><i class="fas fa-user-times text-xs"></i></div>
+        <span class="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1">Faltas no Ano</span>
         <span class="text-2xl font-black {{ 'text-red-500' if faltas > 5 else 'text-slate-700' }}">{{ faltas }}</span>
     </div>
-    <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4 flex flex-col items-center justify-center text-center">
-        <span class="text-[10px] uppercase font-bold text-slate-400 mb-1">Dias Usados</span>
+    
+    <div class="glass-panel p-5 flex flex-col items-center justify-center text-center">
+        <div class="w-8 h-8 rounded-full bg-amber-50 text-amber-500 flex items-center justify-center mb-2 shadow-sm"><i class="fas fa-plane text-xs"></i></div>
+        <span class="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1">Dias Usados</span>
         <span class="text-2xl font-black text-amber-500">{{ dias_usados }}</span>
     </div>
-    <div class="bg-emerald-50 rounded-xl border border-emerald-200 shadow-sm p-4 flex flex-col items-center justify-center text-center">
-        <span class="text-[10px] uppercase font-black text-emerald-700 mb-1">Saldo Disponível</span>
-        <span class="text-3xl font-black text-emerald-600" id="saldo_disponivel">{{ saldo }}</span>
+    
+    <div class="glass-panel p-5 flex flex-col items-center justify-center text-center bg-brand/5 border-brand/20 relative">
+        <div class="absolute top-0 left-0 w-full h-1.5 bg-brand"></div>
+        <div class="w-8 h-8 rounded-full bg-white text-brand flex items-center justify-center mb-2 shadow-sm mt-1"><i class="fas fa-calendar-check text-xs"></i></div>
+        <span class="text-[10px] font-black uppercase tracking-widest text-brand mb-1">Saldo Final</span>
+        <span class="text-4xl font-black text-slate-800" id="saldo_disponivel">{{ saldo }}</span>
     </div>
 </div>
 {% else %}
-<div class="bg-amber-50 border border-amber-200 text-amber-800 p-4 rounded-xl mb-8 text-sm font-medium flex items-center gap-3 shadow-sm">
-    <i class="fas fa-exclamation-triangle text-2xl text-amber-500"></i>
-    Sua data de admissão não está configurada. O cálculo automático de férias está desativado. Contate o RH.
+<div class="bg-amber-50 border border-amber-200 text-amber-800 p-5 rounded-2xl mb-8 text-sm font-medium flex items-center gap-4 shadow-sm animate-fade-in">
+    <div class="w-12 h-12 bg-amber-100 rounded-full flex items-center justify-center flex-shrink-0 text-xl"><i class="fas fa-exclamation-triangle"></i></div>
+    <div>A sua data de admissão não está configurada no sistema. O cálculo automático de saldo está desativado. Por favor, contate os Recursos Humanos.</div>
 </div>
 {% endif %}
 
-<div class="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
+<div class="grid grid-cols-1 xl:grid-cols-5 gap-8 items-start animate-fade-in" style="animation-delay: 0.2s; animation-fill-mode: both;">
     
-    <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-        <div class="bg-emerald-600 p-5 text-white">
-            <h3 class="font-bold text-lg"><i class="fas fa-edit mr-2"></i> Nova Solicitação</h3>
+    <div class="glass-panel xl:col-span-2 overflow-hidden shadow-md">
+        <div class="bg-brand p-6 text-white text-center">
+            <div class="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-3 backdrop-blur-sm shadow-inner"><i class="fas fa-paper-plane text-xl"></i></div>
+            <h3 class="font-black text-lg tracking-tight">Nova Solicitação</h3>
+            <p class="text-xs text-white/70 font-medium mt-1">Preencha os dados da ausência</p>
         </div>
-        <div class="p-6">
+        
+        <div class="p-8">
             <form method="POST" action="{{ url_for('ponto.solicitar_ferias') }}" id="formFerias">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 
-                <div class="mb-4">
-                    <label class="label-pro">Motivo / Tipo de Ausência</label>
-                    <select name="tipo_ausencia" id="tipo_ausencia" onchange="configurarFormulario()" required class="input-pro cursor-pointer bg-slate-50">
+                <div class="mb-5">
+                    <label class="label-pro">Motivo da Ausência</label>
+                    <select name="tipo_ausencia" id="tipo_ausencia" onchange="configurarFormulario()" required class="input-pro cursor-pointer font-bold text-slate-700">
                         <option value="Férias">Férias Anuais</option>
                         <option value="Folga Prêmio">Folga Prêmio</option>
                         <option value="Licença Maternidade/Paternidade">Licença Maternidade/Paternidade</option>
@@ -55,12 +67,12 @@
                     </select>
                 </div>
 
-                <div id="blocoFeriasRules">
-                    <div class="grid grid-cols-2 gap-4 mb-4">
+                <div id="blocoFeriasRules" class="bg-slate-50 p-4 rounded-2xl border border-slate-200 mb-5 shadow-inner">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
                             <label class="label-pro">Dias a Gozar</label>
-                            <select name="dias_gozo" id="dias_gozo" onchange="calcularRetorno()" class="input-pro cursor-pointer">
-                                <option value="30">30 Dias</option>
+                            <select name="dias_gozo" id="dias_gozo" onchange="calcularRetorno()" class="input-pro cursor-pointer !py-2.5">
+                                <option value="30">30 Dias (Mês)</option>
                                 <option value="20">20 Dias</option>
                                 <option value="15">15 Dias</option>
                                 <option value="10">10 Dias</option>
@@ -68,8 +80,8 @@
                             </select>
                         </div>
                         <div id="divAbono">
-                            <label class="label-pro text-blue-600"><i class="fas fa-dollar-sign"></i> Vender Férias?</label>
-                            <select name="vender_ferias" id="vender_ferias" onchange="calcularRetorno()" class="input-pro cursor-pointer border-blue-200 bg-blue-50">
+                            <label class="label-pro text-brand"><i class="fas fa-dollar-sign"></i> Vender Férias?</label>
+                            <select name="vender_ferias" id="vender_ferias" onchange="calcularRetorno()" class="input-pro cursor-pointer !py-2.5 border-brand/20 bg-white text-brand font-bold">
                                 <option value="nao">Não vender</option>
                                 <option value="sim">Sim (Abono)</option>
                             </select>
@@ -77,61 +89,71 @@
                     </div>
                 </div>
                 
-                <div class="grid grid-cols-2 gap-4 mb-5">
+                <div class="grid grid-cols-2 gap-4 mb-6">
                     <div>
                         <label class="label-pro">Data Início</label>
                         <input type="date" name="data_inicio" id="data_inicio" onchange="calcularRetorno()" required class="input-pro cursor-pointer">
                     </div>
                     <div>
-                        <label class="label-pro flex items-center gap-1"><i class="fas fa-lock text-slate-400"></i> Data Retorno</label>
-                        <input type="date" name="data_fim" id="data_fim" required class="input-pro bg-slate-100 text-slate-500 border-dashed" readonly>
+                        <label class="label-pro flex items-center justify-between">Retorno <i class="fas fa-lock opacity-30"></i></label>
+                        <input type="date" name="data_fim" id="data_fim" required class="input-pro bg-slate-100 text-slate-500 border-dashed border-slate-300 font-mono text-sm" readonly>
                     </div>
                 </div>
 
-                <div class="mb-6">
+                <div class="mb-8">
                     <label class="label-pro">Observações ao RH (Opcional)</label>
-                    <textarea name="observacao" rows="2" class="input-pro" placeholder="Digite detalhes se necessário..."></textarea>
+                    <textarea name="observacao" rows="2" class="input-pro text-sm font-medium" placeholder="Digite detalhes se necessário..."></textarea>
                 </div>
 
-                <button type="submit" id="btnSubmit" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3.5 rounded-lg shadow-lg transition flex items-center justify-center gap-2">
-                    <i class="fas fa-paper-plane"></i> ENVIAR SOLICITAÇÃO
+                <button type="submit" id="btnSubmit" class="w-full btn-primary py-4 text-base shadow-lg">
+                    Enviar Solicitação <i class="fas fa-arrow-right ml-1"></i>
                 </button>
             </form>
         </div>
     </div>
 
-    <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
-        <h3 class="font-bold text-slate-800 text-lg mb-4 border-b pb-3"><i class="fas fa-history text-slate-400 mr-2"></i> Meu Histórico</h3>
-        <div class="space-y-4 max-h-[500px] overflow-y-auto pr-2">
+    <div class="glass-panel xl:col-span-3 p-8">
+        <h3 class="font-black text-slate-800 text-lg mb-6 flex items-center gap-2"><i class="fas fa-history text-slate-400"></i> Meu Histórico</h3>
+        
+        <div class="space-y-4 max-h-[600px] overflow-y-auto pr-2">
             {% for sol in minhas_solicitacoes %}
-            <div class="p-4 border border-slate-100 rounded-lg bg-slate-50 flex flex-col gap-2 hover:bg-slate-100 transition">
-                <div class="flex justify-between items-start">
-                    <span class="font-bold text-sm text-slate-800">
-                        {{ sol.tipo_ausencia }}
-                        {% if sol.abono_pecuniario %}
-                            <span class="ml-2 text-[9px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded font-black uppercase"><i class="fas fa-dollar-sign"></i> Abono (+{{ sol.dias_abono }}d)</span>
-                        {% endif %}
+            
+            {% set cor_status = 'bg-yellow-50 text-yellow-600 border-yellow-200' %}
+            {% if sol.status == 'Aprovado' %} {% set cor_status = 'bg-emerald-50 text-emerald-600 border-emerald-200' %}
+            {% elif sol.status == 'Cancelado' %} {% set cor_status = 'bg-slate-100 text-slate-500 border-slate-200' %}
+            {% elif sol.status == 'Recusado' %} {% set cor_status = 'bg-red-50 text-red-600 border-red-200' %} {% endif %}
+
+            <div class="bg-white p-5 border border-slate-100 rounded-2xl shadow-sm hover:shadow-md transition">
+                <div class="flex justify-between items-start mb-3">
+                    <div>
+                        <span class="font-bold text-base text-slate-800 tracking-tight flex items-center gap-2">
+                            {{ sol.tipo_ausencia }}
+                            {% if sol.abono_pecuniario %}
+                                <span class="text-[9px] bg-brand/10 text-brand px-2 py-0.5 rounded-md font-black uppercase tracking-wider"><i class="fas fa-dollar-sign"></i> Abono (+{{ sol.dias_abono }}d)</span>
+                            {% endif %}
+                        </span>
+                    </div>
+                    <span class="text-[9px] border px-2.5 py-1 rounded-md font-black uppercase tracking-widest {{ cor_status }}">
+                        {{ sol.status }}
                     </span>
-                    
-                    {% if sol.status == 'Pendente' %}
-                        <span class="text-[10px] bg-amber-100 text-amber-600 px-2.5 py-1 rounded font-black uppercase tracking-wide">Pendente</span>
-                    {% elif sol.status == 'Aprovado' %}
-                        <span class="text-[10px] bg-emerald-100 text-emerald-600 px-2.5 py-1 rounded font-black uppercase tracking-wide">Aprovado</span>
-                    {% elif sol.status == 'Cancelado' %}
-                        <span class="text-[10px] bg-slate-200 text-slate-600 px-2.5 py-1 rounded font-black uppercase tracking-wide">Cancelado</span>
-                    {% else %}
-                        <span class="text-[10px] bg-red-100 text-red-600 px-2.5 py-1 rounded font-black uppercase tracking-wide">Recusado</span>
-                    {% endif %}
                 </div>
-                <div class="text-xs text-slate-500 font-medium">
-                    <i class="far fa-calendar-alt mr-1"></i> {{ sol.data_inicio.strftime('%d/%m/%Y') }} até {{ sol.data_fim.strftime('%d/%m/%Y') }} 
-                    <span class="ml-2 font-bold text-blue-600">({{ sol.quantidade_dias }} dias descanso)</span>
+                
+                <div class="flex items-center gap-3 bg-slate-50 rounded-xl p-3 border border-slate-100">
+                    <div class="w-10 h-10 rounded-full bg-white flex items-center justify-center text-slate-400 shadow-sm"><i class="far fa-calendar-alt"></i></div>
+                    <div>
+                        <p class="text-[10px] font-bold uppercase text-slate-400 mb-0.5 tracking-wider">Período de Descanso</p>
+                        <p class="text-sm font-bold text-slate-700">
+                            {{ sol.data_inicio.strftime('%d/%m/%Y') }} <i class="fas fa-arrow-right text-[10px] opacity-30 mx-1"></i> {{ sol.data_fim.strftime('%d/%m/%Y') }} 
+                            <span class="ml-2 font-black text-brand bg-brand/5 px-2 py-0.5 rounded text-xs">{{ sol.quantidade_dias }} dias</span>
+                        </p>
+                    </div>
                 </div>
             </div>
             {% else %}
-            <div class="text-center py-12 text-sm text-slate-400">
-                <i class="fas fa-box-open text-4xl mb-3 opacity-20 block"></i>
-                Você não tem solicitações de férias recentes.
+            <div class="text-center py-16 bg-slate-50/50 rounded-2xl border border-slate-100 border-dashed">
+                <div class="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto mb-4 text-slate-300 shadow-sm"><i class="fas fa-plane text-2xl"></i></div>
+                <p class="text-sm font-bold text-slate-500">Sem histórico</p>
+                <p class="text-xs font-medium text-slate-400 mt-1">Você ainda não solicitou férias pelo portal.</p>
             </div>
             {% endfor %}
         </div>
@@ -153,10 +175,12 @@
             blocoFerias.style.display = 'block';
             dataFim.readOnly = true;
             dataFim.classList.add('bg-slate-100', 'border-dashed', 'text-slate-500');
+            dataFim.classList.remove('bg-white');
         } else {
             blocoFerias.style.display = 'none';
             dataFim.readOnly = false;
             dataFim.classList.remove('bg-slate-100', 'border-dashed', 'text-slate-500');
+            dataFim.classList.add('bg-white');
             dataFim.value = "";
         }
         calcularRetorno();
@@ -169,26 +193,19 @@
         let abono = vendeFerias.value === "sim" ? (dias / 2) : 0; 
         let totalDescontado = dias + abono;
 
-        // Limpa bloqueios anteriores
         btnSubmit.disabled = false;
         btnSubmit.classList.remove('opacity-50', 'cursor-not-allowed');
 
-        // Regra de Ouro 1: Limite máximo legal de 30 dias
         if (totalDescontado > 30) {
-            alert(`Pela lei, o máximo permitido de férias por período são 30 dias. Você não pode gozar ${dias} e vender ${abono}. Reduza os dias de gozo para poder vender.`);
-            btnSubmit.disabled = true;
-            btnSubmit.classList.add('opacity-50', 'cursor-not-allowed');
-            dataFim.value = "";
-            return;
+            alert(`Pela lei, o máximo permitido de férias por período são 30 dias. Você não pode gozar ${dias} e vender ${abono}.`);
+            btnSubmit.disabled = true; btnSubmit.classList.add('opacity-50', 'cursor-not-allowed');
+            dataFim.value = ""; return;
         }
 
-        // Regra de Ouro 2: Não pode ultrapassar o saldo atual
         if (totalDescontado > saldoUser) {
-            alert(`ATENÇÃO: Você só tem ${saldoUser} dias de saldo. Por favor, ajuste a quantidade de dias ou remova a opção de venda.`);
-            btnSubmit.disabled = true;
-            btnSubmit.classList.add('opacity-50', 'cursor-not-allowed');
-            dataFim.value = "";
-            return;
+            alert(`ATENÇÃO: Você só tem ${saldoUser} dias de saldo.`);
+            btnSubmit.disabled = true; btnSubmit.classList.add('opacity-50', 'cursor-not-allowed');
+            dataFim.value = ""; return;
         }
 
         if(!dataInicio.value) return;
