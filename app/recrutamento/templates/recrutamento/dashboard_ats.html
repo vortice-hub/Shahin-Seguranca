@@ -8,9 +8,15 @@
         <p class="text-sm text-slate-500 font-medium mt-1">Gestão de vagas e atração de talentos para a empresa.</p>
     </div>
     
-    <button onclick="document.getElementById('modalNovaVaga').classList.remove('hidden', 'opacity-0')" class="btn-primary !px-6 shadow-lg shadow-brand/20 flex items-center gap-2">
-        <i class="fas fa-plus"></i> Abrir Nova Vaga
-    </button>
+    <div class="flex items-center gap-3">
+        <a href="{{ url_for('recrutamento.banco_talentos') }}" class="btn-glass text-sm flex items-center gap-2 !px-5">
+            <i class="fas fa-users text-slate-500"></i> Banco de Talentos
+        </a>
+        
+        <button onclick="document.getElementById('modalNovaVaga').classList.remove('hidden', 'opacity-0')" class="btn-primary !px-6 shadow-lg shadow-brand/20 flex items-center gap-2">
+            <i class="fas fa-plus"></i> Abrir Nova Vaga
+        </button>
+    </div>
 </div>
 
 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-fade-in" style="animation-delay: 0.1s; animation-fill-mode: both;">
@@ -45,7 +51,7 @@
         </div>
         
         <div class="relative z-10 pt-4 border-t border-slate-100">
-            <a href="#" class="w-full bg-brand/5 hover:bg-brand text-brand hover:text-white border border-brand/20 font-bold text-sm py-3 rounded-xl transition flex items-center justify-center gap-2 shadow-sm">
+            <a href="{{ url_for('recrutamento.kanban_vaga', vaga_id=vaga.id) }}" class="w-full bg-brand/5 hover:bg-brand text-brand hover:text-white border border-brand/20 font-bold text-sm py-3 rounded-xl transition flex items-center justify-center gap-2 shadow-sm">
                 <i class="fas fa-columns"></i> Ver Funil (Kanban)
             </a>
         </div>

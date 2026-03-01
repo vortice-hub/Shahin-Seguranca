@@ -8,6 +8,7 @@ from google.cloud import storage
 from app.recrutamento import recrutamento_bp
 from app.models import Vaga, Candidato, Candidatura, FaseRecrutamento
 from app.extensions import db
+from flask import jsonify
 
 # ==============================================================================
 # 🎯 VORTICE RECRUTAMENTO - GESTÃO DE VAGAS E ATS
@@ -126,3 +127,57 @@ def novo_candidato():
     flash(f'O currículo de {nome} foi guardado no banco com sucesso!', 'success')
     return redirect(url_for('recrutamento.banco_talentos'))
 
+@recrutamento_bp.route('/vagas/<int:vaga_id>/kanban', methods=['GET'])
+@login_required
+def kanban_vaga(vaga_id):
+    """Exibe o quadro Kanban para uma vaga específica."""
+    vaga = Vaga.query.filter_by(id=vaga_id, empresa_id=current_user.empresa_id).first_or_404()
+    fases = FaseRecrutamento.query.filter_by(vaga_id=vaga.id).order_by(FaseRecrutamento.ordem).all()
+    
+    # Busca candidatos do banco de talentos que AINDA NÃO estão nesta vaga para podermos adicioná-los
+    subquery = db.session.query(Candidatura.candidato_id).filter(Candidatura.vaga_id == vaga_id)
+    candidatos_disponiveis = Candidato.query.filter(
+        Candidato.empresa_id == current_user.empresa_id, 
+        ~Candidato.id.in_(subquery)
+    ).all()
+    
+    return render_template('recrutamento/kanban.html', vaga=vaga, fases=fases, candidatos=candidatos_disponiveis)
+
+@recrutamento_bp.route('/vagas/<int:vaga_id>/vincular-candidato', methods=['POST'])
+@login_required
+def vincular_candidato(vaga_id):
+    """Adiciona um candidato do Banco de Talentos à primeira coluna desta Vaga."""
+    vaga = Vaga.query.filter_by(id=vaga_id, empresa_id=current_user.empresa_id).first_or_404()
+    candidato_id = request.form.get('candidato_id')
+    
+    # Pega a primeira fase (ex: "Novos Currículos")
+    primeira_fase = FaseRecrutamento.query.filter_by(vaga_id=vaga.id).order_by(FaseRecrutamento.ordem).first()
+    
+    if candidato_id and primeira_fase:
+        nova_cand = Candidatura(candidato_id=candidato_id, vaga_id=vaga.id, fase_id=primeira_fase.id)
+        db.session.add(nova_cand)
+        db.session.commit()
+        flash('Candidato inserido no funil com sucesso!', 'success')
+        
+    return redirect(url_for('recrutamento.kanban_vaga', vaga_id=vaga.id))
+
+@recrutamento_bp.route('/api/kanban/mover', methods=['POST'])
+@login_required
+def mover_candidato():
+    """API oculta: Recebe o sinal do Javascript quando arrastamos um card e salva no DB."""
+    data = request.get_json()
+    candidatura_id = data.get('candidatura_id')
+    nova_fase_id = data.get('nova_fase_id')
+    
+    # Encontra o cartão
+    candidatura = Candidatura.query.join(Vaga).filter(
+        Candidatura.id == candidatura_id, 
+        Vaga.empresa_id == current_user.empresa_id
+    ).first()
+    
+    if candidatura:
+        candidatura.fase_id = nova_fase_id
+        db.session.commit()
+        return jsonify({'success': True})
+        
+    return jsonify({'success': False, 'error': 'Não encontrado'}), 404

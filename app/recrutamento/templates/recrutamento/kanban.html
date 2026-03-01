@@ -1,0 +1,160 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
+
+<div class="mb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 animate-fade-in">
+    <div>
+        <a href="/vagas" class="text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-brand flex items-center gap-1 mb-2 transition"><i class="fas fa-arrow-left"></i> Voltar às Vagas</a>
+        <h2 class="text-2xl font-black text-slate-800 tracking-tight">{{ vaga.titulo }}</h2>
+        <p class="text-xs text-slate-500 font-medium flex items-center gap-2 mt-1">
+            <span class="bg-brand/10 text-brand px-2 py-0.5 rounded border border-brand/20">{{ vaga.status }}</span>
+            <i class="fas fa-map-marker-alt opacity-50"></i> {{ vaga.local or 'Local não definido' }}
+        </p>
+    </div>
+    
+    <button onclick="document.getElementById('modalVincular').classList.remove('hidden', 'opacity-0')" class="btn-primary !px-5 shadow-lg shadow-brand/20 flex items-center gap-2 text-sm">
+        <i class="fas fa-user-plus"></i> Adicionar Candidato ao Funil
+    </button>
+</div>
+
+<div class="flex gap-6 overflow-x-auto pb-8 pt-2 custom-scrollbar animate-fade-in" style="animation-delay: 0.1s; animation-fill-mode: both; min-height: 60vh;">
+    
+    {% for fase in fases %}
+    <div class="w-80 flex-shrink-0 flex flex-col glass-panel !p-0 overflow-hidden border-t-4 border-t-brand/50">
+        <div class="p-4 bg-white/60 border-b border-slate-100 flex justify-between items-center backdrop-blur-sm">
+            <h3 class="font-black text-slate-700 text-sm tracking-tight uppercase">{{ fase.nome }}</h3>
+            <span class="w-6 h-6 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center text-[10px] font-bold shadow-inner">{{ fase.candidaturas|length }}</span>
+        </div>
+        
+        <div class="flex-1 p-3 space-y-3 overflow-y-auto kanban-column min-h-[150px]" data-fase-id="{{ fase.id }}">
+            
+            {% for cand in fase.candidaturas %}
+            <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition cursor-grab active:cursor-grabbing group relative" data-cand-id="{{ cand.id }}">
+                <div class="flex items-center gap-3 mb-3">
+                    <div class="w-10 h-10 rounded-full bg-gradient-to-br from-slate-100 to-slate-200 border border-slate-200 text-slate-600 flex items-center justify-center font-black text-xs shadow-inner">
+                        {{ cand.candidato.nome[:2].upper() }}
+                    </div>
+                    <div class="flex-1 overflow-hidden">
+                        <h4 class="font-bold text-slate-800 text-sm truncate">{{ cand.candidato.nome }}</h4>
+                        <p class="text-[10px] text-slate-400 font-mono tracking-wider">{{ cand.data_candidatura.strftime('%d/%m') }}</p>
+                    </div>
+                </div>
+                
+                <div class="flex items-center justify-between mt-3 pt-3 border-t border-slate-100">
+                    <div class="text-[9px] font-black uppercase text-slate-400 tracking-widest flex items-center gap-1 group-hover:text-brand transition">
+                        <i class="fas fa-grip-lines opacity-30"></i> Arrastar
+                    </div>
+                    
+                    {% if cand.candidato.url_curriculo %}
+                    <a href="{{ cand.candidato.url_curriculo }}" target="_blank" class="w-8 h-8 rounded-lg bg-red-50 text-red-500 hover:bg-red-500 hover:text-white flex items-center justify-center transition border border-red-100 shadow-sm" title="Ver CV PDF">
+                        <i class="fas fa-file-pdf text-xs"></i>
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+            
+        </div>
+    </div>
+    {% endfor %}
+    
+</div>
+
+<div id="modalVincular" class="hidden fixed inset-0 bg-slate-900/60 z-[100] flex items-center justify-center p-4 backdrop-blur-md opacity-0 transition-opacity duration-300">
+    <div class="glass-panel max-w-md w-full overflow-hidden shadow-2xl">
+        <div class="bg-brand/5 p-5 flex justify-between items-center border-b border-brand/10">
+            <h3 class="font-black text-brand tracking-tight text-lg">Puxar do Banco de Talentos</h3>
+            <button onclick="fecharModalVincular()" class="w-8 h-8 bg-white rounded-full text-slate-400 hover:text-slate-600 flex items-center justify-center shadow-sm transition"><i class="fas fa-times"></i></button>
+        </div>
+        
+        <form action="/vagas/{{ vaga.id }}/vincular-candidato" method="POST" class="p-6 bg-white/50">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            
+            <p class="text-xs text-slate-500 font-medium mb-4 leading-relaxed">Selecione um candidato que já está cadastrado no seu Banco de Talentos para iniciar o processo seletivo dele nesta vaga.</p>
+            
+            <div class="mb-6">
+                <label class="label-pro">Selecionar Candidato</label>
+                <div class="relative">
+                    <select name="candidato_id" required class="input-pro font-bold text-slate-700 bg-white cursor-pointer appearance-none shadow-sm">
+                        <option value="" disabled selected>Clique para buscar talento...</option>
+                        {% for c in candidatos %}
+                        <option value="{{ c.id }}">{{ c.nome }} ({{ c.palavras_chave or 'Sem tags' }})</option>
+                        {% endfor %}
+                    </select>
+                    <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-slate-400"><i class="fas fa-chevron-down text-xs"></i></div>
+                </div>
+            </div>
+            
+            <button type="submit" class="w-full btn-primary py-3.5 text-sm shadow-md flex justify-center items-center gap-2">
+                <i class="fas fa-check"></i> Iniciar Processo
+            </button>
+        </form>
+    </div>
+</div>
+
+<style>
+    /* Suaviza o drag and drop */
+    .sortable-ghost { opacity: 0.4; background-color: var(--primary-color) !important; mix-blend-mode: multiply; }
+    .sortable-drag { cursor: grabbing !important; transform: rotate(3deg); box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1) !important; }
+</style>
+
+<script>
+    function fecharModalVincular() {
+        const modal = document.getElementById('modalVincular');
+        modal.classList.add('opacity-0');
+        setTimeout(() => modal.classList.add('hidden'), 300);
+    }
+
+    // A MÁGICA DO KANBAN ACONTECE AQUI
+    document.addEventListener("DOMContentLoaded", () => {
+        // Pega todas as colunas
+        const colunas = document.querySelectorAll('.kanban-column');
+        
+        colunas.forEach(coluna => {
+            new Sortable(coluna, {
+                group: 'vagas', // Permite arrastar entre colunas do mesmo grupo
+                animation: 150, // Velocidade suave da animação
+                easing: "cubic-bezier(1, 0, 0, 1)",
+                
+                // O que acontece quando soltamos o cartão numa nova coluna
+                onEnd: function (evt) {
+                    const item = evt.item; // O Cartão
+                    const colunaDestino = evt.to; // A Coluna onde caiu
+                    
+                    const candidaturaId = item.getAttribute('data-cand-id');
+                    const novaFaseId = colunaDestino.getAttribute('data-fase-id');
+                    
+                    // Se não mudou de coluna, não faz nada
+                    if(evt.from === evt.to) return;
+
+                    // Envia silenciosamente para o Backend Flask guardar no DB
+                    fetch('/api/kanban/mover', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': '{{ csrf_token() }}'
+                        },
+                        body: JSON.stringify({
+                            candidatura_id: candidaturaId,
+                            nova_fase_id: novaFaseId
+                        })
+                    }).then(response => response.json())
+                      .then(data => {
+                          if(data.success) {
+                              Toastify({ text: "Fase atualizada!", duration: 2000, style: { background: "#10b981", borderRadius: "8px", fontSize: "12px"} }).showToast();
+                          }
+                      });
+                    
+                    // Atualiza os contadores das colunas na tela
+                    document.querySelectorAll('.kanban-column').forEach(col => {
+                        const countSpan = col.previousElementSibling.querySelector('span');
+                        countSpan.innerText = col.children.length;
+                    });
+                }
+            });
+        });
+    });
+</script>
+{% endblock %}
+
