@@ -127,6 +127,7 @@
                         
                         {% if is_master or 'USUARIOS' in perms %}
                         <a href="/admin/usuarios" class="block px-3 py-2.5 text-xs font-medium text-slate-600 rounded-xl hover:bg-slate-50 hover:text-brand transition"><i class="fas fa-users w-6 text-center opacity-50"></i> Equipe e Cargos</a>
+                        <a href="/vagas" class="block px-3 py-2.5 text-xs font-medium text-slate-600 rounded-xl hover:bg-slate-50 hover:text-brand transition"><i class="fas fa-briefcase w-6 text-center opacity-50"></i> Recrutamento (ATS)</a>
                         {% endif %}
                         
                         {% if feat_ponto and (is_master or 'PONTO' in perms) %}
@@ -256,15 +257,21 @@
                 <div class="bg-slate-50 -mx-6 p-6 border-y border-slate-100">
                     <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-1"><i class="fas fa-lock text-brand"></i> Área de Gestão</p>
                     <div class="space-y-4 pl-3">
-                        {% if is_master or 'USUARIOS' in perms %}<a href="/admin/usuarios" class="block text-sm font-bold text-slate-700 hover:text-brand">Equipe e Cargos</a>{% endif %}
+                        {% if is_master or 'USUARIOS' in perms %}
+                        <a href="/admin/usuarios" class="block text-sm font-bold text-slate-700 hover:text-brand">Equipe e Cargos</a>
+                        <a href="/vagas" class="block text-sm font-bold text-slate-700 hover:text-brand">Recrutamento (ATS)</a>
+                        {% endif %}
+                        
                         {% if feat_ponto and (is_master or 'PONTO' in perms) %}
                         <a href="/ponto/admin/controle-escala" class="block text-sm font-bold text-slate-700 hover:text-brand">Central de Ponto</a>
                         <a href="/admin/solicitacoes" class="block text-sm font-bold text-slate-700 hover:text-brand">Caixa de Aprovações</a>
                         {% endif %}
+                        
                         {% if feat_docs and (is_master or 'DOCUMENTOS' in perms) %}
                         <a href="/documentos/admin" class="block text-sm font-bold text-slate-700 hover:text-brand">Central Documentos</a>
                         <a href="/documentos/relatorio-folha" class="block text-sm font-bold text-slate-700 hover:text-brand">Fechamento Folha</a>
                         {% endif %}
+                        
                         {% if feat_estoque and (is_master or 'ESTOQUE' in perms) %}<a href="/estoque/gerenciar" class="block text-sm font-bold text-slate-700 hover:text-brand">Inventário (Logística)</a>{% endif %}
                     </div>
                 </div>
@@ -358,7 +365,6 @@
             }
         }
 
-        // Fecha menus flutuantes ao clicar fora
         document.addEventListener('click', function(event) {
             const btn = document.getElementById('bell-icon-desktop')?.parentElement;
             const painel = document.getElementById('painel-notificacoes');
