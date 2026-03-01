@@ -301,3 +301,54 @@ class PushSubscription(TenantModel):
     auth = db.Column(db.String(255), nullable=False)
     user = db.relationship('User', backref=db.backref('push_subs', lazy=True))
 
+# ==============================================================================
+# 🎯 MÓDULO ATS - RECRUTAMENTO E SELEÇÃO (VORTICE RECRUTAMENTO)
+# ==============================================================================
+
+class Vaga(TenantModel):
+    """Oportunidades de emprego abertas pela empresa"""
+    __tablename__ = 'vagas'
+    id = db.Column(db.Integer, primary_key=True)
+    titulo = db.Column(db.String(150), nullable=False)
+    descricao = db.Column(db.Text, nullable=True)
+    salario = db.Column(db.String(50), nullable=True)
+    local = db.Column(db.String(100), nullable=True)
+    status = db.Column(db.String(20), default='Aberta') # Aberta, Pausada, Fechada
+    
+    # Relacionamentos
+    fases = db.relationship('FaseRecrutamento', backref='vaga', lazy=True, cascade='all, delete-orphan', order_by='FaseRecrutamento.ordem')
+    candidaturas = db.relationship('Candidatura', backref='vaga', lazy=True, cascade='all, delete-orphan')
+
+class FaseRecrutamento(TenantModel):
+    """As colunas do Kanban (Ex: Novos, Triagem, Entrevista, Contratado)"""
+    __tablename__ = 'fases_recrutamento'
+    id = db.Column(db.Integer, primary_key=True)
+    vaga_id = db.Column(db.Integer, db.ForeignKey('vagas.id', ondelete='CASCADE'), nullable=False)
+    nome = db.Column(db.String(50), nullable=False)
+    ordem = db.Column(db.Integer, default=0) # Ordem da coluna na tela (0, 1, 2...)
+    
+    candidaturas = db.relationship('Candidatura', backref='fase', lazy=True)
+
+class Candidato(TenantModel):
+    """Banco de Talentos Global da Empresa"""
+    __tablename__ = 'candidatos'
+    id = db.Column(db.Integer, primary_key=True)
+    nome = db.Column(db.String(120), nullable=False)
+    email = db.Column(db.String(120), nullable=True)
+    telefone = db.Column(db.String(20), nullable=True)
+    url_curriculo = db.Column(db.String(500), nullable=True) # PDF do CV
+    texto_extraido = db.Column(db.Text, nullable=True) # Onde a IA vai ler e colar o conteúdo do PDF
+    palavras_chave = db.Column(db.String(255), nullable=True) # Ex: "Portaria, CNH, Excel"
+    
+    candidaturas = db.relationship('Candidatura', backref='candidato', lazy=True, cascade='all, delete-orphan')
+
+class Candidatura(TenantModel):
+    """O 'Cartão' do candidato que se move no Kanban da Vaga"""
+    __tablename__ = 'candidaturas'
+    id = db.Column(db.Integer, primary_key=True)
+    candidato_id = db.Column(db.Integer, db.ForeignKey('candidatos.id', ondelete='CASCADE'), nullable=False)
+    vaga_id = db.Column(db.Integer, db.ForeignKey('vagas.id', ondelete='CASCADE'), nullable=False)
+    fase_id = db.Column(db.Integer, db.ForeignKey('fases_recrutamento.id', ondelete='SET NULL'), nullable=True)
+    notas_rh = db.Column(db.Text, nullable=True) # Anotações da entrevista
+    data_candidatura = db.Column(db.DateTime, default=get_brasil_time)
+

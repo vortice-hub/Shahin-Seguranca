@@ -34,12 +34,21 @@ def login(slug=None):
         raw_input = request.form.get('username', '').strip()
         password = request.form.get('password')
         
-        # CORREÇÃO: Limpa formatação solta, mas preserva o underscore (_) do terminal e formatos de e-mail
-        username = re.sub(r'[^0-9a-zA-Z_@.-]', '', raw_input)
+        # --- CORREÇÃO DE VALIDAÇÃO DE LOGIN ---
+        # 1. Se começar por "terminal_", é o acesso de portaria (Mantém o '_')
+        if raw_input.startswith('terminal_'):
+            username = raw_input 
+        # 2. Se for um e-mail (Mantém '@' e '.')
+        elif '@' in raw_input:
+             username = raw_input
+        # 3. Caso contrário, é um CPF (Remove pontos e traços para igualar à base de dados)
+        else:
+            username = re.sub(r'[^0-9a-zA-Z]', '', raw_input)
         
+        # Tenta procurar o usuário
         user = User.query.filter_by(username=username).first()
         if not user:
-            # Tenta por CPF
+            # Tenta procurar pelo campo CPF, caso o username seja diferente
             user = User.query.filter_by(cpf=username).first()
             
         if user and user.check_password(password):
