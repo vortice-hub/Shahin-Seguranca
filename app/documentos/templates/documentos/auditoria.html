@@ -1,65 +1,66 @@
 {% extends 'base.html' %}
 {% block content %}
-<div class="mb-8 flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
+<div class="mb-8 flex flex-col md:flex-row justify-between items-start md:items-end gap-6 animate-fade-in">
     <div>
-        <h2 class="text-2xl font-bold text-slate-800">Auditoria e Assinaturas</h2>
-        <p class="text-sm text-slate-500">Controle legal de leitura e pendências de documentos.</p>
+        <h2 class="text-3xl font-black text-slate-800 tracking-tight">Auditoria e Compliance</h2>
+        <p class="text-sm text-slate-500 font-medium mt-1">Rastreabilidade legal de assinaturas e documentos pendentes.</p>
     </div>
 </div>
 
-<div class="border-b border-slate-200 mb-6">
-    <nav class="-mb-px flex space-x-8" aria-label="Tabs">
-        <button onclick="switchTab('assinados')" id="tab-assinados" class="tab-btn active border-blue-500 text-blue-600 whitespace-nowrap py-4 px-1 border-b-2 font-bold text-sm transition flex items-center gap-2">
-            <i class="fas fa-check-double"></i> Documentos Assinados
-        </button>
-        <button onclick="switchTab('pendentes')" id="tab-pendentes" class="tab-btn border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition flex items-center gap-2">
-            <i class="fas fa-clock"></i> Pendentes de Assinatura
-            {% if pendentes|length > 0 %}
-            <span class="bg-red-500 text-white py-0.5 px-2.5 rounded-full text-xs font-black shadow-sm badge-pop">{{ pendentes|length }}</span>
-            {% endif %}
-        </button>
-    </nav>
+<div class="glass-panel p-2 mb-8 inline-flex items-center gap-2 w-full md:w-auto animate-fade-in overflow-x-auto" style="animation-delay: 0.1s; animation-fill-mode: both;">
+    <button onclick="switchTab('assinados')" id="tab-assinados" class="tab-btn active w-full md:w-auto px-6 py-2.5 rounded-xl font-bold text-sm text-white bg-brand shadow-sm transition whitespace-nowrap flex items-center justify-center gap-2">
+        <i class="fas fa-check-double text-white/70"></i> Assinados (Logs)
+    </button>
+    <button onclick="switchTab('pendentes')" id="tab-pendentes" class="tab-btn w-full md:w-auto px-6 py-2.5 rounded-xl font-medium text-sm text-slate-500 bg-transparent hover:bg-slate-100 transition whitespace-nowrap flex items-center justify-center gap-2">
+        <i class="fas fa-clock text-slate-400"></i> Pendentes
+        {% if pendentes|length > 0 %}
+        <span class="bg-red-500 text-white py-0.5 px-2 rounded-md text-[10px] font-black shadow-sm badge-pop">{{ pendentes|length }}</span>
+        {% endif %}
+    </button>
 </div>
 
-<div id="content-assinados" class="tab-content block animate-fade-in">
-    <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-10">
+<div id="content-assinados" class="tab-content block animate-fade-in" style="animation-delay: 0.2s; animation-fill-mode: both;">
+    <div class="glass-panel overflow-hidden mb-10">
         <div class="overflow-x-auto">
             <table class="w-full text-left text-sm text-slate-600">
-                <thead class="bg-slate-50 text-[10px] uppercase text-slate-400 font-bold border-b border-slate-100">
+                <thead class="bg-slate-50/50 text-[10px] uppercase text-slate-400 font-black tracking-widest border-b border-slate-100">
                     <tr>
-                        <th class="px-6 py-4">Data/Hora da Assinatura</th>
-                        <th class="px-6 py-4">Colaborador</th>
-                        <th class="px-6 py-4">Documento</th>
-                        <th class="px-6 py-4 text-center">IP Registado</th>
-                        <th class="px-6 py-4 text-right">Hash Criptográfico</th>
+                        <th class="px-6 py-5">Carimbo de Tempo</th>
+                        <th class="px-6 py-5">Colaborador</th>
+                        <th class="px-6 py-5">Documento</th>
+                        <th class="px-6 py-5 text-center">Endereço IP</th>
+                        <th class="px-6 py-5 text-right">Criptografia (SHA-256)</th>
                     </tr>
                 </thead>
-                <tbody class="divide-y divide-slate-100">
+                <tbody class="divide-y divide-slate-100/50">
                     {% for a in assinaturas %}
-                    <tr class="hover:bg-slate-50 transition">
-                        <td class="px-6 py-4 whitespace-nowrap text-xs font-medium text-slate-500">
-                            <i class="fas fa-lock text-emerald-500 mr-1"></i> {{ a.data_assinatura.strftime('%d/%m/%Y %H:%M') }}
+                    <tr class="hover:bg-white/60 transition group">
+                        <td class="px-6 py-4 whitespace-nowrap text-xs font-bold text-slate-700 flex items-center gap-2">
+                            <i class="fas fa-lock text-emerald-500 opacity-70"></i> {{ a.data_assinatura.strftime('%d/%m/%Y %H:%M:%S') }}
                         </td>
                         <td class="px-6 py-4 font-bold text-slate-800">{{ a.user.real_name if a.user else 'Desconhecido' }}</td>
                         <td class="px-6 py-4">
-                            <span class="bg-blue-50 text-blue-600 px-2.5 py-1 rounded text-[10px] font-black uppercase tracking-wider border border-blue-100">
+                            <span class="bg-brand/10 text-brand px-2.5 py-1 rounded-md text-[9px] font-black uppercase tracking-wider border border-brand/20">
                                 {{ a.documento_tipo }}
                             </span>
                         </td>
-                        <td class="px-6 py-4 text-center text-xs font-mono text-slate-400">{{ a.ip_address }}</td>
+                        <td class="px-6 py-4 text-center text-xs font-mono text-slate-500 font-bold tracking-wider">{{ a.ip_address }}</td>
                         <td class="px-6 py-4 text-right">
-                            <span class="text-[10px] font-mono text-slate-500 bg-slate-100 px-2.5 py-1.5 rounded truncate max-w-[150px] inline-block border border-slate-200 cursor-help" title="{{ a.hash_arquivo }}">
-                                {{ a.hash_arquivo[:15] }}...
-                            </span>
+                            <div class="inline-flex items-center gap-2 bg-slate-900 text-emerald-400 px-3 py-1.5 rounded-lg border border-slate-700 shadow-inner cursor-help" title="{{ a.hash_arquivo }}">
+                                <i class="fas fa-shield-alt text-[10px] opacity-50"></i>
+                                <span class="text-[10px] font-mono tracking-widest">
+                                    {{ a.hash_arquivo[:16] }}...
+                                </span>
+                            </div>
                         </td>
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="5" class="px-6 py-16 text-center">
-                            <div class="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
-                                <i class="fas fa-file-signature text-2xl text-slate-300"></i>
+                        <td colspan="5" class="px-6 py-20 text-center">
+                            <div class="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto mb-4 border border-slate-100 shadow-sm text-slate-300">
+                                <i class="fas fa-file-signature text-2xl"></i>
                             </div>
-                            <span class="text-slate-500 font-medium text-sm">Nenhuma assinatura digital registada até ao momento.</span>
+                            <span class="text-slate-500 font-medium text-sm">A base de dados de auditoria está vazia.</span>
                         </td>
                     </tr>
                     {% endfor %}
@@ -69,51 +70,51 @@
     </div>
 </div>
 
-<div id="content-pendentes" class="tab-content hidden animate-fade-in">
-    <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-10">
+<div id="content-pendentes" class="tab-content hidden animate-fade-in" style="animation-delay: 0.2s; animation-fill-mode: both;">
+    <div class="glass-panel overflow-hidden mb-10 border-l-4 border-l-amber-400">
         <div class="overflow-x-auto">
             <table class="w-full text-left text-sm text-slate-600">
-                <thead class="bg-amber-50 text-[10px] uppercase text-amber-700 font-bold border-b border-amber-100">
+                <thead class="bg-amber-50/50 text-[10px] uppercase text-amber-700 font-black tracking-widest border-b border-amber-100/50">
                     <tr>
-                        <th class="px-6 py-4">Enviado Em</th>
-                        <th class="px-6 py-4">Colaborador Pendente</th>
-                        <th class="px-6 py-4">Tipo de Documento</th>
-                        <th class="px-6 py-4">Referência / Valor</th>
-                        <th class="px-6 py-4 text-right">Status</th>
+                        <th class="px-6 py-5">Disparado Em</th>
+                        <th class="px-6 py-5">Colaborador Pendente</th>
+                        <th class="px-6 py-5">Tipo de Ficheiro</th>
+                        <th class="px-6 py-5">Referência</th>
+                        <th class="px-6 py-5 text-right">Status Atual</th>
                     </tr>
                 </thead>
-                <tbody class="divide-y divide-slate-100">
+                <tbody class="divide-y divide-amber-100/30">
                     {% for p in pendentes %}
                     <tr class="hover:bg-amber-50/40 transition group">
-                        <td class="px-6 py-4 whitespace-nowrap text-xs font-medium text-slate-500">
+                        <td class="px-6 py-4 whitespace-nowrap text-xs font-bold text-slate-600">
                             {{ p.data_envio.strftime('%d/%m/%Y %H:%M') if p.data_envio else 'N/A' }}
                         </td>
-                        <td class="px-6 py-4 font-bold text-slate-800 flex items-center gap-2">
-                            <div class="w-6 h-6 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-xs">
-                                <i class="fas fa-user"></i>
+                        <td class="px-6 py-4 font-bold text-slate-800 flex items-center gap-3">
+                            <div class="w-8 h-8 rounded-full bg-white border border-amber-200 text-amber-500 flex items-center justify-center text-xs shadow-sm">
+                                <i class="fas fa-user-clock"></i>
                             </div>
                             {{ p.user.real_name if p.user else 'Desconhecido' }}
                         </td>
                         <td class="px-6 py-4">
-                            <span class="bg-slate-100 text-slate-600 px-2.5 py-1 rounded text-[10px] font-black uppercase tracking-wider border border-slate-200">
+                            <span class="bg-white text-slate-600 px-2.5 py-1 rounded-md text-[9px] font-black uppercase tracking-wider border border-slate-200 shadow-sm">
                                 {{ p.tipo }}
                             </span>
                         </td>
-                        <td class="px-6 py-4 text-sm font-bold text-slate-600">{{ p.ref }}</td>
+                        <td class="px-6 py-4 text-xs font-bold text-slate-600 tracking-wider">{{ p.ref }}</td>
                         <td class="px-6 py-4 text-right">
-                            <span class="text-amber-500 font-bold text-[10px] uppercase flex items-center justify-end gap-1">
-                                <i class="fas fa-hourglass-half fa-spin-pulse"></i> Aguardando Leitura
+                            <span class="text-amber-500 font-black text-[9px] uppercase tracking-widest flex items-center justify-end gap-1.5">
+                                <i class="fas fa-circle-notch fa-spin"></i> Aguardando Leitura
                             </span>
                         </td>
                     </tr>
                     {% else %}
                     <tr>
                         <td colspan="5" class="px-6 py-20 text-center">
-                            <div class="w-20 h-20 bg-emerald-50 rounded-full flex items-center justify-center mx-auto mb-4">
-                                <i class="fas fa-check-circle text-3xl text-emerald-400"></i>
+                            <div class="w-20 h-20 bg-emerald-50 rounded-full flex items-center justify-center mx-auto mb-5 border border-emerald-100 shadow-sm">
+                                <i class="fas fa-check-circle text-4xl text-emerald-500"></i>
                             </div>
-                            <h3 class="text-lg font-bold text-slate-800 mb-1">Tudo em dia!</h3>
-                            <span class="text-slate-500 font-medium text-sm">Neste momento, não há nenhum documento pendente de assinatura.</span>
+                            <h3 class="text-xl font-black text-slate-800 mb-1 tracking-tight">Zero Pendências!</h3>
+                            <span class="text-slate-500 font-medium text-sm">Todos os colaboradores já assinaram os seus documentos.</span>
                         </td>
                     </tr>
                     {% endfor %}
@@ -123,22 +124,23 @@
     </div>
 </div>
 
-<style>
-    .animate-fade-in { animation: fadeIn 0.3s ease-in-out; }
-    @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
-</style>
-
 <script>
     function switchTab(tabId) {
         document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
         document.querySelectorAll('.tab-btn').forEach(el => {
-            el.classList.remove('border-blue-500', 'text-blue-600', 'font-bold', 'active');
-            el.classList.add('border-transparent', 'text-slate-500', 'font-medium');
+            el.classList.remove('bg-brand', 'text-white', 'shadow-sm', 'active');
+            el.classList.add('bg-transparent', 'text-slate-500');
+            el.querySelector('i').classList.remove('text-white/70');
+            el.querySelector('i').classList.add('text-slate-400');
         });
+        
         document.getElementById('content-' + tabId).classList.remove('hidden');
+        
         const activeBtn = document.getElementById('tab-' + tabId);
-        activeBtn.classList.remove('border-transparent', 'text-slate-500', 'font-medium');
-        activeBtn.classList.add('border-blue-500', 'text-blue-600', 'font-bold', 'active');
+        activeBtn.classList.remove('bg-transparent', 'text-slate-500');
+        activeBtn.classList.add('bg-brand', 'text-white', 'shadow-sm', 'active');
+        activeBtn.querySelector('i').classList.remove('text-slate-400');
+        activeBtn.querySelector('i').classList.add('text-white/70');
     }
 </script>
 {% endblock %}

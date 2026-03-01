@@ -1,48 +1,91 @@
 {% extends 'base.html' %}
 {% block content %}
-<div class="max-w-5xl mx-auto py-8">
-    <div class="mb-10 flex justify-between items-center">
+<link href="https://cdn.jsdelivr.net/npm/tom-select@2.2.2/dist/css/tom-select.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/tom-select@2.2.2/dist/js/tom-select.complete.min.js"></script>
+
+<style>
+    /* Estilos do TomSelect adaptados ao Glassmorphism */
+    .ts-dropdown { z-index: 1000 !important; border-radius: 0 0 1rem 1rem; box-shadow: 0 15px 50px -10px rgba(0,0,0,0.1); border-color: rgba(226,232,240,0.8); background: rgba(255,255,255,0.95); backdrop-filter: blur(10px); }
+    .ts-control { border-radius: 1rem; padding: 0.85rem 1.2rem; font-size: 0.875rem; font-weight: 700; border-color: rgba(226,232,240,0.8); background-color: #ffffff; box-shadow: 0 1px 2px 0 rgba(0,0,0,0.05); }
+    .ts-control.focus { border-color: color-mix(in srgb, var(--primary-color) 40%, transparent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary-color) 10%, transparent); }
+</style>
+
+<div class="max-w-4xl mx-auto py-4 animate-fade-in">
+    <div class="mb-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-            <h2 class="text-3xl font-black text-slate-800 tracking-tight">Aguardando Revisão</h2>
-            <p class="text-slate-500 mt-2">Identifique os nomes que a IA não conseguiu processar.</p>
+            <h2 class="text-3xl font-black text-slate-800 tracking-tight">Revisão de IA</h2>
+            <p class="text-slate-500 font-medium mt-1 text-sm">Vincule manualmente os holerites que o sistema não conseguiu identificar.</p>
         </div>
-        <form action="{{ url_for('documentos.limpar_revisoes') }}" method="POST" onsubmit="return confirm('Apagar tudo na revisão?')">
+        <form action="{{ url_for('documentos.limpar_revisoes') }}" method="POST" onsubmit="return confirm('ATENÇÃO: Isto apagará todos os PDFs pendentes na fila de revisão. Continuar?')">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-            <button type="submit" class="bg-red-50 text-red-600 px-4 py-2 rounded-xl text-xs font-bold hover:bg-red-600 hover:text-white transition">
-                <i class="fas fa-trash mr-2"></i> LIMPAR TUDO
+            <button type="submit" class="bg-white border border-red-200 text-red-500 px-5 py-2.5 rounded-xl text-xs font-bold hover:bg-red-50 hover:text-red-600 transition shadow-sm flex items-center gap-2">
+                <i class="fas fa-trash-alt"></i> Limpar Fila
             </button>
         </form>
     </div>
 
     <div class="grid gap-6">
         {% for h in pendentes %}
-        <div class="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm flex flex-col md:flex-row items-center gap-6">
-            <div class="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex items-center gap-4 flex-1 w-full">
-                <i class="fas fa-file-pdf text-3xl text-red-500"></i>
-                <div class="overflow-hidden">
-                    <p class="text-[10px] font-black text-slate-400 uppercase">Referência</p>
-                    <p class="font-bold text-slate-800">{{ h.mes_referencia }}</p>
+        <div class="glass-panel p-6 flex flex-col lg:flex-row items-center gap-6 group hover:-translate-y-1 transition duration-300">
+            
+            <div class="bg-slate-50 p-5 rounded-2xl border border-slate-100 flex items-center gap-5 flex-1 w-full relative overflow-hidden">
+                <div class="absolute right-0 top-0 bottom-0 w-24 bg-gradient-to-l from-slate-100 to-transparent"></div>
+                <div class="w-14 h-14 bg-white rounded-xl flex items-center justify-center shadow-sm border border-slate-200 text-red-500 flex-shrink-0">
+                    <i class="fas fa-file-pdf text-3xl"></i>
+                </div>
+                <div class="relative z-10">
+                    <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Competência</p>
+                    <p class="font-bold text-slate-800 text-lg leading-tight mb-2">{{ h.mes_referencia }}</p>
                     <form action="{{ url_for('documentos.baixar_holerite', id=h.id) }}" method="POST" target="_blank">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                        <button type="submit" class="text-xs font-bold text-blue-600 hover:text-blue-800 transition">ABRIR PDF</button>
+                        <button type="submit" class="text-[10px] font-black text-brand bg-brand/10 hover:bg-brand/20 px-3 py-1.5 rounded-md uppercase tracking-wider transition shadow-sm">Abrir Documento</button>
                     </form>
                 </div>
             </div>
 
-            <form action="{{ url_for('documentos.vincular_holerite') }}" method="POST" class="flex gap-3">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                <input type="hidden" name="holerite_id" value="{{ h.id }}">
-                <select name="user_id" class="bg-slate-100 rounded-2xl px-4 py-3 text-sm font-bold md:w-72" required>
-                    <option value="">Selecione o funcionário...</option>
-                    {% for u in funcionarios %}
-                    <option value="{{ u.id }}">{{ u.real_name }}</option>
-                    {% endfor %}
-                </select>
-                <button type="submit" class="bg-slate-900 text-white font-bold py-3 px-8 rounded-2xl hover:bg-blue-600 transition">VINCULAR</button>
-            </form>
+            <div class="w-full lg:w-[45%] xl:w-[50%] flex flex-col justify-center">
+                <p class="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-2 pl-1">Vincular Colaborador:</p>
+                <form action="{{ url_for('documentos.vincular_holerite') }}" method="POST" class="flex flex-col sm:flex-row gap-3">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                    <input type="hidden" name="holerite_id" value="{{ h.id }}">
+                    
+                    <div class="flex-1">
+                        <select name="user_id" class="tom-select-user w-full" placeholder="Procurar nome..." autocomplete="off" required>
+                            <option value="">Selecione o funcionário...</option>
+                            {% for u in funcionarios %}
+                            <option value="{{ u.id }}">{{ u.real_name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <button type="submit" class="btn-primary !py-2.5 !px-6 h-[46px] shadow-md shadow-brand/20 text-sm">
+                        Confirmar
+                    </button>
+                </form>
+            </div>
+
+        </div>
+        {% else %}
+        <div class="glass-panel text-center py-20 px-6">
+            <div class="w-20 h-20 bg-emerald-50 rounded-full flex items-center justify-center mx-auto mb-4 border border-emerald-100 shadow-sm text-emerald-500">
+                <i class="fas fa-check-circle text-4xl"></i>
+            </div>
+            <h3 class="text-xl font-black text-slate-800 tracking-tight mb-1">Nenhuma Revisão Pendente</h3>
+            <p class="text-sm font-medium text-slate-500">A Inteligência Artificial conseguiu processar e entregar 100% dos documentos com sucesso.</p>
         </div>
         {% endfor %}
     </div>
 </div>
+
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        document.querySelectorAll('.tom-select-user').forEach(function(el) {
+            new TomSelect(el, {
+                create: false,
+                sortField: { field: "text", direction: "asc" }
+            });
+        });
+    });
+</script>
 {% endblock %}
 

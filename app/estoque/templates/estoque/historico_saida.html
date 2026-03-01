@@ -1,30 +1,66 @@
 {% extends 'base.html' %}
 {% block content %}
-<div class="mb-6"><h2 class="text-lg font-bold text-slate-800">Registro de Entregas</h2></div>
-<div class="space-y-3">
-    {% for log in logs %}
-    <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition relative group">
-        <a href="/historico/saida/editar/{{ log.id }}" class="absolute top-4 right-4 text-slate-300 hover:text-blue-500 p-2"><i class="fas fa-pencil-alt"></i></a>
-        <div class="flex justify-between items-start mb-2">
-            <div class="text-xs font-bold text-slate-400 uppercase tracking-wide">{{ log.data_entrega.strftime('%d/%m/%Y') }}</div>
-            <div class="bg-blue-50 text-blue-700 text-xs px-2 py-1 rounded font-bold mr-8">-{{ log.quantidade }} UN</div>
+<div class="max-w-5xl mx-auto animate-fade-in">
+    <div class="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
+        <div>
+            <h2 class="text-3xl font-black text-slate-800 tracking-tight flex items-center gap-3">
+                <i class="fas fa-truck-loading text-brand"></i> Registo de Entregas
+            </h2>
+            <p class="text-sm text-slate-500 font-medium mt-1">Histórico de todas as saídas e baixas de material aos funcionários.</p>
         </div>
-        <div class="flex items-center gap-3 mb-3">
-             <div class="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 font-bold text-xs">{{ log.colaborador[:1] }}</div>
-             <div><div class="font-bold text-slate-800">{{ log.colaborador }}</div><div class="text-xs text-slate-500">Autorizado por: {{ log.coordenador }}</div></div>
-        </div>
-        <!-- Detalhes de Tamanho e Genero -->
-        <div class="pt-3 border-t border-slate-100 text-sm text-slate-700 flex items-center gap-2">
-            <i class="fas fa-tshirt text-slate-400"></i> 
-            <span class="font-semibold">{{ log.item_nome }}</span>
-            <span class="text-slate-300">|</span>
-            <span class="bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded text-xs font-bold">{{ log.tamanho }}</span>
-            <span class="text-slate-300">|</span>
-            <span class="text-xs text-slate-500">{{ log.genero }}</span>
-        </div>
+        <a href="{{ url_for('estoque.controle_uniforme') }}" class="btn-glass text-xs md:w-auto w-full justify-center">
+            <i class="fas fa-arrow-left mr-1"></i> Voltar
+        </a>
     </div>
-    {% else %}
-    <div class="text-center py-10 text-slate-400">Nenhuma entrega registrada.</div>
-    {% endfor %}
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {% for log in logs %}
+        <div class="glass-panel p-6 relative group hover:-translate-y-1 transition duration-300 hover:shadow-lg border-t-4 border-t-red-400">
+            <a href="/historico/saida/editar/{{ log.id }}" class="absolute top-5 right-5 w-8 h-8 bg-white border border-slate-200 text-slate-400 rounded-full flex items-center justify-center hover:text-brand hover:border-brand/30 shadow-sm transition opacity-0 group-hover:opacity-100 focus:opacity-100" title="Editar Log"><i class="fas fa-pencil-alt text-xs"></i></a>
+            
+            <div class="flex justify-between items-start mb-5">
+                <div class="text-[9px] font-black text-slate-400 uppercase tracking-widest bg-white px-2.5 py-1 rounded-md border border-slate-100 shadow-sm">
+                    <i class="far fa-calendar-alt opacity-50 mr-1"></i> {{ log.data_entrega.strftime('%d/%m/%Y') }}
+                </div>
+                <div class="bg-red-50 text-red-600 text-[10px] px-3 py-1.5 rounded-md font-black uppercase tracking-widest border border-red-100 shadow-sm pr-10">
+                    -{{ log.quantidade }} UN
+                </div>
+            </div>
+            
+            <div class="flex items-center gap-4 mb-5">
+                <div class="w-12 h-12 rounded-2xl bg-white border border-slate-100 shadow-inner flex items-center justify-center text-slate-400 font-black text-lg">
+                    {{ log.colaborador[:2].upper() }}
+                </div>
+                <div>
+                    <div class="font-black text-slate-800 text-base leading-tight mb-1">{{ log.colaborador }}</div>
+                    <div class="text-[9px] font-bold text-slate-500 uppercase tracking-widest bg-slate-50 px-2 py-0.5 rounded border border-slate-100 w-max">
+                        <span class="text-slate-400">Autorizou:</span> {{ log.coordenador }}
+                    </div>
+                </div>
+            </div>
+            
+            <div class="pt-4 border-t border-slate-200/60 flex items-center gap-3">
+                <div class="w-10 h-10 rounded-full bg-brand/5 text-brand flex items-center justify-center text-sm border border-brand/10 shadow-sm"><i class="fas fa-tshirt"></i></div> 
+                <div class="flex-1">
+                    <span class="font-bold text-slate-700 text-sm block mb-1">{{ log.item_nome }}</span>
+                    <div class="flex items-center gap-2">
+                        <span class="bg-white text-slate-500 border border-slate-200 px-2 py-0.5 rounded shadow-sm text-[9px] font-black uppercase tracking-wider">{{ log.tamanho }}</span>
+                        <span class="text-slate-300">|</span>
+                        <span class="text-[9px] font-black text-slate-400 uppercase tracking-widest">{{ log.genero }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <div class="md:col-span-2 glass-panel py-24 text-center">
+            <div class="w-20 h-20 bg-white rounded-full flex items-center justify-center mx-auto mb-5 border border-slate-100 shadow-sm">
+                <i class="fas fa-box-open text-4xl text-slate-300"></i>
+            </div>
+            <h3 class="text-xl font-black text-slate-700 tracking-tight mb-1">Nenhuma entrega registada</h3>
+            <p class="text-sm font-medium text-slate-500">O histórico de saídas está completamente vazio.</p>
+        </div>
+        {% endfor %}
+    </div>
 </div>
 {% endblock %}
+

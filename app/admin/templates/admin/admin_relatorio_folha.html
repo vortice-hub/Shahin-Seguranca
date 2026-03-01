@@ -1,42 +1,78 @@
 {% extends 'base.html' %}
 {% block content %}
-<div class="mb-6 flex justify-between items-center">
-    <h2 class="text-2xl font-bold text-slate-800">Relatório de Folha</h2>
-    <form action="/admin/relatorio-folha" method="POST" class="flex gap-2">
-        <input type="month" name="mes_ref" value="{{ mes_ref }}" class="p-2 rounded-lg border border-slate-200 text-sm">
-        <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded-lg font-bold text-sm">Filtrar</button>
-    </form>
-</div>
+<div class="max-w-5xl mx-auto animate-fade-in">
+    <div class="mb-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+        <div>
+            <h2 class="text-3xl font-black text-slate-800 tracking-tight">Saldos do Mês</h2>
+            <p class="text-sm text-slate-500 font-medium mt-1">Acompanhamento do banco de horas da equipa por competência.</p>
+        </div>
+        
+        <div class="glass-panel p-2 flex items-center gap-3 border border-slate-200/60 shadow-sm">
+            <label class="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-3 hidden sm:block">Competência</label>
+            <form action="/admin/relatorio-folha" method="POST" class="m-0 flex items-center gap-2">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <input type="month" name="mes_ref" value="{{ mes_ref }}" class="input-pro cursor-pointer !py-2 !text-sm font-bold bg-white text-brand shadow-sm border-none ring-1 ring-slate-100 w-auto">
+                <button type="submit" class="btn-primary !py-2 !px-5 text-xs h-full">Filtrar</button>
+            </form>
+        </div>
+    </div>
 
-<div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-    <table class="w-full text-left text-sm">
-        <thead class="bg-slate-50 text-slate-400 font-bold text-xs uppercase border-b border-slate-100">
-            <tr>
-                <th class="px-6 py-4">Funcionário</th>
-                <th class="px-6 py-4">Cargo</th>
-                <th class="px-6 py-4 text-center">Saldo do Mês</th>
-                <th class="px-6 py-4 text-right">Ação</th>
-            </tr>
-        </thead>
-        <tbody class="divide-y divide-slate-100">
-            {% for item in relatorio %}
-            <tr class="hover:bg-slate-50 transition">
-                <td class="px-6 py-4">
-                    <!-- Drill-down: Link para o espelho do funcionario -->
-                    <a href="/ponto/espelho?user_id={{ item.id }}&mes_ref={{ mes_ref }}" class="font-bold text-blue-600 hover:underline">
-                        {{ item.nome }}
-                    </a>
-                </td>
-                <td class="px-6 py-4 text-slate-500">{{ item.cargo }}</td>
-                <td class="px-6 py-4 text-center font-mono font-bold {{ item.sinal }}">{{ item.saldo_formatado }}</td>
-                <td class="px-6 py-4 text-right">
-                    <a href="/ponto/espelho?user_id={{ item.id }}&mes_ref={{ mes_ref }}" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1 rounded-full transition">
-                        Auditar Ponto
-                    </a>
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+    <div class="glass-panel overflow-hidden shadow-md animate-fade-in" style="animation-delay: 0.1s; animation-fill-mode: both;">
+        <div class="overflow-x-auto">
+            <table class="w-full text-left text-sm text-slate-600">
+                <thead class="bg-slate-50/50 text-[10px] uppercase text-slate-400 font-black tracking-widest border-b border-slate-100">
+                    <tr>
+                        <th class="px-6 py-5">Colaborador</th>
+                        <th class="px-6 py-5">Função</th>
+                        <th class="px-6 py-5 text-center">Saldo de Horas</th>
+                        <th class="px-6 py-5 text-right">Ação</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100/50">
+                    {% for item in relatorio %}
+                    <tr class="hover:bg-white/60 transition group">
+                        <td class="px-6 py-5">
+                            <a href="/ponto/espelho?user_id={{ item.id }}&mes_ref={{ mes_ref }}" class="font-bold text-slate-800 hover:text-brand transition flex items-center gap-4">
+                                <div class="w-10 h-10 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center text-xs font-black shadow-inner group-hover:bg-brand/10 group-hover:text-brand border border-slate-200 transition">
+                                    {{ item.nome[:2].upper() }}
+                                </div>
+                                {{ item.nome }}
+                            </a>
+                        </td>
+                        <td class="px-6 py-5 font-medium text-slate-500">{{ item.cargo }}</td>
+                        <td class="px-6 py-5 text-center">
+                            {% set bg_saldo = 'bg-slate-100 text-slate-600' %}
+                            {% if 'text-red' in item.sinal %} 
+                                {% set bg_saldo = 'bg-red-50 text-red-600 border border-red-100' %}
+                            {% elif 'text-emerald' in item.sinal or 'text-blue' in item.sinal %} 
+                                {% set bg_saldo = 'bg-emerald-50 text-emerald-600 border border-emerald-100' %} 
+                            {% endif %}
+                            
+                            <span class="font-mono font-black text-sm {{ bg_saldo }} px-4 py-1.5 rounded-lg inline-block shadow-sm">
+                                {{ item.saldo_formatado }}
+                            </span>
+                        </td>
+                        <td class="px-6 py-5 text-right">
+                            <a href="/ponto/espelho?user_id={{ item.id }}&mes_ref={{ mes_ref }}" class="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-brand bg-brand/5 hover:bg-brand/10 px-4 py-2 rounded-lg transition shadow-sm border border-brand/10">
+                                <i class="fas fa-search text-[10px]"></i> Auditar
+                            </a>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="4" class="px-6 py-20 text-center text-slate-400">
+                            <div class="w-20 h-20 bg-white rounded-full flex items-center justify-center mx-auto mb-4 shadow-sm border border-slate-100">
+                                <i class="fas fa-calendar-times text-3xl text-slate-300"></i>
+                            </div>
+                            <span class="font-black tracking-tight text-slate-600 block text-base mb-1">Nenhum registo</span>
+                            <span class="font-medium text-sm">Não há cálculos para a competência {{ mes_ref }}.</span>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
 </div>
 {% endblock %}
+

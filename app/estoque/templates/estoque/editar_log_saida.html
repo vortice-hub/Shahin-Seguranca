@@ -1,21 +1,55 @@
 {% extends 'base.html' %}
 {% block content %}
-<div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
-    <h2 class="text-lg font-bold text-slate-800 mb-4">Editar Histórico (Saída)</h2>
-    <form action="/historico/saida/editar/{{ log.id }}" method="POST" class="space-y-4">
-        <div class="grid grid-cols-2 gap-4">
-            <div><label class="label-pro">Coordenador</label><input type="text" name="coordenador" value="{{ log.coordenador }}" class="input-pro"></div>
-            <div><label class="label-pro">Colaborador</label><input type="text" name="colaborador" value="{{ log.colaborador }}" class="input-pro"></div>
+<div class="max-w-2xl mx-auto animate-fade-in">
+    <div class="flex items-center justify-between mb-8">
+        <div>
+            <h2 class="text-3xl font-black text-slate-800 tracking-tight">Editar Saída</h2>
+            <p class="text-sm text-slate-500 font-medium mt-1">Correção de log de entrega no histórico.</p>
         </div>
-        <div><label class="label-pro">Item (Texto)</label><input type="text" name="item_nome" value="{{ log.item_nome }}" class="input-pro"></div>
-        <div><label class="label-pro">Quantidade</label><input type="number" name="quantidade" value="{{ log.quantidade }}" class="input-pro"></div>
-        <div><label class="label-pro">Data</label><input type="date" name="data" value="{{ log.data_entrega.strftime('%Y-%m-%d') }}" class="input-pro"></div>
-        
-        <div class="flex gap-3 pt-4">
-            <button type="submit" name="acao" value="salvar" class="flex-1 bg-blue-600 text-white font-bold py-3 rounded-lg">Salvar Correção</button>
-            <button type="submit" name="acao" value="excluir" class="flex-none bg-red-100 text-red-600 font-bold py-3 px-6 rounded-lg" onclick="return confirm('Excluir este registro?')"><i class="fas fa-trash"></i></button>
-        </div>
-    </form>
+        <a href="/historico/saida" class="btn-glass text-xs"><i class="fas fa-arrow-left mr-1"></i> Voltar</a>
+    </div>
+
+    <div class="glass-panel overflow-hidden shadow-md">
+        <form action="/historico/saida/editar/{{ log.id }}" method="POST" class="p-8 space-y-6 bg-white/50">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                <div class="bg-slate-50/80 p-5 rounded-2xl border border-slate-100 shadow-inner">
+                    <label class="label-pro">Coordenador (Autorizou)</label>
+                    <input type="text" name="coordenador" value="{{ log.coordenador }}" class="input-pro bg-white focus:bg-white shadow-sm font-bold text-slate-700">
+                </div>
+                <div class="bg-slate-50/80 p-5 rounded-2xl border border-slate-100 shadow-inner">
+                    <label class="label-pro text-brand">Colaborador (Recebeu)</label>
+                    <input type="text" name="colaborador" value="{{ log.colaborador }}" class="input-pro bg-white focus:bg-white shadow-sm font-bold text-slate-800">
+                </div>
+            </div>
+
+            <div>
+                <label class="label-pro">Item (Texto do Registo)</label>
+                <input type="text" name="item_nome" value="{{ log.item_nome }}" class="input-pro font-bold text-slate-600 bg-slate-50">
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                <div>
+                    <label class="label-pro text-red-600">Qtd. Entregue</label>
+                    <input type="number" name="quantidade" value="{{ log.quantidade }}" class="input-pro text-red-600 font-black text-xl text-center bg-red-50/30 border-red-100 focus:border-red-400">
+                </div>
+                <div>
+                    <label class="label-pro">Data da Entrega</label>
+                    <input type="date" name="data" value="{{ log.data_entrega.strftime('%Y-%m-%d') }}" class="input-pro text-slate-600 font-medium">
+                </div>
+            </div>
+
+            <div class="flex gap-4 pt-6 border-t border-slate-200 mt-4">
+                <button type="submit" name="acao" value="salvar" class="flex-1 btn-primary !bg-blue-600 hover:!bg-blue-700 shadow-blue-500/30 !py-3.5">
+                    <i class="fas fa-save mr-2"></i> Salvar Correção
+                </button>
+                <button type="submit" name="acao" value="excluir" class="flex-none w-14 flex justify-center items-center bg-white border border-red-200 text-red-500 hover:bg-red-50 hover:text-red-600 rounded-xl font-bold transition shadow-sm" onclick="return confirm('Tem a certeza que deseja excluir este registo?')" title="Excluir Log">
+                    <i class="fas fa-trash-alt"></i>
+                </button>
+            </div>
+        </form>
+    </div>
 </div>
-<style>.label-pro { display: block; font-size: 0.7rem; font-weight: 700; color: #64748b; text-transform: uppercase; margin-bottom: 0.5rem; } .input-pro { width: 100%; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 0.5rem; padding: 0.75rem 1rem; }</style>
 {% endblock %}
+
