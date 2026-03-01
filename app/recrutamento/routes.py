@@ -1,6 +1,7 @@
 import os
 import uuid
-from flask import render_template, request, redirect, url_for, flash
+import json
+from flask import render_template, request, redirect, url_for, flash, jsonify
 from flask_login import login_required, current_user
 from werkzeug.utils import secure_filename
 from google.cloud import storage
@@ -8,7 +9,9 @@ from google.cloud import storage
 from app.recrutamento import recrutamento_bp
 from app.models import Vaga, Candidato, Candidatura, FaseRecrutamento
 from app.extensions import db
-from flask import jsonify
+
+# IMPORTANTE: Importar o nosso motor de IA
+from app.services.cv_parser import analisar_curriculo_ia
 
 # ==============================================================================
 # 🎯 VORTICE RECRUTAMENTO - GESTÃO DE VAGAS E ATS
@@ -71,61 +74,93 @@ def banco_talentos():
 @recrutamento_bp.route('/banco-talentos/novo', methods=['POST'])
 @login_required
 def novo_candidato():
-    """Cadastra um novo candidato fazendo upload do currículo para o GCP Storage."""
-    nome = request.form.get('nome')
-    email = request.form.get('email')
-    telefone = request.form.get('telefone')
-    tags = request.form.get('palavras_chave')
+    """Cadastra um novo candidato via I.A. e faz upload para o GCP Storage."""
+    # Pega os dados manuais (se o RH tiver digitado algo, isso substitui a I.A.)
+    nome_manual = request.form.get('nome')
+    email_manual = request.form.get('email')
+    telefone_manual = request.form.get('telefone')
+    tags_manuais = request.form.get('palavras_chave')
     
     arquivo_cv = request.files.get('arquivo_cv')
     url_cv = None
+    texto_extraido = None
     
-    # ☁️ Lógica de Upload Profissional para o Google Cloud Storage
+    # Variáveis finais que vão para o BD
+    nome_final = nome_manual
+    email_final = email_manual
+    telefone_final = telefone_manual
+    tags_finais = tags_manuais
+    
     if arquivo_cv and arquivo_cv.filename:
-        bucket_name = os.environ.get('VORTICE_BUCKET')
+        # --- 🤖 1. MAGIA DA I.A. (Lê o PDF antes de guardar) ---
+        dados_ia = analisar_curriculo_ia(arquivo_cv)
         
-        if not bucket_name:
-            flash('Erro de infraestrutura: Variável VORTICE_BUCKET não está configurada.', 'error')
-            return redirect(url_for('recrutamento.banco_talentos'))
+        if dados_ia:
+            # Se o RH deixou o campo em branco, preenchemos com o que a I.A. encontrou
+            nome_final = nome_manual if nome_manual else dados_ia.get('nome', 'Candidato Sem Nome')
+            email_final = email_manual if email_manual else dados_ia.get('email')
+            telefone_final = telefone_manual if telefone_manual else dados_ia.get('telefone')
+            tags_finais = tags_manuais if tags_manuais else dados_ia.get('palavras_chave')
+            texto_extraido = json.dumps(dados_ia) # Guarda o JSON bruto por segurança/auditoria
+        else:
+            if not nome_final: nome_final = "Candidato (A Revisar)"
             
-        try:
-            # 1. Gera um nome de arquivo único e isolado por Tenant (Inquilino)
-            filename = secure_filename(arquivo_cv.filename)
-            extensao = filename.rsplit('.', 1)[1].lower() if '.' in filename else 'pdf'
-            nome_hash = uuid.uuid4().hex
+        # Garante que o ponteiro do arquivo voltou ao início após a IA o ter lido
+        arquivo_cv.seek(0)
             
-            # Caminho no Storage: cvs/{id_da_empresa}/{hash}.pdf
-            caminho_gcp = f"cvs/{current_user.empresa_id}/{nome_hash}.{extensao}"
-            
-            # 2. Conecta ao GCP e faz o upload direto da memória (sem salvar local)
-            storage_client = storage.Client()
-            bucket = storage_client.bucket(bucket_name)
-            blob = bucket.blob(caminho_gcp)
-            
-            blob.upload_from_file(arquivo_cv, content_type=arquivo_cv.content_type)
-            
-            # 3. Retorna a URL pública do currículo
-            url_cv = blob.public_url
-            
-        except Exception as e:
-            flash(f'Falha ao enviar documento para a nuvem: {str(e)}', 'error')
-            return redirect(url_for('recrutamento.banco_talentos'))
-    
-    # Cria o registro no banco de dados com a URL em nuvem
+        # --- ☁️ 2. UPLOAD PARA O GCP STORAGE ---
+        bucket_name = os.environ.get('VORTICE_BUCKET')
+        if bucket_name:
+            try:
+                # 1. Gera um nome de arquivo único e isolado por Tenant
+                filename = secure_filename(arquivo_cv.filename)
+                extensao = filename.rsplit('.', 1)[1].lower() if '.' in filename else 'pdf'
+                nome_hash = uuid.uuid4().hex
+                
+                # Caminho no Storage: cvs/{id_da_empresa}/{hash}.pdf
+                caminho_gcp = f"cvs/{current_user.empresa_id}/{nome_hash}.{extensao}"
+                
+                # 2. Conecta ao GCP e faz o upload direto da memória
+                storage_client = storage.Client()
+                bucket = storage_client.bucket(bucket_name)
+                blob = bucket.blob(caminho_gcp)
+                
+                blob.upload_from_file(arquivo_cv, content_type=arquivo_cv.content_type)
+                
+                # 3. Retorna a URL pública do currículo
+                url_cv = blob.public_url
+            except Exception as e:
+                flash(f'Falha no upload para nuvem: {str(e)}', 'error')
+                return redirect(url_for('recrutamento.banco_talentos'))
+        else:
+            flash('Aviso: VORTICE_BUCKET não configurado. CV não foi salvo na nuvem.', 'error')
+
+    # Se não mandou PDF nem Nome, barra a ação
+    if not nome_final and not arquivo_cv:
+        flash('É necessário anexar um currículo ou informar o nome.', 'error')
+        return redirect(url_for('recrutamento.banco_talentos'))
+
+    # Cria o registro no banco de dados
     novo_cand = Candidato(
-        nome=nome,
-        email=email,
-        telefone=telefone,
-        palavras_chave=tags,
+        nome=nome_final,
+        email=email_final,
+        telefone=telefone_final,
+        palavras_chave=tags_finais,
         url_curriculo=url_cv,
+        texto_extraido=texto_extraido,
         empresa_id=current_user.empresa_id
     )
     
     db.session.add(novo_cand)
     db.session.commit()
     
-    flash(f'O currículo de {nome} foi guardado no banco com sucesso!', 'success')
+    flash(f'Sucesso! O CV de {nome_final} foi processado.', 'success')
     return redirect(url_for('recrutamento.banco_talentos'))
+
+
+# ==============================================================================
+# 🎯 VORTICE RECRUTAMENTO - KANBAN (DRAG & DROP)
+# ==============================================================================
 
 @recrutamento_bp.route('/vagas/<int:vaga_id>/kanban', methods=['GET'])
 @login_required
@@ -181,3 +216,4 @@ def mover_candidato():
         return jsonify({'success': True})
         
     return jsonify({'success': False, 'error': 'Não encontrado'}), 404
+
