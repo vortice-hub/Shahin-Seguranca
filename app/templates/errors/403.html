@@ -1,16 +1,29 @@
 {% extends 'base.html' %}
 {% block content %}
-<div class="flex flex-col items-center justify-center min-h-[60vh] text-center px-4 animate-fade-in">
-    <div class="w-28 h-28 bg-red-100 text-red-500 rounded-full flex items-center justify-center text-5xl mb-6 shadow-inner ring-4 ring-red-50">
-        <i class="fas fa-shield-alt"></i>
-    </div>
-    <h1 class="text-4xl font-black text-slate-800 mb-2">Acesso Negado</h1>
-    <h2 class="text-lg font-bold text-red-600 mb-4">Área Restrita (Erro 403)</h2>
-    <p class="text-sm text-slate-500 mb-8 max-w-md">O seu nível de acesso não permite visualizar este documento ou realizar esta operação. Contacte a supervisão se acha que isto é um erro.</p>
+<div class="flex flex-col items-center justify-center min-h-[75vh] px-4 animate-fade-in">
     
-    <a href="/" class="bg-slate-900 hover:bg-slate-800 text-white font-bold py-4 px-8 rounded-xl shadow-lg transition transform hover:-translate-y-1 flex items-center gap-2">
-        <i class="fas fa-arrow-left"></i> VOLTAR EM SEGURANÇA
-    </a>
+    <div class="glass-panel max-w-lg w-full p-10 md:p-14 text-center relative overflow-hidden shadow-xl border-t-4 border-t-red-500">
+        
+        <div class="absolute -top-10 -right-10 text-[12rem] font-black text-red-500/5 pointer-events-none select-none leading-none">403</div>
+        
+        <div class="relative z-10">
+            <div class="w-20 h-20 bg-red-50 rounded-full flex items-center justify-center text-4xl mb-6 shadow-sm border border-red-100 mx-auto text-red-500">
+                <i class="fas fa-shield-alt"></i>
+            </div>
+            
+            <h1 class="text-3xl font-black text-slate-800 mb-2 tracking-tight">Acesso Bloqueado</h1>
+            <h2 class="text-sm font-bold text-red-600 mb-6 uppercase tracking-widest">Erro 403 - Área Restrita</h2>
+            
+            <p class="text-sm text-slate-500 mb-10 font-medium leading-relaxed bg-white/60 p-5 rounded-2xl border border-slate-100 shadow-inner">
+                O seu nível de acesso atual não permite visualizar esta página ou realizar esta operação. Se acha que isto é um erro, por favor contacte a sua chefia direta.
+            </p>
+            
+            <a href="/" class="w-full btn-primary !bg-slate-900 hover:!bg-slate-800 !shadow-slate-900/30 py-4 text-base flex justify-center items-center gap-2">
+                <i class="fas fa-arrow-left"></i> Voltar à Segurança
+            </a>
+        </div>
+    </div>
+    
 </div>
 {% endblock %}
 

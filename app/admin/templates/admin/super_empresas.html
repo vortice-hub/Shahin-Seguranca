@@ -1,82 +1,83 @@
 {% extends 'base.html' %}
 {% block content %}
-<div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8 bg-slate-900 p-6 rounded-3xl shadow-xl border border-slate-800 relative overflow-hidden">
-    <div class="absolute top-0 left-0 w-1 h-full bg-blue-500"></div>
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-10 bg-slate-900 p-8 rounded-[2rem] shadow-xl border border-slate-800 relative overflow-hidden animate-fade-in">
+    <div class="absolute -top-20 -left-20 w-48 h-48 bg-blue-600/30 rounded-full blur-[80px] pointer-events-none"></div>
+    
     <div class="relative z-10">
-        <h2 class="text-2xl font-black text-white tracking-tight">Vortice <span class="text-blue-500">SaaS</span></h2>
-        <p class="text-xs text-slate-400 font-mono uppercase tracking-widest">Painel de Infraestrutura Global</p>
+        <h2 class="text-3xl font-black text-white tracking-tight">Vortice <span class="text-blue-500">SaaS</span></h2>
+        <p class="text-[10px] text-indigo-300 font-mono uppercase tracking-widest mt-1 font-bold">Painel de Infraestrutura Global</p>
     </div>
     
     <div class="flex flex-wrap items-center gap-3 relative z-10">
-        <button onclick="executarAuditoria()" class="bg-indigo-600/20 hover:bg-indigo-600 text-indigo-400 hover:text-white border border-indigo-500/30 px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2">
+        <button onclick="executarAuditoria()" class="bg-indigo-900/50 hover:bg-indigo-600 text-indigo-300 hover:text-white border border-indigo-700/50 px-5 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2">
             <i class="fas fa-microscope"></i> VORTICE LABS
         </button>
         
-        <button onclick="confirmarAcao('Deseja remover TODAS as empresas e dados gerados pelo Labs?', '/vortice/labs/cleanup')" class="bg-amber-600/20 hover:bg-amber-600 text-amber-400 hover:text-white border border-amber-500/30 px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2">
+        <button onclick="confirmarAcao('Deseja remover TODAS as empresas e dados gerados pelo Labs?', '/vortice/labs/cleanup')" class="bg-amber-900/30 hover:bg-amber-600 text-amber-500 hover:text-white border border-amber-700/30 px-5 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2">
             <i class="fas fa-broom"></i> LIMPAR TESTES
         </button>
 
-        <a href="/vortice/logout" class="bg-red-600/20 hover:bg-red-600 text-red-400 hover:text-white border border-red-500/30 px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2">
-            <i class="fas fa-sign-out-alt"></i> DESCONECTAR
+        <a href="/vortice/logout" class="bg-red-900/30 hover:bg-red-600 text-red-500 hover:text-white border border-red-800/30 px-5 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2">
+            <i class="fas fa-power-off"></i> DESCONECTAR
         </a>
     </div>
 </div>
 
-<div class="flex items-center justify-between mb-6">
-    <h3 class="text-xl font-bold text-slate-800">Clientes Cadastrados</h3>
-    <button onclick="document.getElementById('modalNovaEmpresa').classList.remove('hidden')" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-xl shadow-lg transition transform hover:-translate-y-1 flex items-center gap-2">
+<div class="flex items-center justify-between mb-6 animate-fade-in" style="animation-delay: 0.1s; animation-fill-mode: both;">
+    <h3 class="text-2xl font-black text-slate-800 tracking-tight">Clientes Instanciados</h3>
+    <button onclick="document.getElementById('modalNovaEmpresa').classList.remove('hidden', 'opacity-0')" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 px-6 rounded-xl shadow-lg transition flex items-center gap-2">
         <i class="fas fa-plus"></i> NOVO CLIENTE
     </button>
 </div>
 
-<div class="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+<div class="glass-panel overflow-hidden animate-fade-in" style="animation-delay: 0.2s; animation-fill-mode: both;">
     <table class="w-full text-left border-collapse">
         <thead>
-            <tr class="bg-slate-50 border-b border-slate-100 text-xs text-slate-500 uppercase tracking-wider">
-                <th class="p-4 font-bold">Empresa (Clique p/ Acessos)</th>
-                <th class="p-4 font-bold">Plano</th>
-                <th class="p-4 font-bold">Módulos</th>
-                <th class="p-4 font-bold text-right">Ações de Gestão</th>
+            <tr class="bg-slate-50/50 border-b border-slate-100 text-[10px] text-slate-400 uppercase tracking-widest font-black">
+                <th class="p-5">Inquilino (Tenant)</th>
+                <th class="p-5">Plano</th>
+                <th class="p-5">Módulos Ativos</th>
+                <th class="p-5 text-right">Gestão da Instância</th>
             </tr>
         </thead>
-        <tbody class="divide-y divide-slate-100">
+        <tbody class="divide-y divide-slate-100/50">
             {% for empresa in empresas %}
-            <tr class="hover:bg-slate-50/50 transition group">
-                <td class="p-4">
-                    <div class="flex items-center gap-3">
-                        <img src="{{ (empresa.config_json or {}).get('logo_url', '/static/icons/vortice-icon.png') }}" class="w-10 h-10 rounded-lg object-cover border border-slate-200 bg-white">
+            <tr class="hover:bg-white/60 transition group">
+                <td class="p-5">
+                    <div class="flex items-center gap-4">
+                        <img src="{{ (empresa.config_json or {}).get('logo_url', '/static/icons/vortice-icon.png') }}" class="w-12 h-12 rounded-xl object-cover border border-slate-200 bg-white shadow-sm">
                         <div>
-                            <button onclick="abrirCredenciais('{{ empresa.nome }}', '{{ empresa.master_nome }}', '{{ empresa.master_cpf }}', 'terminal_{{ empresa.slug }}', 'terminal1234{{ empresa.slug }}')" class="font-bold text-slate-800 hover:text-blue-600 transition flex items-center gap-2 text-left">
-                                {{ empresa.nome }} <i class="fas fa-key text-slate-300 text-[10px]"></i>
+                            <button onclick="abrirCredenciais('{{ empresa.nome }}', '{{ empresa.master_nome }}', '{{ empresa.master_cpf }}', 'terminal_{{ empresa.slug }}', 'terminal1234{{ empresa.slug }}')" class="font-black text-slate-800 text-base hover:text-blue-600 transition flex items-center gap-2 text-left">
+                                {{ empresa.nome }} <i class="fas fa-key text-blue-400 text-[10px] opacity-0 group-hover:opacity-100 transition"></i>
                             </button>
-                            <div class="text-[10px] text-slate-400 font-mono">{{ empresa.slug }}</div>
+                            <div class="text-[10px] text-slate-400 font-mono mt-0.5">slug: {{ empresa.slug }}</div>
                         </div>
                     </div>
                 </td>
-                <td class="p-4">
-                    <span class="px-2 py-1 bg-slate-100 text-slate-600 text-[10px] font-bold uppercase rounded border border-slate-200">{{ empresa.plano }}</span>
+                <td class="p-5">
+                    <span class="px-2.5 py-1 bg-slate-100 text-slate-600 text-[9px] font-black uppercase tracking-wider rounded-md border border-slate-200">{{ empresa.plano }}</span>
                 </td>
-                <td class="p-4">
-                    <div class="flex gap-1">
-                        {% if empresa.features_json.get('ponto') %}<i class="fas fa-fingerprint text-purple-400 text-xs" title="Ponto"></i>{% endif %}
-                        {% if empresa.features_json.get('documentos') %}<i class="fas fa-file-alt text-blue-400 text-xs" title="Documentos"></i>{% endif %}
-                        {% if empresa.features_json.get('estoque') %}<i class="fas fa-box text-emerald-400 text-xs" title="Estoque"></i>{% endif %}
+                <td class="p-5">
+                    <div class="flex gap-2">
+                        {% if empresa.features_json.get('ponto') %}<div class="w-6 h-6 rounded-md bg-purple-50 text-purple-500 flex items-center justify-center border border-purple-100" title="Ponto"><i class="fas fa-fingerprint text-[10px]"></i></div>{% endif %}
+                        {% if empresa.features_json.get('documentos') %}<div class="w-6 h-6 rounded-md bg-blue-50 text-blue-500 flex items-center justify-center border border-blue-100" title="Documentos"><i class="fas fa-file-alt text-[10px]"></i></div>{% endif %}
+                        {% if empresa.features_json.get('estoque') %}<div class="w-6 h-6 rounded-md bg-emerald-50 text-emerald-500 flex items-center justify-center border border-emerald-100" title="Estoque"><i class="fas fa-box text-[10px]"></i></div>{% endif %}
                     </div>
                 </td>
-                <td class="p-4 text-right space-x-1">
-                    <button onclick="abrirBranding({{ empresa.id }}, '{{ (empresa.config_json or {}).get('cor_primaria', '#2563eb') }}', '{{ (empresa.config_json or {}).get('cor_hover', '#1d4ed8') }}', '{{ (empresa.config_json or {}).get('logo_url', '') }}')" class="w-8 h-8 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition" title="Cores e Logo">
+                <td class="p-5 text-right space-x-1">
+                    <button onclick="abrirBranding({{ empresa.id }}, '{{ (empresa.config_json or {}).get('cor_primaria', '#2563eb') }}', '{{ (empresa.config_json or {}).get('cor_hover', '#1d4ed8') }}', '{{ (empresa.config_json or {}).get('logo_url', '') }}')" class="w-8 h-8 rounded-full text-slate-400 bg-white border border-slate-100 shadow-sm hover:text-blue-600 hover:bg-blue-50 transition" title="Cores e Logo">
                         <i class="fas fa-palette text-xs"></i>
                     </button>
-                    <button onclick="abrirModulos({{ empresa.id }}, {{ empresa.features_json | tojson }})" class="w-8 h-8 rounded-lg text-slate-400 hover:text-purple-600 hover:bg-purple-50 transition" title="Ativar Módulos">
+                    <button onclick="abrirModulos({{ empresa.id }}, {{ empresa.features_json | tojson }})" class="w-8 h-8 rounded-full text-slate-400 bg-white border border-slate-100 shadow-sm hover:text-purple-600 hover:bg-purple-50 transition" title="Ativar Módulos">
                         <i class="fas fa-cubes text-xs"></i>
                     </button>
                     <form action="/vortice/empresas/status/{{ empresa.id }}" method="POST" class="inline">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                        <button type="submit" class="w-8 h-8 rounded-lg {% if empresa.ativa %}text-emerald-500 hover:bg-emerald-50{% else %}text-red-500 hover:bg-red-50{% endif %} transition">
+                        <button type="submit" class="w-8 h-8 rounded-full bg-white border border-slate-100 shadow-sm {% if empresa.ativa %}text-emerald-500 hover:bg-emerald-50{% else %}text-red-500 hover:bg-red-50{% endif %} transition" title="Status">
                             <i class="fas fa-power-off text-xs"></i>
                         </button>
                     </form>
-                    <button type="button" onclick="confirmarAcao('ATENÇÃO: Deletar a empresa {{ empresa.nome }} apagará TODOS os funcionários, pontos e documentos. Confirmar?', '/vortice/empresas/excluir/{{ empresa.id }}')" class="w-8 h-8 rounded-lg text-slate-300 hover:text-red-600 hover:bg-red-50 transition">
+                    <button type="button" onclick="confirmarAcao('ATENÇÃO: Deletar a empresa {{ empresa.nome }} apagará TODOS os funcionários, pontos e documentos. Confirmar?', '/vortice/empresas/excluir/{{ empresa.id }}')" class="w-8 h-8 rounded-full text-slate-300 bg-white border border-slate-100 shadow-sm hover:text-red-600 hover:bg-red-50 transition" title="Excluir Definitivamente">
                         <i class="fas fa-trash-alt text-xs"></i>
                     </button>
                 </td>
@@ -86,108 +87,127 @@
     </table>
 </div>
 
-<div id="modalNovaEmpresa" class="hidden fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-    <div class="bg-white rounded-3xl shadow-2xl max-w-xl w-full overflow-hidden">
+<div id="modalNovaEmpresa" class="hidden fixed inset-0 bg-slate-900/60 z-[100] flex items-center justify-center p-4 backdrop-blur-md opacity-0 transition-opacity duration-300">
+    <div class="glass-panel max-w-xl w-full overflow-hidden shadow-2xl">
         <div class="bg-blue-600 p-6 flex justify-between items-center text-white">
-            <h3 class="font-bold text-lg">Cadastrar Novo Cliente SaaS</h3>
-            <button onclick="document.getElementById('modalNovaEmpresa').classList.add('hidden')" class="hover:text-blue-200"><i class="fas fa-times"></i></button>
+            <h3 class="font-black tracking-tight text-lg">Instanciar Novo Cliente SaaS</h3>
+            <button onclick="document.getElementById('modalNovaEmpresa').classList.add('hidden', 'opacity-0')" class="hover:text-blue-200"><i class="fas fa-times"></i></button>
         </div>
-        <form action="/vortice/empresas/nova" method="POST" enctype="multipart/form-data" class="p-8 max-h-[80vh] overflow-y-auto">
+        <form action="/vortice/empresas/nova" method="POST" enctype="multipart/form-data" class="p-8 max-h-[80vh] overflow-y-auto bg-white/50">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
             
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-                <div class="col-span-2"><label class="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Nome Fantasia da Empresa</label><input type="text" name="nome_empresa" required placeholder="Ex: Shahin Logística" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl"></div>
-                <div><label class="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Nome do Gestor Master</label><input type="text" name="nome_master" required placeholder="Nome Completo" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl"></div>
-                <div><label class="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">CPF do Master (Login)</label><input type="text" name="cpf_master" required placeholder="000.000.000-00" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl"></div>
+                <div class="col-span-2">
+                    <label class="label-pro !text-[10px]">Nome Fantasia da Empresa</label>
+                    <input type="text" name="nome_empresa" required placeholder="Ex: Logística SA" class="input-pro font-bold text-slate-800">
+                </div>
+                <div>
+                    <label class="label-pro !text-[10px]">Nome do Gestor Master</label>
+                    <input type="text" name="nome_master" required placeholder="Nome Completo" class="input-pro">
+                </div>
+                <div>
+                    <label class="label-pro !text-[10px]">CPF do Master (Acesso Inicial)</label>
+                    <input type="text" name="cpf_master" required placeholder="000.000.000-00" class="input-pro font-mono tracking-widest">
+                </div>
                 
-                <div><label class="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Cor Primária</label><input type="color" name="cor_primaria" value="#2563eb" class="w-full h-12 p-1 bg-white border border-slate-200 rounded-xl cursor-pointer"></div>
-                <div><label class="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Cor Hover</label><input type="color" name="cor_hover" value="#1d4ed8" class="w-full h-12 p-1 bg-white border border-slate-200 rounded-xl cursor-pointer"></div>
+                <div>
+                    <label class="label-pro !text-[10px]">Cor Primária</label>
+                    <input type="color" name="cor_primaria" value="#2563eb" class="w-full h-12 p-1 bg-white border border-slate-200 rounded-xl cursor-pointer shadow-sm">
+                </div>
+                <div>
+                    <label class="label-pro !text-[10px]">Cor Hover</label>
+                    <input type="color" name="cor_hover" value="#1d4ed8" class="w-full h-12 p-1 bg-white border border-slate-200 rounded-xl cursor-pointer shadow-sm">
+                </div>
                 
-                <div class="col-span-2"><label class="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Logotipo da Empresa</label><input type="file" name="logo_arquivo" accept="image/*" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs"></div>
+                <div class="col-span-2">
+                    <label class="label-pro !text-[10px]">Logotipo da Empresa</label>
+                    <input type="file" name="logo_arquivo" accept="image/*" class="w-full p-3 bg-white border border-slate-200 rounded-xl text-xs shadow-sm">
+                </div>
             </div>
             
-            <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-2xl shadow-lg transition flex items-center justify-center gap-2">
-                <i class="fas fa-check-circle"></i> FINALIZAR E CRIAR ACESSOS
+            <button type="submit" class="w-full btn-primary py-4 text-base">
+                <i class="fas fa-magic mr-2"></i> Criar Instância e Acessos
             </button>
         </form>
     </div>
 </div>
 
-<div id="modalBranding" class="hidden fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-    <div class="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden">
-        <div class="bg-slate-800 p-5 flex justify-between items-center text-white">
-            <h3 class="font-bold">Ajustar Identidade Visual</h3>
-            <button onclick="document.getElementById('modalBranding').classList.add('hidden')" class="hover:text-slate-400"><i class="fas fa-times"></i></button>
+<div id="modalBranding" class="hidden fixed inset-0 bg-slate-900/60 z-[100] flex items-center justify-center p-4 backdrop-blur-md opacity-0 transition-opacity duration-300">
+    <div class="glass-panel max-w-md w-full overflow-hidden shadow-2xl">
+        <div class="bg-slate-800 p-6 flex justify-between items-center text-white">
+            <h3 class="font-black tracking-tight text-lg">Ajustar Identidade Visual</h3>
+            <button onclick="document.getElementById('modalBranding').classList.add('hidden', 'opacity-0')" class="hover:text-slate-400"><i class="fas fa-times"></i></button>
         </div>
-        <form id="formBranding" method="POST" enctype="multipart/form-data" class="p-6 space-y-4">
+        <form id="formBranding" method="POST" enctype="multipart/form-data" class="p-8 space-y-5 bg-white/50">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-            <div class="grid grid-cols-2 gap-4">
-                <div><label class="text-xs font-bold text-slate-500">Cor Primária</label><input type="color" name="cor_primaria" id="edit_cor_p" class="w-full h-10 rounded-lg"></div>
-                <div><label class="text-xs font-bold text-slate-500">Cor Hover</label><input type="color" name="cor_hover" id="edit_cor_h" class="w-full h-10 rounded-lg"></div>
+            <div class="grid grid-cols-2 gap-5">
+                <div><label class="label-pro !text-[10px]">Cor Primária</label><input type="color" name="cor_primaria" id="edit_cor_p" class="w-full h-12 p-1 bg-white rounded-xl shadow-sm border border-slate-200"></div>
+                <div><label class="label-pro !text-[10px]">Cor Hover</label><input type="color" name="cor_hover" id="edit_cor_h" class="w-full h-12 p-1 bg-white rounded-xl shadow-sm border border-slate-200"></div>
             </div>
-            <div><label class="text-xs font-bold text-slate-500">URL do Logo (Opcional)</label><input type="text" name="logo_url" id="edit_logo_url" class="w-full p-3 bg-slate-50 border rounded-xl text-xs"></div>
-            <div><label class="text-xs font-bold text-slate-500">Ou Enviar Novo Ficheiro</label><input type="file" name="logo_arquivo" class="w-full p-2 text-xs"></div>
-            <button type="submit" class="w-full bg-blue-600 text-white font-bold py-3 rounded-xl shadow-md">SALVAR BRANDING</button>
+            <div><label class="label-pro !text-[10px]">URL do Logo (Opcional)</label><input type="text" name="logo_url" id="edit_logo_url" class="input-pro text-xs"></div>
+            <div><label class="label-pro !text-[10px]">Ou Enviar Novo Ficheiro</label><input type="file" name="logo_arquivo" class="input-pro text-xs !py-2.5"></div>
+            
+            <div class="pt-2"><button type="submit" class="w-full btn-primary py-4 text-sm">Salvar Branding</button></div>
         </form>
     </div>
 </div>
 
-<div id="modalModulos" class="hidden fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-    <div class="bg-white rounded-3xl shadow-2xl max-w-sm w-full overflow-hidden">
-        <div class="bg-purple-600 p-5 flex justify-between items-center text-white">
-            <h3 class="font-bold">Ativar Recursos</h3>
-            <button onclick="document.getElementById('modalModulos').classList.add('hidden')" class="hover:text-purple-200"><i class="fas fa-times"></i></button>
+<div id="modalModulos" class="hidden fixed inset-0 bg-slate-900/60 z-[100] flex items-center justify-center p-4 backdrop-blur-md opacity-0 transition-opacity duration-300">
+    <div class="glass-panel max-w-sm w-full overflow-hidden shadow-2xl">
+        <div class="bg-purple-600 p-6 flex justify-between items-center text-white">
+            <h3 class="font-black tracking-tight text-lg">Módulos do Contrato</h3>
+            <button onclick="document.getElementById('modalModulos').classList.add('hidden', 'opacity-0')" class="hover:text-purple-200"><i class="fas fa-times"></i></button>
         </div>
-        <form id="formModulos" method="POST" class="p-8 space-y-6">
+        <form id="formModulos" method="POST" class="p-8 space-y-4 bg-white/50">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-            <div class="space-y-4">
-                <label class="flex items-center justify-between p-4 bg-slate-50 rounded-2xl cursor-pointer">
-                    <span class="font-bold text-slate-700">Controle de Ponto</span>
-                    <input type="checkbox" name="mod_ponto" id="chk_ponto" class="w-5 h-5 accent-purple-600">
-                </label>
-                <label class="flex items-center justify-between p-4 bg-slate-50 rounded-2xl cursor-pointer">
-                    <span class="font-bold text-slate-700">Documentos / RH</span>
-                    <input type="checkbox" name="mod_documentos" id="chk_docs" class="w-5 h-5 accent-purple-600">
-                </label>
-                <label class="flex items-center justify-between p-4 bg-slate-50 rounded-2xl cursor-pointer">
-                    <span class="font-bold text-slate-700">Estoque / EPI</span>
-                    <input type="checkbox" name="mod_estoque" id="chk_estoque" class="w-5 h-5 accent-purple-600">
-                </label>
-            </div>
-            <button type="submit" class="w-full bg-purple-600 text-white font-bold py-4 rounded-2xl shadow-lg">ATUALIZAR CONTRATO</button>
+            
+            <label class="flex items-center justify-between p-5 bg-white border border-slate-200 shadow-sm rounded-2xl cursor-pointer hover:border-purple-300 transition">
+                <span class="font-bold text-slate-700 text-sm">Controle de Ponto</span>
+                <input type="checkbox" name="mod_ponto" id="chk_ponto" class="w-5 h-5 accent-purple-600">
+            </label>
+            <label class="flex items-center justify-between p-5 bg-white border border-slate-200 shadow-sm rounded-2xl cursor-pointer hover:border-purple-300 transition">
+                <span class="font-bold text-slate-700 text-sm">Documentos / RH</span>
+                <input type="checkbox" name="mod_documentos" id="chk_docs" class="w-5 h-5 accent-purple-600">
+            </label>
+            <label class="flex items-center justify-between p-5 bg-white border border-slate-200 shadow-sm rounded-2xl cursor-pointer hover:border-purple-300 transition">
+                <span class="font-bold text-slate-700 text-sm">Estoque / EPI</span>
+                <input type="checkbox" name="mod_estoque" id="chk_estoque" class="w-5 h-5 accent-purple-600">
+            </label>
+            
+            <div class="pt-4"><button type="submit" class="w-full btn-primary !bg-purple-600 hover:!bg-purple-700 py-4 text-sm shadow-purple-600/30">Atualizar Permissões</button></div>
         </form>
     </div>
 </div>
 
-<div id="modalCredenciais" class="hidden fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4">
-    <div class="bg-white rounded-3xl shadow-2xl max-w-sm w-full overflow-hidden transform scale-95 transition-transform duration-300" id="modalCredContent">
+<div id="modalCredenciais" class="hidden fixed inset-0 bg-slate-900/60 z-[150] flex items-center justify-center p-4 backdrop-blur-md opacity-0 transition-opacity duration-300">
+    <div class="glass-panel max-w-sm w-full overflow-hidden transform scale-95 transition-transform duration-300 shadow-2xl" id="modalCredContent">
         <div class="bg-slate-900 p-6 text-white flex justify-between items-start">
-            <div><h3 class="font-bold text-lg" id="cEmpresa">---</h3><p class="text-[10px] text-blue-400 uppercase font-black">Credenciais de Acesso</p></div>
+            <div><h3 class="font-black text-xl tracking-tight" id="cEmpresa">---</h3><p class="text-[9px] text-blue-400 uppercase font-black tracking-widest mt-1">Acessos do Inquilino</p></div>
             <button onclick="fecharCredenciais()" class="text-slate-500 hover:text-white"><i class="fas fa-times"></i></button>
         </div>
-        <div class="p-6 space-y-4">
-            <div class="p-4 bg-blue-50 rounded-2xl border border-blue-100">
-                <p class="text-[10px] font-black text-blue-800 uppercase mb-2">Gestor Master</p>
-                <p class="text-sm font-bold text-slate-700" id="cMNome">---</p>
-                <p class="text-xs font-mono text-slate-500 mt-1">Login: <span id="cMCPf" class="select-all font-bold text-slate-800">---</span></p>
+        <div class="p-8 space-y-5 bg-white/50">
+            <div class="p-5 bg-blue-50/80 rounded-2xl border border-blue-100 shadow-sm">
+                <p class="text-[9px] font-black text-blue-600 uppercase tracking-widest mb-3 flex items-center gap-1.5"><i class="fas fa-user-shield"></i> Gestor Master</p>
+                <p class="text-sm font-bold text-slate-800" id="cMNome">---</p>
+                <p class="text-[11px] font-mono text-slate-500 mt-1">Login: <span id="cMCPf" class="select-all font-bold text-slate-800 bg-white px-1 rounded">---</span></p>
             </div>
-            <div class="p-4 bg-emerald-50 rounded-2xl border border-emerald-100">
-                <p class="text-[10px] font-black text-emerald-800 uppercase mb-2">Terminal Portaria</p>
-                <p class="text-xs font-mono text-slate-600">Usuário: <span id="cTUser" class="select-all font-bold text-slate-800">---</span></p>
-                <p class="text-xs font-mono text-slate-600 mt-1">Senha: <span id="cTPass" class="select-all font-bold text-slate-800">---</span></p>
+            <div class="p-5 bg-emerald-50/80 rounded-2xl border border-emerald-100 shadow-sm">
+                <p class="text-[9px] font-black text-emerald-600 uppercase tracking-widest mb-3 flex items-center gap-1.5"><i class="fas fa-tablet-alt"></i> Terminal Portaria</p>
+                <p class="text-[11px] font-mono text-slate-600 mb-1">User: <span id="cTUser" class="select-all font-bold text-slate-800 bg-white px-1 rounded">---</span></p>
+                <p class="text-[11px] font-mono text-slate-600">Pass: <span id="cTPass" class="select-all font-bold text-slate-800 bg-white px-1 rounded">---</span></p>
             </div>
         </div>
     </div>
 </div>
 
-<div id="modalLabs" class="hidden fixed inset-0 bg-black/80 z-[200] flex items-center justify-center p-4">
-    <div class="bg-slate-900 border border-slate-700 rounded-3xl shadow-2xl max-w-4xl w-full overflow-hidden">
-        <div class="p-6 border-b border-slate-800 flex justify-between items-center">
-            <h3 class="text-indigo-400 font-bold flex items-center gap-2"><i class="fas fa-terminal"></i> VORTICE LABS - AUDITORIA EM TEMPO REAL</h3>
-            <button onclick="document.getElementById('modalLabs').classList.add('hidden')" class="text-slate-500 hover:text-white"><i class="fas fa-times text-xl"></i></button>
+<div id="modalLabs" class="hidden fixed inset-0 bg-slate-950/90 z-[200] flex items-center justify-center p-4 backdrop-blur-xl opacity-0 transition-opacity duration-300">
+    <div class="bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl max-w-4xl w-full overflow-hidden transform scale-95 transition-transform duration-300" id="modalLabsContent">
+        <div class="p-6 border-b border-slate-800 flex justify-between items-center bg-slate-900">
+            <h3 class="text-indigo-400 font-bold flex items-center gap-2 font-mono text-sm uppercase tracking-widest"><i class="fas fa-terminal"></i> Vortice Labs &bull; Auditoria</h3>
+            <button onclick="document.getElementById('modalLabs').classList.add('hidden', 'opacity-0')" class="text-slate-500 hover:text-white"><i class="fas fa-times text-xl"></i></button>
         </div>
-        <div id="logsLabs" class="p-6 h-[500px] overflow-y-auto font-mono text-xs text-emerald-400 space-y-1 bg-black/50">
-            <p>> A aguardar início do processo...</p>
+        <div id="logsLabs" class="p-6 h-[500px] overflow-y-auto font-mono text-xs text-emerald-400 space-y-1.5 bg-black/80">
+            <p class="text-slate-500">> Inicializando sistema...</p>
         </div>
     </div>
 </div>
@@ -199,31 +219,50 @@
         document.getElementById('cMCPf').innerText = mCpf;
         document.getElementById('cTUser').innerText = tUser;
         document.getElementById('cTPass').innerText = tPass;
-        document.getElementById('modalCredenciais').classList.remove('hidden');
-        setTimeout(() => document.getElementById('modalCredContent').classList.add('scale-100'), 10);
+        
+        const modal = document.getElementById('modalCredenciais');
+        modal.classList.remove('hidden');
+        setTimeout(() => {
+            modal.classList.remove('opacity-0');
+            document.getElementById('modalCredContent').classList.add('scale-100');
+        }, 10);
     }
     function fecharCredenciais() {
+        const modal = document.getElementById('modalCredenciais');
         document.getElementById('modalCredContent').classList.remove('scale-100');
-        setTimeout(() => document.getElementById('modalCredenciais').classList.add('hidden'), 200);
+        modal.classList.add('opacity-0');
+        setTimeout(() => modal.classList.add('hidden'), 300);
     }
     function abrirBranding(id, cp, ch, logo) {
         document.getElementById('formBranding').action = `/vortice/empresas/branding/${id}`;
         document.getElementById('edit_cor_p').value = cp;
         document.getElementById('edit_cor_h').value = ch;
         document.getElementById('edit_logo_url').value = logo;
-        document.getElementById('modalBranding').classList.remove('hidden');
+        const modal = document.getElementById('modalBranding');
+        modal.classList.remove('hidden');
+        setTimeout(() => modal.classList.remove('opacity-0'), 10);
     }
     function abrirModulos(id, features) {
         document.getElementById('formModulos').action = `/vortice/empresas/modulos/${id}`;
         document.getElementById('chk_ponto').checked = features.ponto;
         document.getElementById('chk_docs').checked = features.documentos;
         document.getElementById('chk_estoque').checked = features.estoque;
-        document.getElementById('modalModulos').classList.remove('hidden');
+        const modal = document.getElementById('modalModulos');
+        modal.classList.remove('hidden');
+        setTimeout(() => modal.classList.remove('opacity-0'), 10);
     }
     async function executarAuditoria() {
+        const modal = document.getElementById('modalLabs');
+        const content = document.getElementById('modalLabsContent');
         const logs = document.getElementById('logsLabs');
-        document.getElementById('modalLabs').classList.remove('hidden');
-        logs.innerHTML = '<p class="text-white animate-pulse">Iniciando auditoria de isolamento Multi-Tenant...</p>';
+        
+        modal.classList.remove('hidden');
+        setTimeout(() => {
+            modal.classList.remove('opacity-0');
+            content.classList.add('scale-100');
+        }, 10);
+        
+        logs.innerHTML = '<p class="text-indigo-400 animate-pulse">> Conectando ao motor de I.A e validando isolamento Multi-Tenant...</p>';
         try {
             const req = await fetch('/vortice/labs/audit', { method: 'POST', headers: { 'X-CSRFToken': '{{ csrf_token() }}' } });
             const data = await req.json();
@@ -233,7 +272,7 @@
                 logs.innerHTML += `<p class="${cor}">> ${l}</p>`;
             });
             logs.scrollTop = logs.scrollHeight;
-        } catch (e) { logs.innerHTML += '<p class="text-red-500">Erro fatal na conexão com o Labs.</p>'; }
+        } catch (e) { logs.innerHTML += '<p class="text-red-500">> Erro fatal na conexão com o Labs.</p>'; }
     }
 </script>
 {% endblock %}

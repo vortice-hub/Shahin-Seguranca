@@ -34,8 +34,8 @@ def login(slug=None):
         raw_input = request.form.get('username', '').strip()
         password = request.form.get('password')
         
-        # Limpa pontuação se for CPF
-        username = re.sub(r'[^0-9a-zA-Z]', '', raw_input)
+        # CORREÇÃO: Limpa formatação solta, mas preserva o underscore (_) do terminal e formatos de e-mail
+        username = re.sub(r'[^0-9a-zA-Z_@.-]', '', raw_input)
         
         user = User.query.filter_by(username=username).first()
         if not user:
