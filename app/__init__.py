@@ -96,7 +96,7 @@ def create_app():
         from app.estoque.routes import estoque_bp
         from app.documentos.routes import documentos_bp
         from app.main.routes import main_bp
-	from app.recrutamento import recrutamento_bp
+        from app.recrutamento import recrutamento_bp
 
         app.register_blueprint(auth_bp)
         app.register_blueprint(admin_bp)
@@ -105,7 +105,7 @@ def create_app():
         app.register_blueprint(estoque_bp)
         app.register_blueprint(documentos_bp)
         app.register_blueprint(main_bp)
-	app.register_blueprint(recrutamento_bp)
+        app.register_blueprint(recrutamento_bp)
 
     return app
 
