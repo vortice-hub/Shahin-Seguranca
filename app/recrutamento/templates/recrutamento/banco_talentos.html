@@ -1,0 +1,153 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="mb-8 flex flex-col md:flex-row justify-between items-start md:items-end gap-6 animate-fade-in">
+    <div>
+        <h2 class="text-3xl font-black text-slate-800 tracking-tight flex items-center gap-3">
+            <i class="fas fa-users text-brand"></i> Banco de Talentos
+        </h2>
+        <p class="text-sm text-slate-500 font-medium mt-1">A sua base de dados global de currículos e candidatos.</p>
+    </div>
+    
+    <div class="flex items-center gap-3">
+        <a href="/vagas" class="btn-glass text-xs"><i class="fas fa-briefcase mr-1"></i> Ver Vagas</a>
+        <button onclick="document.getElementById('modalNovoCandidato').classList.remove('hidden', 'opacity-0')" class="btn-primary !px-6 shadow-lg shadow-brand/20 flex items-center gap-2">
+            <i class="fas fa-upload"></i> Adicionar Currículo
+        </button>
+    </div>
+</div>
+
+<div class="mb-8 relative animate-fade-in" style="animation-delay: 0.1s; animation-fill-mode: both;">
+    <i class="fas fa-search absolute left-5 top-1/2 -translate-y-1/2 text-slate-400"></i>
+    <input type="text" id="buscaCandidato" onkeyup="filtrarCandidatos()" placeholder="Pesquisar por nome ou habilidade (Ex: Empilhador, Excel)..." class="w-full pl-12 pr-4 py-4 rounded-2xl border-none bg-white/60 backdrop-blur-md shadow-sm focus:outline-none focus:ring-2 focus:ring-brand font-medium text-slate-700 transition">
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" id="gridCandidatos">
+    {% for candidato in candidatos %}
+    <div class="glass-panel p-6 relative group hover:-translate-y-1 transition duration-300 item-candidato">
+        <div class="flex items-start gap-4 mb-4">
+            <div class="w-12 h-12 rounded-2xl bg-brand/10 text-brand font-black text-lg flex items-center justify-center border border-brand/20 shadow-sm flex-shrink-0">
+                {{ candidato.nome[:2].upper() }}
+            </div>
+            <div>
+                <h3 class="font-black text-slate-800 text-base leading-tight mb-1 nome-cand">{{ candidato.nome }}</h3>
+                <p class="text-[10px] text-slate-500 font-bold uppercase tracking-widest">{{ candidato.telefone or 'Sem Telefone' }}</p>
+            </div>
+        </div>
+        
+        <div class="mb-5">
+            <p class="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2 pl-1">Habilidades / Tags</p>
+            <div class="flex flex-wrap gap-1.5 tags-cand">
+                {% if candidato.palavras_chave %}
+                    {% for tag in candidato.palavras_chave.split(',') %}
+                    <span class="bg-white border border-slate-200 text-slate-600 px-2.5 py-1 rounded-md text-[9px] font-black uppercase tracking-wider shadow-sm">{{ tag.strip() }}</span>
+                    {% endfor %}
+                {% else %}
+                    <span class="text-xs italic text-slate-400 font-medium">Nenhuma tag registada.</span>
+                {% endif %}
+            </div>
+        </div>
+        
+        <div class="pt-4 border-t border-slate-100 flex gap-2">
+            {% if candidato.url_curriculo %}
+            <a href="{{ candidato.url_curriculo }}" target="_blank" class="flex-1 bg-white hover:bg-brand/5 border border-slate-200 text-slate-600 hover:text-brand font-bold text-xs py-2.5 rounded-xl transition flex items-center justify-center gap-2 shadow-sm">
+                <i class="fas fa-file-pdf text-red-500"></i> Ver CV
+            </a>
+            {% else %}
+            <button disabled class="flex-1 bg-slate-50 border border-slate-100 text-slate-400 font-bold text-xs py-2.5 rounded-xl flex items-center justify-center gap-2 opacity-60 cursor-not-allowed">
+                Sem Anexo
+            </button>
+            {% endif %}
+            
+            <button class="w-10 flex-shrink-0 bg-white hover:bg-slate-50 border border-slate-200 text-slate-400 font-bold text-xs py-2.5 rounded-xl transition flex items-center justify-center shadow-sm" title="Vincular a uma Vaga">
+                <i class="fas fa-link"></i>
+            </button>
+        </div>
+    </div>
+    {% else %}
+    <div class="col-span-full glass-panel py-20 text-center">
+        <div class="w-20 h-20 bg-white rounded-full flex items-center justify-center mx-auto mb-4 border border-slate-100 shadow-sm text-slate-300">
+            <i class="fas fa-id-badge text-4xl"></i>
+        </div>
+        <h3 class="text-lg font-black text-slate-800 tracking-tight mb-1">Banco Vazio</h3>
+        <p class="text-sm font-medium text-slate-500 mb-6">Ainda não registou nenhum currículo.</p>
+        <button onclick="document.getElementById('modalNovoCandidato').classList.remove('hidden', 'opacity-0')" class="btn-primary !px-8 shadow-lg shadow-brand/20">
+            Adicionar o Primeiro Candidato
+        </button>
+    </div>
+    {% endfor %}
+</div>
+
+<div id="modalNovoCandidato" class="hidden fixed inset-0 bg-slate-900/60 z-[100] flex items-center justify-center p-4 backdrop-blur-md opacity-0 transition-opacity duration-300">
+    <div class="glass-panel max-w-lg w-full overflow-hidden shadow-2xl transform scale-95 transition-transform duration-300" id="modalCandContent">
+        <div class="bg-brand/5 p-6 flex justify-between items-center border-b border-brand/10">
+            <h3 class="font-black text-brand tracking-tight text-lg flex items-center gap-2"><i class="fas fa-user-plus"></i> Novo Currículo</h3>
+            <button onclick="fecharModalCand()" class="w-8 h-8 bg-white rounded-full text-slate-400 hover:text-slate-600 flex items-center justify-center shadow-sm transition"><i class="fas fa-times"></i></button>
+        </div>
+        
+        <form action="{{ url_for('recrutamento.novo_candidato') }}" method="POST" enctype="multipart/form-data" class="p-8 space-y-5 bg-white/50">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            
+            <div>
+                <label class="label-pro">Nome Completo</label>
+                <input type="text" name="nome" required placeholder="Ex: Maria Silva" class="input-pro font-bold text-slate-800">
+            </div>
+            
+            <div class="grid grid-cols-2 gap-4">
+                <div><label class="label-pro">Telefone / WhatsApp</label><input type="text" name="telefone" placeholder="(00) 00000-0000" class="input-pro text-sm"></div>
+                <div><label class="label-pro">Email</label><input type="email" name="email" placeholder="maria@email.com" class="input-pro text-sm"></div>
+            </div>
+            
+            <div>
+                <label class="label-pro flex justify-between">
+                    <span>Palavras-Chave (Tags)</span>
+                    <span class="text-[9px] text-slate-400 font-medium normal-case">Separadas por vírgula</span>
+                </label>
+                <input type="text" name="palavras_chave" placeholder="Ex: CNH B, Inglês, Vigia" class="input-pro text-sm border-brand/30 focus:ring-brand/20">
+            </div>
+
+            <div class="bg-slate-50 p-4 rounded-2xl border border-slate-200 border-dashed text-center mt-2 group hover:bg-brand/5 transition cursor-pointer relative">
+                <input type="file" name="arquivo_cv" accept=".pdf" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" onchange="document.getElementById('nome-arquivo').innerText = this.files[0].name;">
+                <i class="fas fa-file-upload text-2xl text-slate-300 group-hover:text-brand mb-2 transition"></i>
+                <p class="text-xs font-bold text-slate-600 group-hover:text-brand" id="nome-arquivo">Anexar PDF do Currículo</p>
+            </div>
+            
+            <div class="pt-4 border-t border-slate-100">
+                <button type="submit" class="w-full btn-primary py-4 text-base shadow-lg shadow-brand/20">
+                    <i class="fas fa-save mr-2"></i> GUARDAR NO BANCO
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    document.addEventListener("DOMContentLoaded", () => {
+        document.getElementById('modalCandContent').classList.add('scale-100');
+    });
+
+    function fecharModalCand() {
+        const modal = document.getElementById('modalNovoCandidato');
+        document.getElementById('modalCandContent').classList.remove('scale-100');
+        modal.classList.add('opacity-0');
+        setTimeout(() => modal.classList.add('hidden'), 300);
+    }
+
+    function filtrarCandidatos() {
+        let input = document.getElementById('buscaCandidato');
+        let filter = input.value.toUpperCase();
+        let grid = document.getElementById('gridCandidatos');
+        let itens = grid.getElementsByClassName('item-candidato');
+        
+        for (let i = 0; i < itens.length; i++) {
+            let nome = itens[i].getElementsByClassName('nome-cand')[0].innerText.toUpperCase();
+            let tags = itens[i].getElementsByClassName('tags-cand')[0].innerText.toUpperCase();
+            if (nome.indexOf(filter) > -1 || tags.indexOf(filter) > -1) { 
+                itens[i].style.display = ""; 
+            } else { 
+                itens[i].style.display = "none"; 
+            }
+        }
+    }
+</script>
+{% endblock %}
+

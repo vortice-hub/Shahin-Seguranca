@@ -106,6 +106,12 @@ def create_app():
         app.register_blueprint(documentos_bp)
         app.register_blueprint(main_bp)
         app.register_blueprint(recrutamento_bp)
+        
+        # ==============================================================================
+        # 🚀 AUTO-MIGRAÇÃO DE BANCO DE DADOS
+        # Cria fisicamente as tabelas que faltam no PostgreSQL (Vagas, Candidatos, etc)
+        # ==============================================================================
+        db.create_all()
 
     return app
 
