@@ -1,99 +1,113 @@
 {% extends 'base.html' %}
 {% block content %}
-<div class="mb-6 flex justify-between items-center">
-    <h2 class="text-2xl font-bold text-slate-800">Novo Funcionário</h2>
-    <a href="{{ url_for('admin.gerenciar_usuarios') }}" class="text-sm font-bold text-slate-400 hover:text-slate-600 transition"><i class="fas fa-arrow-left mr-1"></i> Voltar</a>
-</div>
-
-<div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden max-w-4xl mx-auto">
-    <div class="bg-blue-50 border-b border-blue-100 p-6 flex items-center gap-4">
-        <div class="w-12 h-12 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center text-xl shadow-inner">
-            <i class="fas fa-user-plus"></i>
-        </div>
+<div class="max-w-4xl mx-auto animate-fade-in">
+    <div class="mb-8 flex justify-between items-center gap-4">
         <div>
-            <h3 class="font-bold text-lg text-slate-800">Dados do Colaborador</h3>
-            <p class="text-sm text-slate-500">O utilizador receberá um e-mail com instruções para o Primeiro Acesso.</p>
+            <h2 class="text-3xl font-black text-slate-800 tracking-tight">Novo Funcionário</h2>
+            <p class="text-sm text-slate-500 font-medium mt-1">Pré-cadastro para liberação de acesso ao sistema.</p>
         </div>
+        <a href="{{ url_for('admin.gerenciar_usuarios') }}" class="btn-glass text-xs">
+            <i class="fas fa-arrow-left mr-1"></i> Voltar
+        </a>
     </div>
 
-    <form method="POST" action="{{ url_for('admin.novo_usuario') }}" class="p-8">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-        
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-            <div class="col-span-1 md:col-span-2"><h4 class="text-xs font-black text-slate-400 uppercase tracking-widest border-b pb-2 mb-4">Informações Pessoais</h4></div>
-            
-            <div>
-                <label class="label-pro">Nome Completo</label>
-                <input type="text" name="nome" class="input-pro" placeholder="Ex: João Silva" required>
+    <div class="glass-panel overflow-hidden animate-fade-in" style="animation-delay: 0.1s; animation-fill-mode: both;">
+        <div class="bg-brand/5 border-b border-brand/10 p-6 flex items-center gap-4">
+            <div class="w-12 h-12 bg-white text-brand rounded-2xl flex items-center justify-center text-xl shadow-sm">
+                <i class="fas fa-user-plus"></i>
             </div>
             <div>
-                <label class="label-pro">E-mail Profissional</label>
-                <input type="email" name="email" class="input-pro" placeholder="joao.silva@empresa.com" required>
-            </div>
-            <div>
-                <label class="label-pro">CPF</label>
-                <input type="text" name="cpf" class="input-pro" placeholder="000.000.000-00" required>
-            </div>
-            <div>
-                <label class="label-pro">Data de Admissão</label>
-                <input type="date" name="data_admissao" class="input-pro" required>
-            </div>
-
-            <div class="col-span-1 md:col-span-2 mt-4"><h4 class="text-xs font-black text-slate-400 uppercase tracking-widest border-b pb-2 mb-4">Dados do Contrato</h4></div>
-            
-            <div>
-                <label class="label-pro">Razão Social</label>
-                <input type="text" name="razao_social" class="input-pro" value="{{ g.empresa.nome if g.empresa else '' }}" required>
-            </div>
-            <div>
-                <label class="label-pro">CNPJ</label>
-                <input type="text" name="cnpj" class="input-pro" placeholder="00.000.000/0001-00" value="" required>
-            </div>
-            <div>
-                <label class="label-pro">Departamento</label>
-                <select name="departamento" class="input-pro cursor-pointer">
-                    <option value="Operacional">Operacional</option>
-                    <option value="Administrativo">Administrativo</option>
-                    <option value="Comercial">Comercial</option>
-                    <option value="Diretoria">Diretoria</option>
-                    <option value="RH">Recursos Humanos</option>
-                </select>
-            </div>
-            <div>
-                <label class="label-pro">Cargo Efetivo (Função)</label>
-                <input type="text" name="funcao" class="input-pro" placeholder="Ex: Vigilante, Rececionista..." required>
-            </div>
-
-            <div class="col-span-1 md:col-span-2 mt-4"><h4 class="text-xs font-black text-slate-400 uppercase tracking-widest border-b pb-2 mb-4">Escala e Sistema</h4></div>
-            
-            <div>
-                <label class="label-pro">Escala de Trabalho</label>
-                <select name="escala" class="input-pro cursor-pointer">
-                    <option value="5x2">5x2 (Seg a Sex)</option>
-                    <option value="12x36">12x36 (Dia sim, Dia não)</option>
-                    <option value="6x1">6x1 (6 Dias trab, 1 Folga)</option>
-                    <option value="Personalizado">Personalizado</option>
-                </select>
-            </div>
-            <div>
-                <label class="label-pro flex items-center gap-2">
-                    Cargo no Sistema (RBAC) 
-                    <span class="text-[9px] bg-purple-100 text-purple-600 px-1.5 py-0.5 rounded font-bold uppercase">Acesso</span>
-                </label>
-                <select name="role_sistema" class="input-pro border-purple-200 bg-purple-50 cursor-pointer">
-                    <option value="User">Colaborador Padrão (Sem privilégios)</option>
-                    <option value="Gestor">Gestor (Aprova pontos e férias)</option>
-                    <option value="Admin">Administrador (Acesso total RH)</option>
-                </select>
+                <h3 class="font-black text-lg text-slate-800 tracking-tight">Dados do Colaborador</h3>
+                <p class="text-xs text-slate-500 font-medium">O utilizador completará o cadastro no seu primeiro acesso.</p>
             </div>
         </div>
 
-        <div class="mt-8 pt-6 border-t border-slate-100">
-            <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl shadow-lg transition flex items-center justify-center gap-2">
-                <i class="fas fa-check-circle"></i> CADASTRAR FUNCIONÁRIO
-            </button>
-        </div>
-    </form>
+        <form method="POST" action="{{ url_for('admin.novo_usuario') }}" class="p-8 space-y-8 bg-white/50">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            
+            <div>
+                <h4 class="text-[10px] font-black text-brand uppercase tracking-widest border-b border-brand/10 pb-2 mb-5">Informações Pessoais</h4>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    <div>
+                        <label class="label-pro">Nome Completo</label>
+                        <input type="text" name="nome" class="input-pro" placeholder="Ex: João Silva" required>
+                    </div>
+                    <div>
+                        <label class="label-pro">E-mail Profissional</label>
+                        <input type="email" name="email" class="input-pro" placeholder="joao.silva@empresa.com" required>
+                    </div>
+                    <div>
+                        <label class="label-pro">CPF</label>
+                        <input type="text" name="cpf" class="input-pro font-mono tracking-wider" placeholder="000.000.000-00" required>
+                    </div>
+                    <div>
+                        <label class="label-pro">Data de Admissão</label>
+                        <input type="date" name="data_admissao" class="input-pro text-slate-500" required>
+                    </div>
+                </div>
+            </div>
+
+            <div>
+                <h4 class="text-[10px] font-black text-brand uppercase tracking-widest border-b border-brand/10 pb-2 mb-5">Dados do Contrato</h4>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    <div>
+                        <label class="label-pro">Razão Social</label>
+                        <input type="text" name="razao_social" class="input-pro" value="{{ g.empresa.nome if g.empresa else '' }}" required>
+                    </div>
+                    <div>
+                        <label class="label-pro">CNPJ</label>
+                        <input type="text" name="cnpj" class="input-pro font-mono" placeholder="00.000.000/0001-00" value="" required>
+                    </div>
+                    <div>
+                        <label class="label-pro">Departamento</label>
+                        <select name="departamento" class="input-pro cursor-pointer">
+                            <option value="Operacional">Operacional</option>
+                            <option value="Administrativo">Administrativo</option>
+                            <option value="Comercial">Comercial</option>
+                            <option value="Diretoria">Diretoria</option>
+                            <option value="RH">Recursos Humanos</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="label-pro">Cargo Efetivo (Função)</label>
+                        <input type="text" name="funcao" class="input-pro" placeholder="Ex: Vigilante, Rececionista..." required>
+                    </div>
+                </div>
+            </div>
+
+            <div>
+                <h4 class="text-[10px] font-black text-brand uppercase tracking-widest border-b border-brand/10 pb-2 mb-5">Escala e Sistema</h4>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    <div>
+                        <label class="label-pro">Escala de Trabalho</label>
+                        <select name="escala" class="input-pro cursor-pointer font-bold text-slate-700">
+                            <option value="5x2">5x2 (Seg a Sex)</option>
+                            <option value="12x36">12x36 (Dia sim, Dia não)</option>
+                            <option value="6x1">6x1 (6 Dias trab, 1 Folga)</option>
+                            <option value="Personalizado">Personalizado</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="label-pro flex justify-between">
+                            Cargo no Sistema (RBAC) 
+                            <span class="text-[9px] bg-brand/10 text-brand px-2 py-0.5 rounded-md font-black uppercase tracking-widest">Acesso</span>
+                        </label>
+                        <select name="role_sistema" class="input-pro border-brand/20 bg-brand/5 cursor-pointer font-bold text-brand">
+                            <option value="User">Colaborador Padrão (Sem privilégios)</option>
+                            <option value="Gestor">Gestor (Aprova pontos e férias)</option>
+                            <option value="Admin">Administrador (Acesso total RH)</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div class="pt-6">
+                <button type="submit" class="w-full btn-primary py-4 text-base shadow-lg">
+                    <i class="fas fa-check-circle mr-2"></i> Criar Registo do Colaborador
+                </button>
+            </div>
+        </form>
+    </div>
 </div>
 {% endblock %}
 

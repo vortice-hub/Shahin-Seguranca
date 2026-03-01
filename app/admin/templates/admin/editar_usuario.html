@@ -1,32 +1,37 @@
 {% extends 'base.html' %}
 {% block content %}
-<div class="max-w-lg mx-auto pb-20">
-    <div class="flex items-center justify-between mb-6">
-        <h2 class="text-lg font-bold text-slate-800">Editar Perfil</h2>
-        <a href="/admin/usuarios" class="text-xs font-medium text-slate-500 hover:text-slate-800 transition">Voltar</a>
+<div class="max-w-2xl mx-auto pb-20 animate-fade-in">
+    <div class="flex items-center justify-between mb-8">
+        <div>
+            <h2 class="text-3xl font-black text-slate-800 tracking-tight">Editar Perfil</h2>
+            <p class="text-sm text-slate-500 font-medium mt-1">{{ user.real_name }}</p>
+        </div>
+        <a href="/admin/usuarios" class="btn-glass text-xs">
+            <i class="fas fa-arrow-left mr-1"></i> Voltar
+        </a>
     </div>
 
-    <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-        <form id="form-edicao-usuario" action="/admin/usuarios/editar/{{ user.id }}" method="POST" class="p-8 space-y-6">
+    <div class="glass-panel overflow-hidden shadow-md animate-fade-in" style="animation-delay: 0.1s; animation-fill-mode: both;">
+        <form id="form-edicao-usuario" action="/admin/usuarios/editar/{{ user.id }}" method="POST" class="p-8 space-y-8 bg-white/50">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
             <input type="hidden" id="acao_input" name="acao" value="salvar">
             
-            <div class="space-y-4">
+            <div class="space-y-6">
                 <div>
                     <label class="label-pro">Nome Completo</label>
-                    <input type="text" name="real_name" value="{{ user.real_name }}" class="input-pro">
+                    <input type="text" name="real_name" value="{{ user.real_name }}" class="input-pro text-lg font-bold text-slate-800">
                 </div>
                 
-                <div class="bg-purple-50 p-4 rounded-lg border border-purple-100">
-                    <p class="text-xs font-bold text-purple-800 uppercase mb-3 flex items-center gap-2"><i class="fas fa-sitemap"></i> Estrutura Organizacional</p>
-                    <div class="space-y-3">
+                <div class="bg-brand/5 p-6 rounded-2xl border border-brand/10 shadow-inner">
+                    <p class="text-[10px] font-black text-brand uppercase tracking-widest mb-4 flex items-center gap-2"><i class="fas fa-sitemap"></i> Estrutura Organizacional</p>
+                    <div class="space-y-4">
                         <div>
-                            <label class="label-pro text-purple-700">Departamento / Equipe</label>
-                            <input type="text" name="departamento" class="input-pro border-purple-200 focus:border-purple-500" value="{{ user.departamento or '' }}" placeholder="Ex: Operacional">
+                            <label class="label-pro !text-brand/70">Departamento / Equipe</label>
+                            <input type="text" name="departamento" class="input-pro border-brand/20 focus:border-brand/40 bg-white" value="{{ user.departamento or '' }}" placeholder="Ex: Operacional">
                         </div>
                         <div>
-                            <label class="label-pro text-purple-700">Reporta-se a (Gestor)</label>
-                            <select name="gestor_id" class="input-pro border-purple-200 focus:border-purple-500 cursor-pointer">
+                            <label class="label-pro !text-brand/70">Reporta-se a (Gestor)</label>
+                            <select name="gestor_id" class="input-pro border-brand/20 focus:border-brand/40 cursor-pointer bg-white">
                                 <option value="">-- Sem Gestor Direto --</option>
                                 {% for gestor in gestores %}
                                     <option value="{{ gestor.id }}" {% if user.gestor_id == gestor.id %}selected{% endif %}>{{ gestor.real_name }} ({{ gestor.role }})</option>
@@ -37,95 +42,107 @@
                 </div>
                 
                 {% if user.username != '50097952800' %}
-                <div class="bg-blue-50 p-5 rounded-xl border border-blue-100">
-                    <div class="flex items-center gap-2 mb-2 text-blue-700">
-                        <i class="fas fa-shield-halved"></i>
-                        <span class="text-xs font-bold uppercase tracking-wider">Acesso ao Sistema (RBAC)</span>
-                    </div>
-                    <p class="text-xs text-blue-600 mb-4">Determine o que este funcionário pode ver no sistema.</p>
-                    
-                    <div>
-                        <label class="label-pro text-blue-800">Perfil de Acesso (Cargo)</label>
-                        <select name="cargo_id" class="input-pro border-blue-200 focus:border-blue-500 cursor-pointer font-semibold text-slate-700">
-                            <option value="">-- Funcionário Padrão (Sem acessos extra) --</option>
-                            {% for cargo in cargos %}
-                                <option value="{{ cargo.id }}" {% if user.cargo_id == cargo.id %}selected{% endif %}>🛡️ {{ cargo.nome }}</option>
-                            {% endfor %}
-                        </select>
-                        <p class="text-[10px] text-slate-500 mt-2 text-right"><a href="/admin/cargos" class="text-blue-500 hover:underline">Gerenciar Cargos</a></p>
+                <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-sm relative overflow-hidden">
+                    <div class="absolute -right-4 -top-4 opacity-5 text-white"><i class="fas fa-shield-halved text-8xl"></i></div>
+                    <div class="relative z-10">
+                        <div class="flex items-center gap-2 mb-2 text-blue-300">
+                            <i class="fas fa-key text-xs"></i>
+                            <span class="text-[10px] font-black uppercase tracking-widest">Acesso ao Sistema (RBAC)</span>
+                        </div>
+                        <p class="text-xs text-slate-400 mb-4 font-medium">Determine as permissões que este funcionário tem na plataforma.</p>
+                        
+                        <div>
+                            <select name="cargo_id" class="w-full bg-slate-900 border border-slate-600 text-white rounded-xl px-4 py-3.5 focus:outline-none focus:border-blue-500 transition cursor-pointer font-bold text-sm">
+                                <option value="">-- Funcionário Padrão (Sem acessos extra) --</option>
+                                {% for cargo in cargos %}
+                                    <option value="{{ cargo.id }}" {% if user.cargo_id == cargo.id %}selected{% endif %}>🛡️ {{ cargo.nome }}</option>
+                                {% endfor %}
+                            </select>
+                            <p class="text-[10px] text-slate-400 mt-3 text-right"><a href="/admin/cargos" class="text-blue-400 hover:text-blue-300 transition underline tracking-wider uppercase">Gerenciar Cargos</a></p>
+                        </div>
                     </div>
                 </div>
                 {% else %}
-                <div class="bg-slate-100 p-4 rounded-lg text-center border border-slate-200">
-                    <p class="text-[10px] font-bold text-slate-500 uppercase"><i class="fas fa-lock mr-1"></i> Acesso Master Absoluto</p>
+                <div class="bg-gradient-to-r from-slate-900 to-slate-800 p-5 rounded-2xl text-center shadow-lg">
+                    <p class="text-[10px] font-black text-amber-400 uppercase tracking-widest flex items-center justify-center gap-2"><i class="fas fa-crown text-sm"></i> Acesso Master Absoluto</p>
                 </div>
                 {% endif %}
 
-                <div class="bg-slate-50 p-4 rounded-lg border border-slate-200">
-                    <p class="text-xs font-bold text-slate-400 uppercase mb-3">Contratação e Vínculo</p>
-                    <div class="space-y-3">
+                <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+                    <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 border-b border-slate-100 pb-2">Contratação e Vínculo</p>
+                    <div class="space-y-4">
                         <div>
-                            <label class="label-pro text-emerald-700"><i class="fas fa-calendar-check mr-1"></i> Data de Admissão</label>
-                            <input type="date" name="data_admissao" class="input-pro border-emerald-200 focus:border-emerald-500" value="{{ user.data_admissao.strftime('%Y-%m-%d') if user.data_admissao else '' }}">
+                            <label class="label-pro text-emerald-600">Data de Admissão</label>
+                            <input type="date" name="data_admissao" class="input-pro text-slate-600 border-emerald-100 focus:border-emerald-500" value="{{ user.data_admissao.strftime('%Y-%m-%d') if user.data_admissao else '' }}">
                         </div>
-                        <div>
-                            <label class="label-pro">Razão Social</label>
-                            <input type="text" name="razao_social" class="input-pro" value="{{ user.razao_social_empregadora }}">
-                        </div>
-                        <div>
-                            <label class="label-pro">CNPJ</label>
-                            <input type="text" name="cnpj" class="input-pro font-mono" value="{{ user.cnpj_empregador }}">
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label class="label-pro">Razão Social</label>
+                                <input type="text" name="razao_social" class="input-pro" value="{{ user.razao_social_empregadora }}">
+                            </div>
+                            <div>
+                                <label class="label-pro">CNPJ</label>
+                                <input type="text" name="cnpj" class="input-pro font-mono tracking-wider" value="{{ user.cnpj_empregador }}">
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                <div class="grid grid-cols-2 gap-4">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                        <label class="label-pro">Login</label>
-                        <input type="text" name="username" value="{{ user.username }}" class="input-pro" {% if user.username == '50097952800' %}readonly{% endif %}>
+                        <label class="label-pro">Login (CPF)</label>
+                        <input type="text" name="username" value="{{ user.username }}" class="input-pro font-mono tracking-wider bg-slate-100 text-slate-500 border-dashed" {% if user.username == '50097952800' %}readonly{% endif %}>
                     </div>
                     <div>
-                        <label class="label-pro">Título do Contrato</label>
-                        <input type="text" name="role" value="{{ user.role }}" class="input-pro" placeholder="Ex: Vigia" {% if user.username == '50097952800' %}disabled{% endif %}>
+                        <label class="label-pro">Título da Função</label>
+                        <input type="text" name="role" value="{{ user.role }}" class="input-pro font-medium text-slate-700" placeholder="Ex: Vigia" {% if user.username == '50097952800' %}readonly{% endif %}>
                     </div>
                 </div>
             </div>
 
-            <div class="pt-4 border-t border-slate-100">
-                <p class="text-xs font-bold text-slate-400 uppercase mb-3">Regra de Ponto</p>
-                <div class="mb-4">
-                    <label class="label-pro">Escala</label>
-                    <select name="escala" class="input-pro">
-                        <option value="Livre" {% if user.escala == 'Livre' %}selected{% endif %}>Livre</option>
+            <div class="pt-6 border-t border-slate-200">
+                <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-5">Regra de Ponto e Jornada</p>
+                <div class="mb-5">
+                    <label class="label-pro">Escala Aplicada</label>
+                    <select name="escala" class="input-pro cursor-pointer font-bold text-slate-700">
+                        <option value="Livre" {% if user.escala == 'Livre' %}selected{% endif %}>Livre / Administrativo</option>
                         <option value="5x2" {% if user.escala == '5x2' %}selected{% endif %}>Normal 5x2</option>
                         <option value="12x36" {% if user.escala == '12x36' %}selected{% endif %}>Plantão 12x36</option>
                     </select>
                 </div>
                 
-                <div class="grid grid-cols-2 gap-4 bg-yellow-50 p-4 rounded-lg border border-yellow-100">
-                    <div>
-                        <label class="label-pro text-yellow-800">Carga Diária</label>
-                        <input type="time" name="carga_horaria" value="{{ carga_hm }}" class="input-pro border-yellow-200 font-bold">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div class="bg-yellow-50/80 p-5 rounded-2xl border border-yellow-100">
+                        <label class="label-pro !text-yellow-700">Carga Diária</label>
+                        <input type="time" name="carga_horaria" value="{{ carga_hm }}" class="input-pro bg-white border-yellow-200 font-mono text-lg text-yellow-800 text-center">
                     </div>
-                    <div>
-                        <label class="label-pro text-yellow-800">Intervalo (Min)</label>
-                        <input type="number" name="tempo_intervalo" value="{{ user.tempo_intervalo or 60 }}" class="input-pro border-yellow-200 font-bold">
+                    <div class="bg-blue-50/80 p-5 rounded-2xl border border-blue-100">
+                        <label class="label-pro !text-blue-700">Intervalo (Minutos)</label>
+                        <input type="number" name="tempo_intervalo" value="{{ user.tempo_intervalo or 60 }}" class="input-pro bg-white border-blue-200 font-mono text-lg text-blue-800 text-center">
                     </div>
                 </div>
-                <div class="mt-4">
-                    <label class="label-pro">Horário Ideal</label>
-                    <input type="time" name="h_ent" value="{{ user.inicio_jornada_ideal }}" class="input-pro">
+                <div class="mt-5 w-full sm:w-1/2">
+                    <label class="label-pro flex justify-between">
+                        <span>Horário Ideal de Entrada</span>
+                        <i class="fas fa-clock text-slate-300"></i>
+                    </label>
+                    <input type="time" name="h_ent" value="{{ user.inicio_jornada_ideal }}" class="input-pro font-mono text-slate-600">
                 </div>
             </div>
 
-            <div class="pt-6 border-t border-slate-100 flex flex-col gap-3">
-                <button type="submit" onclick="document.getElementById('acao_input').value='salvar'" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl shadow-lg transition transform active:scale-95">SALVAR ALTERAÇÕES</button>
-                <div class="grid grid-cols-2 gap-3">
-                    <button type="submit" onclick="document.getElementById('acao_input').value='resetar_senha'" class="bg-yellow-50 hover:bg-yellow-100 text-yellow-700 font-bold py-3 rounded-lg text-xs border border-yellow-200 transition">RESETAR SENHA</button>
+            <div class="pt-8 border-t border-slate-200 flex flex-col gap-4">
+                <button type="submit" onclick="document.getElementById('acao_input').value='salvar'" class="w-full btn-primary py-4 text-base shadow-lg">
+                    <i class="fas fa-save mr-2"></i> Gravar Alterações do Perfil
+                </button>
+                
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <button type="submit" onclick="document.getElementById('acao_input').value='resetar_senha'" class="w-full py-3.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold rounded-xl text-sm transition shadow-sm flex items-center justify-center gap-2">
+                        <i class="fas fa-key text-slate-400"></i> Gerar Nova Senha
+                    </button>
                     
                     {% if user.username != '50097952800' %}
-                    <button type="button" onclick="acionarModalExclusao()" class="bg-red-50 hover:bg-red-100 text-red-600 font-bold py-3 rounded-lg text-xs border border-red-200 transition">
-                        EXCLUIR
+                    <button type="button" onclick="acionarModalExclusao()" class="w-full py-3.5 bg-red-50 hover:bg-red-100 text-red-600 font-bold rounded-xl text-sm transition border border-red-100 flex items-center justify-center gap-2">
+                        <i class="fas fa-trash-alt text-red-400"></i> Excluir Registo
                     </button>
                     {% endif %}
                 </div>

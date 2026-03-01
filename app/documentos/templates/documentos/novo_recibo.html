@@ -4,109 +4,148 @@
 <script src="https://cdn.jsdelivr.net/npm/tom-select@2.2.2/dist/js/tom-select.complete.min.js"></script>
 
 <style>
-    /* Correção visual para garantir que o menu da biblioteca não fique escondido sob a caixa */
+    /* Adaptação do TomSelect ao novo Design System Glassmorphism */
     .ts-dropdown {
         z-index: 1000 !important;
-        border-radius: 0 0 10px 10px;
-        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+        border-radius: 0 0 1rem 1rem;
+        box-shadow: 0 15px 50px -10px rgba(0, 0, 0, 0.1);
+        border-color: rgba(226, 232, 240, 0.8);
+        background: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(10px);
     }
     .ts-control {
-        border-radius: 10px;
-        padding: 12px 16px;
+        border-radius: 1rem;
+        padding: 0.85rem 1.2rem;
         font-size: 0.875rem;
-        border-color: #cbd5e1;
+        font-weight: 600;
+        border-color: rgba(226, 232, 240, 0.8);
+        background-color: #f8fafc;
+        box-shadow: none;
+    }
+    .ts-control.focus {
+        border-color: color-mix(in srgb, var(--primary-color) 40%, transparent);
+        box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary-color) 10%, transparent);
+        background-color: #ffffff;
     }
 </style>
 
-<div class="max-w-2xl mx-auto">
-    <div class="flex items-center justify-between mb-6">
-        <h2 class="text-xl font-bold text-slate-800">Gerar Recibo de Pagamento</h2>
-        <a href="/documentos/admin" class="text-xs font-bold text-slate-400 hover:text-slate-600">CANCELAR</a>
+<div class="max-w-3xl mx-auto animate-fade-in">
+    <div class="flex items-center justify-between mb-8">
+        <div>
+            <h2 class="text-3xl font-black text-slate-800 tracking-tight">Gerar Recibo Avulso</h2>
+            <p class="text-sm text-slate-500 font-medium mt-1">Crie recibos digitais instantâneos para assinatura.</p>
+        </div>
+        <a href="/documentos/admin" class="btn-glass text-xs">
+            <i class="fas fa-times mr-1"></i> Cancelar
+        </a>
     </div>
 
-    <div class="bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden">
-        <div class="bg-slate-50 border-b border-slate-100 p-6 text-center">
-            <h3 class="font-serif font-bold text-lg text-slate-700">RECIBO DE PAGAMENTO DE BENEFÍCIOS</h3>
+    <div class="glass-panel overflow-hidden shadow-lg animate-fade-in" style="animation-delay: 0.1s; animation-fill-mode: both;">
+        <div class="bg-slate-800 border-b border-slate-700 p-6 text-center relative overflow-hidden">
+            <div class="absolute -right-6 -top-6 text-white/5"><i class="fas fa-receipt text-8xl"></i></div>
+            <h3 class="font-black text-lg text-white tracking-widest uppercase relative z-10">Recibo de Pagamento</h3>
         </div>
 
-        <form action="/documentos/admin/recibo/novo" method="POST" class="p-8 space-y-6">
+        <form action="/documentos/admin/recibo/novo" method="POST" class="p-8 md:p-10 space-y-8 bg-white/50">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
 
             <div>
-                <label class="label-pro">Selecione o Funcionário (Digite o Nome para Pesquisar)</label>
-                <select name="user_id" id="userSelect" class="w-full" placeholder="Clique e comece a digitar..." autocomplete="off">
-                    <option value="">Clique aqui e digite o nome...</option>
+                <label class="label-pro flex items-center gap-2"><i class="fas fa-user-tag text-brand"></i> Selecione o Funcionário</label>
+                <select name="user_id" id="userSelect" class="w-full" placeholder="Clique e digite o nome..." autocomplete="off">
+                    <option value="">Procurar funcionário...</option>
                     {% for u in usuarios %}
                     <option value="{{ u.id }}">{{ u.real_name }}</option>
                     {% endfor %}
                 </select>
             </div>
 
-            <div class="bg-yellow-50 p-4 rounded-lg border border-yellow-100 text-sm font-serif text-slate-700 italic">
-                "Recebi de <strong id="previewEmpresa" class="text-slate-900">...</strong>, inscrita no CNPJ <strong id="previewCnpj" class="text-slate-900">...</strong> a quantia abaixo..."
+            <div class="bg-yellow-50 p-5 rounded-2xl border border-yellow-100 shadow-inner">
+                <p class="text-xs font-serif text-slate-600 italic leading-relaxed text-center">
+                    "Recebi de <strong id="previewEmpresa" class="text-yellow-800 font-bold border-b border-yellow-200 pb-0.5">...</strong>, inscrita no CNPJ <strong id="previewCnpj" class="text-yellow-800 font-mono">...</strong> a quantia abaixo especificada..."
+                </p>
             </div>
 
-            <div class="grid grid-cols-2 gap-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                    <label class="label-pro text-emerald-600">Valor (R$)</label>
-                    <input type="number" step="0.01" name="valor" class="input-pro text-2xl font-bold text-emerald-700" placeholder="0,00" required>
+                    <label class="label-pro text-emerald-600">Valor Líquido (R$)</label>
+                    <div class="relative">
+                        <span class="absolute left-4 top-1/2 -translate-y-1/2 font-black text-emerald-600">R$</span>
+                        <input type="number" step="0.01" name="valor" class="input-pro pl-12 text-2xl font-black text-emerald-700 !py-4 bg-emerald-50/30 border-emerald-100 focus:border-emerald-500 focus:ring-emerald-500" placeholder="0.00" required>
+                    </div>
                 </div>
                 <div>
-                    <label class="label-pro">Data do Pagamento</label>
-                    <input type="date" name="data_pagamento" value="{{ hoje }}" class="input-pro" required>
+                    <label class="label-pro">Data de Referência/Pagamento</label>
+                    <div class="relative">
+                        <i class="far fa-calendar-alt absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                        <input type="date" name="data_pagamento" value="{{ hoje }}" class="input-pro pl-12 text-slate-700 font-medium !py-4" required>
+                    </div>
                 </div>
             </div>
 
-            <div>
-                <label class="label-pro">Tipo de Benefício (Marque as opções)</label>
-                <div class="grid grid-cols-2 gap-3 mt-2">
-                    <label class="flex items-center p-3 border rounded-lg hover:bg-slate-50 cursor-pointer transition">
-                        <input type="checkbox" name="va" checked class="w-5 h-5 text-blue-600 rounded">
-                        <span class="ml-2 text-sm font-bold text-slate-700">Vale Alimentação (VA)</span>
+            <div class="border-t border-slate-200/60 pt-6">
+                <label class="label-pro mb-4">Referente a (Pode marcar vários)</label>
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                    
+                    <label class="flex items-center p-4 border border-slate-200 rounded-2xl bg-white hover:bg-brand/5 hover:border-brand/30 cursor-pointer transition shadow-sm group">
+                        <input type="checkbox" name="va" checked class="w-5 h-5 text-brand bg-slate-50 border-slate-300 rounded focus:ring-brand">
+                        <span class="ml-3 text-sm font-bold text-slate-700 group-hover:text-brand transition">Vale Alimentação</span>
                     </label>
-                    <label class="flex items-center p-3 border rounded-lg hover:bg-slate-50 cursor-pointer transition">
-                        <input type="checkbox" name="vt" checked class="w-5 h-5 text-blue-600 rounded">
-                        <span class="ml-2 text-sm font-bold text-slate-700">Vale Transporte (VT)</span>
+                    
+                    <label class="flex items-center p-4 border border-slate-200 rounded-2xl bg-white hover:bg-brand/5 hover:border-brand/30 cursor-pointer transition shadow-sm group">
+                        <input type="checkbox" name="vt" checked class="w-5 h-5 text-brand bg-slate-50 border-slate-300 rounded focus:ring-brand">
+                        <span class="ml-3 text-sm font-bold text-slate-700 group-hover:text-brand transition">Vale Transporte</span>
                     </label>
-                    <label class="flex items-center p-3 border rounded-lg hover:bg-slate-50 cursor-pointer transition">
-                        <input type="checkbox" name="assiduidade" class="w-5 h-5 text-blue-600 rounded">
-                        <span class="ml-2 text-sm font-bold text-slate-700">Assiduidade</span>
+                    
+                    <label class="flex items-center p-4 border border-slate-200 rounded-2xl bg-white hover:bg-brand/5 hover:border-brand/30 cursor-pointer transition shadow-sm group">
+                        <input type="checkbox" name="assiduidade" class="w-5 h-5 text-brand bg-slate-50 border-slate-300 rounded focus:ring-brand">
+                        <span class="ml-3 text-sm font-bold text-slate-700 group-hover:text-brand transition">Assiduidade</span>
                     </label>
-                    <label class="flex items-center p-3 border rounded-lg hover:bg-slate-50 cursor-pointer transition">
-                        <input type="checkbox" name="cesta" class="w-5 h-5 text-blue-600 rounded">
-                        <span class="ml-2 text-sm font-bold text-slate-700">Cesta Básica</span>
+                    
+                    <label class="flex items-center p-4 border border-slate-200 rounded-2xl bg-white hover:bg-brand/5 hover:border-brand/30 cursor-pointer transition shadow-sm group">
+                        <input type="checkbox" name="cesta" class="w-5 h-5 text-brand bg-slate-50 border-slate-300 rounded focus:ring-brand">
+                        <span class="ml-3 text-sm font-bold text-slate-700 group-hover:text-brand transition">Cesta Básica</span>
                     </label>
                 </div>
             </div>
 
-            <div>
-                <label class="label-pro">Forma de Pagamento</label>
-                <div class="flex gap-4 mt-2 text-sm text-slate-700 font-bold">
-                    <label class="flex items-center cursor-pointer"><input type="radio" name="forma_pagamento" value="Pix" checked class="mr-2"> Pix</label>
-                    <label class="flex items-center cursor-pointer"><input type="radio" name="forma_pagamento" value="Dinheiro" class="mr-2"> Dinheiro</label>
-                    <label class="flex items-center cursor-pointer"><input type="radio" name="forma_pagamento" value="Transferência" class="mr-2"> Transferência</label>
+            <div class="border-t border-slate-200/60 pt-6">
+                <label class="label-pro mb-4">Forma de Pagamento Utilizada</label>
+                <div class="flex flex-wrap gap-4 text-sm font-bold text-slate-600">
+                    <label class="flex items-center cursor-pointer bg-white px-5 py-3 rounded-xl border border-slate-200 shadow-sm hover:border-brand transition group">
+                        <input type="radio" name="forma_pagamento" value="Pix" checked class="text-brand focus:ring-brand mr-2"> 
+                        <span class="group-hover:text-brand">Pix</span>
+                    </label>
+                    <label class="flex items-center cursor-pointer bg-white px-5 py-3 rounded-xl border border-slate-200 shadow-sm hover:border-brand transition group">
+                        <input type="radio" name="forma_pagamento" value="Dinheiro" class="text-brand focus:ring-brand mr-2"> 
+                        <span class="group-hover:text-brand">Dinheiro Físico</span>
+                    </label>
+                    <label class="flex items-center cursor-pointer bg-white px-5 py-3 rounded-xl border border-slate-200 shadow-sm hover:border-brand transition group">
+                        <input type="radio" name="forma_pagamento" value="Transferência" class="text-brand focus:ring-brand mr-2"> 
+                        <span class="group-hover:text-brand">Transferência (TED/DOC)</span>
+                    </label>
                 </div>
             </div>
 
-            <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl shadow-lg transition">
-                <i class="fas fa-file-signature mr-2"></i> GERAR E SALVAR RECIBO
-            </button>
+            <div class="pt-4">
+                <button type="submit" class="w-full btn-primary py-5 text-lg shadow-xl shadow-brand/20">
+                    <i class="fas fa-file-signature mr-2"></i> GERAR RECIBO E ENVIAR PARA ASSINATURA
+                </button>
+            </div>
         </form>
     </div>
 </div>
 
 <script>
-    // Inicialização Blindada do TomSelect
     new TomSelect("#userSelect", {
         create: false,
-        maxOptions: 100, // Garante que a lista não é cortada prematuramente
+        maxOptions: 100, 
         sortField: {
             field: "text",
             direction: "asc"
         },
         render: {
             no_results: function(data, escape) {
-                return '<div class="no-results text-slate-400 p-2 text-sm">Nenhum funcionário encontrado...</div>';
+                return '<div class="no-results text-slate-400 p-3 text-sm font-medium">Nenhum funcionário encontrado...</div>';
             }
         },
         onChange: function(value) {
@@ -119,8 +158,8 @@
         fetch(`/documentos/api/user-info/${userId}`)
             .then(response => response.json())
             .then(data => {
-                document.getElementById('previewEmpresa').innerText = data.razao_social || "LA SHAHIN SERVIÇOS DE SEGURANÇA LTDA";
-                document.getElementById('previewCnpj').innerText = data.cnpj || "50.537.235/0001-95";
+                document.getElementById('previewEmpresa').innerText = data.razao_social || "EMPRESA PADRÃO";
+                document.getElementById('previewCnpj').innerText = data.cnpj || "00.000.000/0000-00";
             })
             .catch(err => console.error("Erro ao buscar dados:", err));
     }
