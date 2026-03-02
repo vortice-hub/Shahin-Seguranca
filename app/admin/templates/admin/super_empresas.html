@@ -55,7 +55,10 @@
                     </div>
                 </td>
                 <td class="p-5">
-                    <span class="px-2.5 py-1 bg-slate-100 text-slate-600 text-[9px] font-black uppercase tracking-wider rounded-md border border-slate-200">{{ empresa.plano }}</span>
+                    {% set p_color = 'bg-slate-100 text-slate-600 border-slate-200' %}
+                    {% if 'pro' in empresa.plano|lower %}{% set p_color = 'bg-blue-100 text-blue-700 border-blue-200' %}{% endif %}
+                    {% if 'premium' in empresa.plano|lower %}{% set p_color = 'bg-indigo-100 text-indigo-700 border-indigo-200 shadow-sm shadow-indigo-200' %}{% endif %}
+                    <span class="px-2.5 py-1 {{ p_color }} text-[9px] font-black uppercase tracking-wider rounded-md border">{{ empresa.plano }}</span>
                 </td>
                 <td class="p-5">
                     <div class="flex gap-2">
@@ -68,7 +71,7 @@
                     <button onclick="abrirBranding({{ empresa.id }}, '{{ (empresa.config_json or {}).get('cor_primaria', '#2563eb') }}', '{{ (empresa.config_json or {}).get('cor_hover', '#1d4ed8') }}', '{{ (empresa.config_json or {}).get('logo_url', '') }}')" class="w-8 h-8 rounded-full text-slate-400 bg-white border border-slate-100 shadow-sm hover:text-blue-600 hover:bg-blue-50 transition" title="Cores e Logo">
                         <i class="fas fa-palette text-xs"></i>
                     </button>
-                    <button onclick="abrirModulos({{ empresa.id }}, {{ empresa.features_json | tojson }})" class="w-8 h-8 rounded-full text-slate-400 bg-white border border-slate-100 shadow-sm hover:text-purple-600 hover:bg-purple-50 transition" title="Ativar Módulos">
+                    <button onclick="abrirModulos({{ empresa.id }}, {{ empresa.features_json | tojson }}, '{{ empresa.plano }}')" class="w-8 h-8 rounded-full text-slate-400 bg-white border border-slate-100 shadow-sm hover:text-purple-600 hover:bg-purple-50 transition" title="Plano e Módulos">
                         <i class="fas fa-cubes text-xs"></i>
                     </button>
                     <form action="/vortice/empresas/status/{{ empresa.id }}" method="POST" class="inline">
@@ -101,6 +104,16 @@
                     <label class="label-pro !text-[10px]">Nome Fantasia da Empresa</label>
                     <input type="text" name="nome_empresa" required placeholder="Ex: Logística SA" class="input-pro font-bold text-slate-800">
                 </div>
+                
+                <div class="col-span-2">
+                    <label class="label-pro !text-[10px]">Plano de Assinatura Vendido</label>
+                    <select name="plano" class="input-pro font-bold text-slate-800 cursor-pointer">
+                        <option value="Básico">Plano BÁSICO (Sem Estoque/ATS)</option>
+                        <option value="Pro" selected>Plano PRO (Recomendado)</option>
+                        <option value="Premium">Plano PREMIUM (Com I.A. Leitora)</option>
+                    </select>
+                </div>
+
                 <div>
                     <label class="label-pro !text-[10px]">Nome do Gestor Master</label>
                     <input type="text" name="nome_master" required placeholder="Nome Completo" class="input-pro">
@@ -155,26 +168,38 @@
 <div id="modalModulos" class="hidden fixed inset-0 bg-slate-900/60 z-[100] flex items-center justify-center p-4 backdrop-blur-md opacity-0 transition-opacity duration-300">
     <div class="glass-panel max-w-sm w-full overflow-hidden shadow-2xl">
         <div class="bg-purple-600 p-6 flex justify-between items-center text-white">
-            <h3 class="font-black tracking-tight text-lg">Módulos do Contrato</h3>
+            <h3 class="font-black tracking-tight text-lg">Assinatura e Módulos</h3>
             <button onclick="document.getElementById('modalModulos').classList.add('hidden', 'opacity-0')" class="hover:text-purple-200"><i class="fas fa-times"></i></button>
         </div>
         <form id="formModulos" method="POST" class="p-8 space-y-4 bg-white/50">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
             
-            <label class="flex items-center justify-between p-5 bg-white border border-slate-200 shadow-sm rounded-2xl cursor-pointer hover:border-purple-300 transition">
-                <span class="font-bold text-slate-700 text-sm">Controle de Ponto</span>
-                <input type="checkbox" name="mod_ponto" id="chk_ponto" class="w-5 h-5 accent-purple-600">
-            </label>
-            <label class="flex items-center justify-between p-5 bg-white border border-slate-200 shadow-sm rounded-2xl cursor-pointer hover:border-purple-300 transition">
-                <span class="font-bold text-slate-700 text-sm">Documentos / RH</span>
-                <input type="checkbox" name="mod_documentos" id="chk_docs" class="w-5 h-5 accent-purple-600">
-            </label>
-            <label class="flex items-center justify-between p-5 bg-white border border-slate-200 shadow-sm rounded-2xl cursor-pointer hover:border-purple-300 transition">
-                <span class="font-bold text-slate-700 text-sm">Estoque / EPI</span>
-                <input type="checkbox" name="mod_estoque" id="chk_estoque" class="w-5 h-5 accent-purple-600">
-            </label>
+            <div class="mb-4">
+                <label class="label-pro !text-[10px]">Plano Atual</label>
+                <select name="plano" id="edit_plano" class="input-pro font-bold text-slate-800 cursor-pointer">
+                    <option value="Básico">Plano Básico</option>
+                    <option value="Pro">Plano Pro</option>
+                    <option value="Premium">Plano Premium</option>
+                </select>
+            </div>
+
+            <div class="pt-2 border-t border-slate-200 mb-2 mt-2">
+                <p class="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-3">Módulos do Sistema</p>
+                <label class="flex items-center justify-between p-4 bg-white border border-slate-200 shadow-sm rounded-xl cursor-pointer hover:border-purple-300 transition mb-3">
+                    <span class="font-bold text-slate-700 text-sm">Controle de Ponto</span>
+                    <input type="checkbox" name="mod_ponto" id="chk_ponto" class="w-5 h-5 accent-purple-600">
+                </label>
+                <label class="flex items-center justify-between p-4 bg-white border border-slate-200 shadow-sm rounded-xl cursor-pointer hover:border-purple-300 transition mb-3">
+                    <span class="font-bold text-slate-700 text-sm">Documentos / RH</span>
+                    <input type="checkbox" name="mod_documentos" id="chk_docs" class="w-5 h-5 accent-purple-600">
+                </label>
+                <label class="flex items-center justify-between p-4 bg-white border border-slate-200 shadow-sm rounded-xl cursor-pointer hover:border-purple-300 transition">
+                    <span class="font-bold text-slate-700 text-sm">Estoque / EPI</span>
+                    <input type="checkbox" name="mod_estoque" id="chk_estoque" class="w-5 h-5 accent-purple-600">
+                </label>
+            </div>
             
-            <div class="pt-4"><button type="submit" class="w-full btn-primary !bg-purple-600 hover:!bg-purple-700 py-4 text-sm shadow-purple-600/30">Atualizar Permissões</button></div>
+            <div class="pt-4"><button type="submit" class="w-full btn-primary !bg-purple-600 hover:!bg-purple-700 py-4 text-sm shadow-purple-600/30">Atualizar Assinatura</button></div>
         </form>
     </div>
 </div>
@@ -242,8 +267,20 @@
         modal.classList.remove('hidden');
         setTimeout(() => modal.classList.remove('opacity-0'), 10);
     }
-    function abrirModulos(id, features) {
+    
+    // Atualizado para receber o plano atual!
+    function abrirModulos(id, features, planoAtual) {
         document.getElementById('formModulos').action = `/vortice/empresas/modulos/${id}`;
+        
+        // Seleciona o plano atual no dropdown
+        let selectPlano = document.getElementById('edit_plano');
+        for (let i = 0; i < selectPlano.options.length; i++) {
+            if (selectPlano.options[i].value === planoAtual || selectPlano.options[i].value.toLowerCase() === (planoAtual || '').toLowerCase()) {
+                selectPlano.selectedIndex = i;
+                break;
+            }
+        }
+        
         document.getElementById('chk_ponto').checked = features.ponto;
         document.getElementById('chk_docs').checked = features.documentos;
         document.getElementById('chk_estoque').checked = features.estoque;
@@ -251,6 +288,7 @@
         modal.classList.remove('hidden');
         setTimeout(() => modal.classList.remove('opacity-0'), 10);
     }
+    
     async function executarAuditoria() {
         const modal = document.getElementById('modalLabs');
         const content = document.getElementById('modalLabsContent');

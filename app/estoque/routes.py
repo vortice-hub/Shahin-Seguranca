@@ -3,7 +3,7 @@ from flask_login import login_required, current_user
 import logging
 
 from app.extensions import db
-from app.utils import permission_required
+from app.utils import permission_required, requires_plan
 
 # --- IMPORTAÇÃO DOS NOVOS SERVICES E REPOSITORIES ---
 from app.services.estoque_service import EstoqueService
@@ -13,9 +13,9 @@ from app.repositories.estoque_repository import (ItemEstoqueRepository, Historic
 estoque_bp = Blueprint('estoque', __name__, template_folder='templates', url_prefix='/estoque')
 logger = logging.getLogger(__name__)
 
-# CORREÇÃO FASE 1: Rota alterada de '/controle-uniforme' para '/gerenciar'
 @estoque_bp.route('/gerenciar')
 @login_required
+@requires_plan('Pro')
 @permission_required('ESTOQUE')
 def gerenciar_estoque():
     item_repo = ItemEstoqueRepository()
@@ -24,6 +24,7 @@ def gerenciar_estoque():
 
 @estoque_bp.route('/entrada', methods=['GET', 'POST'])
 @login_required
+@requires_plan('Pro')
 @permission_required('ESTOQUE')
 def entrada_estoque():
     if request.method == 'POST':
@@ -39,6 +40,7 @@ def entrada_estoque():
 
 @estoque_bp.route('/saida', methods=['GET', 'POST'])
 @login_required
+@requires_plan('Pro')
 @permission_required('ESTOQUE')
 def saida_estoque():
     item_repo = ItemEstoqueRepository()
@@ -59,6 +61,7 @@ def saida_estoque():
 
 @estoque_bp.route('/historico/entrada')
 @login_required
+@requires_plan('Pro')
 @permission_required('ESTOQUE')
 def ver_historico_entrada():
     entrada_repo = HistoricoEntradaRepository()
@@ -67,6 +70,7 @@ def ver_historico_entrada():
 
 @estoque_bp.route('/historico/saida')
 @login_required
+@requires_plan('Pro')
 @permission_required('ESTOQUE')
 def ver_historico_saida():
     saida_repo = HistoricoSaidaRepository()
@@ -75,6 +79,7 @@ def ver_historico_saida():
 
 @estoque_bp.route('/gerenciar/item/<int:id>', methods=['GET', 'POST'])
 @login_required
+@requires_plan('Pro')
 @permission_required('ESTOQUE')
 def editar_item(id):
     item_repo = ItemEstoqueRepository()
@@ -103,6 +108,7 @@ def editar_item(id):
 
 @estoque_bp.route('/controle-uniforme/importar-excel', methods=['POST'])
 @login_required
+@requires_plan('Pro')
 @permission_required('ESTOQUE')
 def importar_excel_estoque():
     if 'arquivo_excel' not in request.files or request.files['arquivo_excel'].filename == '':
@@ -129,6 +135,7 @@ def importar_excel_estoque():
 
 @estoque_bp.route('/api/tamanhos', methods=['GET'])
 @login_required
+@requires_plan('Pro')
 def api_buscar_tamanhos():
     nome_item = request.args.get('nome')
     if not nome_item: return jsonify([])
@@ -139,9 +146,9 @@ def api_buscar_tamanhos():
     resultados = [{'id': item.id, 'tamanho': item.tamanho, 'genero': item.genero, 'quantidade': item.quantidade} for item in itens]
     return jsonify(resultados)
 
-# CORREÇÃO FASE 1: Rota alterada de '/solicitar' para '/solicitar-uniforme'
 @estoque_bp.route('/solicitar-uniforme', methods=['GET', 'POST'])
 @login_required
+@requires_plan('Pro')
 def solicitar_uniforme():
     item_repo = ItemEstoqueRepository()
     solic_repo = SolicitacaoUniformeRepository()
@@ -163,9 +170,9 @@ def solicitar_uniforme():
     
     return render_template('estoque/solicitar_uniforme.html', nomes_disponiveis=nomes_disponiveis, solicitacoes=minhas_solicitacoes)
 
-# CORREÇÃO FASE 1: Rota alterada de '/solicitacoes' para '/admin/solicitacoes'
 @estoque_bp.route('/admin/solicitacoes', methods=['GET', 'POST'])
 @login_required
+@requires_plan('Pro')
 @permission_required('ESTOQUE')
 def gestao_solicitacoes():
     solic_repo = SolicitacaoUniformeRepository()

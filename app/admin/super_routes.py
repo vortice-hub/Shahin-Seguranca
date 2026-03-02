@@ -73,13 +73,13 @@ def listar_empresas():
 @super_admin_bp.route('/empresas/nova', methods=['POST'])
 @super_admin_required
 def cadastrar_empresa():
-    """Cria nova empresa processando o logotipo e as cores iniciais."""
+    """Cria nova empresa processando o logotipo, cores e o PLANO DE ASSINATURA."""
     service = EmpresaService()
     file_logo = request.files.get('logo_arquivo')
     
     dados_empresa = {
         'nome': request.form.get('nome_empresa'),
-        'plano': request.form.get('plano', 'Standard')
+        'plano': request.form.get('plano', 'Basico') # Capta o plano escolhido no frontend
     }
     
     dados_master = {
@@ -103,7 +103,7 @@ def cadastrar_empresa():
             flag_modified(empresa, "config_json")
             db.session.commit()
             
-        flash(f"Empresa '{empresa.nome}' criada! Terminal: terminal_{empresa.slug} | Senha: terminal1234{empresa.slug}", "success")
+        flash(f"Empresa '{empresa.nome}' (Plano {empresa.plano}) criada! Terminal: terminal_{empresa.slug} | Senha: terminal1234{empresa.slug}", "success")
     except ValueError as ve:
         flash(str(ve), "error")
     except Exception as e:
@@ -162,13 +162,16 @@ def configurar_branding(id):
 @super_admin_bp.route('/empresas/modulos/<int:id>', methods=['POST'])
 @super_admin_required
 def configurar_modulos(id):
-    """Ativa ou desativa módulos específicos para uma empresa."""
+    """Altera o Plano da empresa e ativa ou desativa módulos específicos."""
     repo = EmpresaRepository()
     empresa = repo.get_by_id(id)
     
     if not empresa:
         flash("Empresa não encontrada.", "error")
         return redirect(url_for('super_admin.listar_empresas'))
+
+    # Capta a mudança de plano (Upsell / Downsell)
+    novo_plano = request.form.get('plano', empresa.plano)
 
     novos_modulos = {
         "ponto": request.form.get('mod_ponto') == 'on',
@@ -177,13 +180,14 @@ def configurar_modulos(id):
     }
 
     try:
+        empresa.plano = novo_plano
         empresa.features_json = novos_modulos
         flag_modified(empresa, "features_json")
         db.session.commit()
-        flash(f"Módulos da empresa '{empresa.nome}' atualizados com sucesso!", "success")
+        flash(f"Plano ({novo_plano}) e Módulos da empresa '{empresa.nome}' atualizados com sucesso!", "success")
     except Exception as e:
         db.session.rollback()
-        flash(f"Erro ao atualizar módulos: {e}", "error")
+        flash(f"Erro ao atualizar assinatura: {e}", "error")
 
     return redirect(url_for('super_admin.listar_empresas'))
 

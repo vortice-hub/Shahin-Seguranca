@@ -43,17 +43,40 @@ def create_app():
     # ==============================================================================
     @app.before_request
     def blindagem_multi_tenant():
-        # Ignora arquivos estáticos
+        # 1. Ignora arquivos estáticos
         if request.endpoint and request.endpoint.startswith('static'):
             return
 
-        # Ignora rotas do painel de controle administrativo da Vortice
+        # 2. Ignora rotas do painel de controle administrativo da Vortice
         if request.path.startswith('/vortice'):
             return
 
+        # 3. DETECÇÃO INTELIGENTE DE DOMÍNIO (SaaS Produção vs Staging)
+        host = request.host.lower()
+        
+        # Se NÃO estiver no ambiente de testes (.run.app ou localhost)
+        if '.run.app' not in host and 'localhost' not in host and '127.0.0.1' not in host:
+            # Exemplo: shahin.vortice.company
+            partes = host.split('.')
+            
+            # Garante que há um subdomínio antes de vortice.company
+            if len(partes) >= 3 and partes[-2] == 'vortice' and partes[-1] == 'company':
+                subdominio = partes[0]
+                
+                if subdominio != 'www':
+                    from app.models import Empresa
+                    empresa_host = Empresa.query.filter_by(slug=subdominio).first()
+                    
+                    if not empresa_host or not empresa_host.ativa:
+                        # Bloqueia se aceder a um subdomínio que não existe ou está inativo
+                        abort(404)
+                        
+                    # Injeta a empresa do subdomínio globalmente na sessão
+                    g.empresa = empresa_host
+                    g.empresa_id = empresa_host.id
+
+        # 4. VALIDAÇÃO DE USUÁRIO AUTENTICADO
         if current_user.is_authenticated:
-            # 🏢 Regras de Segurança para Inquilinos (Tenants)
-            # Verifica se o utilizador possui vínculo com uma empresa
             empresa_id = getattr(current_user, 'empresa_id', None)
             
             if empresa_id is None:
@@ -64,13 +87,20 @@ def create_app():
             from app.models import Empresa
             empresa_atual = Empresa.query.get(empresa_id)
             
-            # Se a empresa não existir ou estiver desativada, desconecta o utilizador de forma segura
             if not empresa_atual or not empresa_atual.ativa:
                 logout_user()
                 flash("Acesso negado: Empresa inativa ou não encontrada. Contacte o suporte.", "error")
                 return redirect(url_for('auth.login'))
 
-            # Injeta a empresa no contexto global (g) para ser usada em todos os módulos
+            # 5. PROTEÇÃO ANTI-VAZAMENTO CROSS-TENANT
+            # Se o usuário digitou o subdomínio da empresa A, mas ele é da empresa B, desloga!
+            if hasattr(g, 'empresa_id') and g.empresa_id != empresa_id:
+                if current_user.username != '50097952800': # Apenas o Super Admin Vortice pode transitar livremente
+                    logout_user()
+                    flash("Tentativa de acesso a um ambiente não autorizado.", "error")
+                    return redirect(url_for('auth.login'))
+
+            # Garante que o contexto tem a empresa atual
             g.empresa = empresa_atual
             g.empresa_id = empresa_atual.id
 

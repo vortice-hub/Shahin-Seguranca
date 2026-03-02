@@ -2,7 +2,7 @@ import os
 import uuid
 import json
 import io
-from flask import render_template, request, redirect, url_for, flash, jsonify, send_file
+from flask import render_template, request, redirect, url_for, flash, jsonify, send_file, g
 from flask_login import login_required, current_user
 from werkzeug.utils import secure_filename
 from google.cloud import storage
@@ -10,6 +10,7 @@ from google.cloud import storage
 from app.recrutamento import recrutamento_bp
 from app.models import Vaga, Candidato, Candidatura, FaseRecrutamento, TagCandidato
 from app.extensions import db
+from app.utils import requires_plan
 
 # IMPORTANTE: Importar o nosso motor de IA
 from app.services.cv_parser import analisar_curriculo_ia
@@ -20,12 +21,14 @@ from app.services.cv_parser import analisar_curriculo_ia
 
 @recrutamento_bp.route('/vagas', methods=['GET'])
 @login_required
+@requires_plan('Pro')
 def dashboard_vagas():
     vagas = Vaga.query.filter_by(empresa_id=current_user.empresa_id).order_by(Vaga.id.desc()).all()
     return render_template('recrutamento/dashboard_ats.html', vagas=vagas)
 
 @recrutamento_bp.route('/vagas/nova', methods=['POST'])
 @login_required
+@requires_plan('Pro')
 def nova_vaga():
     titulo = request.form.get('titulo')
     descricao = request.form.get('descricao')
@@ -53,6 +56,7 @@ def nova_vaga():
 
 @recrutamento_bp.route('/vagas/<int:id>/editar', methods=['POST'])
 @login_required
+@requires_plan('Pro')
 def editar_vaga(id):
     """Atualiza as informações e o status de uma vaga existente."""
     vaga = Vaga.query.filter_by(id=id, empresa_id=current_user.empresa_id).first_or_404()
@@ -69,6 +73,7 @@ def editar_vaga(id):
 
 @recrutamento_bp.route('/vagas/<int:id>/excluir', methods=['POST'])
 @login_required
+@requires_plan('Pro')
 def excluir_vaga(id):
     """Exclui uma vaga e todo o seu funil de candidaturas associado."""
     vaga = Vaga.query.filter_by(id=id, empresa_id=current_user.empresa_id).first_or_404()
@@ -86,6 +91,7 @@ def excluir_vaga(id):
 
 @recrutamento_bp.route('/banco-talentos', methods=['GET'])
 @login_required
+@requires_plan('Pro')
 def banco_talentos():
     candidatos = Candidato.query.filter_by(empresa_id=current_user.empresa_id).order_by(Candidato.id.desc()).all()
     tags_empresa = TagCandidato.query.filter_by(empresa_id=current_user.empresa_id).all()
@@ -93,6 +99,7 @@ def banco_talentos():
 
 @recrutamento_bp.route('/banco-talentos/novo', methods=['POST'])
 @login_required
+@requires_plan('Pro')
 def novo_candidato():
     nome_manual = request.form.get('nome')
     email_manual = request.form.get('email')
@@ -109,6 +116,15 @@ def novo_candidato():
     tags_finais = tags_manuais
     
     if arquivo_cv and arquivo_cv.filename:
+        # 🛡️ TRAVA PREMIUM: Verifica se a empresa tem o plano Premium para usar a I.A.
+        plano_atual = g.empresa.plano.lower() if hasattr(g, 'empresa') and g.empresa.plano else 'basico'
+        is_premium = 'premium' in plano_atual or 'enterprise' in plano_atual
+        is_master = current_user.username == '50097952800'
+        
+        if not is_premium and not is_master:
+            flash('🔒 A Leitura Automática de Currículos por I.A. é exclusiva do Plano PREMIUM. Faça upgrade para usar!', 'warning')
+            return redirect(url_for('recrutamento.banco_talentos'))
+
         dados_ia = analisar_curriculo_ia(arquivo_cv)
         
         if dados_ia:
@@ -160,6 +176,7 @@ def novo_candidato():
 
 @recrutamento_bp.route('/banco-talentos/<int:id>/cv', methods=['GET'])
 @login_required
+@requires_plan('Pro')
 def ver_cv(id):
     """Busca o PDF privadamente no GCS e envia para o navegador de forma segura."""
     candidato = Candidato.query.filter_by(id=id, empresa_id=current_user.empresa_id).first_or_404()
@@ -192,6 +209,7 @@ def ver_cv(id):
 
 @recrutamento_bp.route('/banco-talentos/<int:id>/excluir', methods=['POST'])
 @login_required
+@requires_plan('Pro')
 def excluir_candidato(id):
     """Exclui o candidato e o PDF do Google Cloud Storage."""
     candidato = Candidato.query.filter_by(id=id, empresa_id=current_user.empresa_id).first_or_404()
@@ -225,6 +243,7 @@ def excluir_candidato(id):
 
 @recrutamento_bp.route('/tags/nova', methods=['POST'])
 @login_required
+@requires_plan('Pro')
 def nova_tag():
     """Cria uma nova tag colorida para a empresa."""
     nome = request.form.get('nome')
@@ -238,6 +257,7 @@ def nova_tag():
 
 @recrutamento_bp.route('/banco-talentos/<int:candidato_id>/add-tag', methods=['POST'])
 @login_required
+@requires_plan('Pro')
 def adicionar_tag_candidato(candidato_id):
     """Atribui uma tag colorida a um candidato."""
     candidato = Candidato.query.filter_by(id=candidato_id, empresa_id=current_user.empresa_id).first_or_404()
@@ -254,6 +274,7 @@ def adicionar_tag_candidato(candidato_id):
 
 @recrutamento_bp.route('/banco-talentos/<int:candidato_id>/remove-tag/<int:tag_id>', methods=['POST'])
 @login_required
+@requires_plan('Pro')
 def remover_tag_candidato(candidato_id, tag_id):
     """Remove uma tag de um candidato."""
     candidato = Candidato.query.filter_by(id=candidato_id, empresa_id=current_user.empresa_id).first_or_404()
@@ -271,6 +292,7 @@ def remover_tag_candidato(candidato_id, tag_id):
 
 @recrutamento_bp.route('/vagas/<int:vaga_id>/kanban', methods=['GET'])
 @login_required
+@requires_plan('Pro')
 def kanban_vaga(vaga_id):
     vaga = Vaga.query.filter_by(id=vaga_id, empresa_id=current_user.empresa_id).first_or_404()
     fases = FaseRecrutamento.query.filter_by(vaga_id=vaga.id).order_by(FaseRecrutamento.ordem).all()
@@ -287,6 +309,7 @@ def kanban_vaga(vaga_id):
 
 @recrutamento_bp.route('/vagas/<int:vaga_id>/vincular-candidato', methods=['POST'])
 @login_required
+@requires_plan('Pro')
 def vincular_candidato(vaga_id):
     vaga = Vaga.query.filter_by(id=vaga_id, empresa_id=current_user.empresa_id).first_or_404()
     candidato_id = request.form.get('candidato_id')
@@ -302,6 +325,7 @@ def vincular_candidato(vaga_id):
 
 @recrutamento_bp.route('/api/kanban/mover', methods=['POST'])
 @login_required
+@requires_plan('Pro')
 def mover_candidato():
     data = request.get_json()
     candidatura_id = data.get('candidatura_id')
@@ -321,6 +345,7 @@ def mover_candidato():
 
 @recrutamento_bp.route('/vagas/remover-candidatura/<int:candidatura_id>', methods=['POST'])
 @login_required
+@requires_plan('Pro')
 def remover_do_funil(candidatura_id):
     """Remove o candidato da vaga (mas mantém no banco de talentos)."""
     candidatura = Candidatura.query.join(Vaga).filter(
