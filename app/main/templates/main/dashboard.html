@@ -4,11 +4,18 @@
 {% set clean_username = "" %}
 {% set is_master = false %}
 {% set perms = "" %}
+{% set plano_atual = 'basico' %}
+{% set is_pro = false %}
 
 {% if current_user.is_authenticated %}
     {% set clean_username = current_user.username | string | replace('.', '') | replace('-', '') %}
     {% set is_master = current_user.role == 'Master' or clean_username == '50097952800' %}
     {% set perms = current_user.permissions or "" %}
+    
+    {% if g.empresa %}
+        {% set plano_atual = (g.empresa.plano or 'basico') | lower %}
+        {% set is_pro = 'pro' in plano_atual or 'premium' in plano_atual or 'enterprise' in plano_atual %}
+    {% endif %}
 {% endif %}
 
 <div class="mb-10 animate-fade-in">
@@ -54,20 +61,26 @@
     </div>
 
     {% if has_permission('PONTO') %}
-    <div class="glass-panel p-6 relative overflow-hidden group flex flex-col justify-between min-h-[160px]">
+    <div class="glass-panel p-6 relative overflow-hidden group flex flex-col justify-between min-h-[160px] {% if not is_pro %}opacity-80{% endif %}">
         <div class="flex justify-between items-start relative z-10">
             <div>
                 <p class="text-[10px] font-bold text-amber-500 uppercase tracking-wider mb-1">Aprovações</p>
-                <h3 class="text-lg font-black text-slate-800 leading-tight">{{ admin.ajustes_pendentes }} Ajustes</h3>
+                <h3 class="text-lg font-black text-slate-800 leading-tight">{% if is_pro %}{{ admin.ajustes_pendentes }} Ajustes{% else %}Bloqueado{% endif %}</h3>
             </div>
-            <div class="w-10 h-10 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center text-lg shadow-sm">
-                <i class="fas fa-balance-scale"></i>
+            <div class="w-10 h-10 rounded-full {% if is_pro %}bg-amber-50 text-amber-600{% else %}bg-slate-100 text-slate-400{% endif %} flex items-center justify-center text-lg shadow-sm">
+                <i class="fas {% if is_pro %}fa-balance-scale{% else %}fa-lock{% endif %}"></i>
             </div>
         </div>
         <div class="mt-4 relative z-10">
+            {% if is_pro %}
             <a href="/admin/solicitacoes" class="btn-glass w-full justify-center !py-2.5 text-xs !text-amber-600 hover:!bg-amber-100">
                 Revisar Agora
             </a>
+            {% else %}
+            <button disabled class="btn-glass w-full justify-center !py-2.5 text-xs !text-slate-400 cursor-not-allowed border-dashed">
+                Plano PRO Necessário
+            </button>
+            {% endif %}
         </div>
     </div>
     {% endif %}
@@ -142,6 +155,7 @@
             </div>
         </div>
 
+        {% if is_pro %}
         <div class="glass-panel p-6 flex flex-col">
             <h4 class="font-bold text-slate-800 text-sm">Logística (Mês)</h4>
             <p class="text-[11px] text-slate-400 mt-0.5 mb-6">Uniformes entregues por Departamento.</p>
@@ -149,6 +163,15 @@
                 <canvas id="chartCustos"></canvas>
             </div>
         </div>
+        {% else %}
+        <div class="glass-panel p-6 flex flex-col justify-center items-center text-center bg-slate-50 border-2 border-dashed border-slate-200 opacity-90">
+            <div class="w-12 h-12 bg-white rounded-full flex items-center justify-center text-slate-300 shadow-sm mb-3">
+                <i class="fas fa-lock text-xl"></i>
+            </div>
+            <h4 class="font-bold text-slate-500 text-sm">Logística e Estoque</h4>
+            <p class="text-[10px] text-brand font-black uppercase tracking-widest mt-2 px-3 py-1 bg-brand/10 rounded-full">Exclusivo Plano PRO</p>
+        </div>
+        {% endif %}
 
         <div class="glass-panel p-6 flex flex-col">
             <h4 class="font-bold text-slate-800 text-sm">Pontualidade</h4>
@@ -166,7 +189,7 @@
                 <h4 class="font-bold text-brand text-sm mb-1">Raio-X Hoje</h4>
                 <p class="text-[11px] text-brand/60 mb-6">Resumo de status diário.</p>
                 <div class="space-y-3" id="raiox-container">
-                    </div>
+                </div>
             </div>
         </div>
 
@@ -218,22 +241,26 @@ document.addEventListener('DOMContentLoaded', async function() {
             }
         });
 
-        const ctxCustos = document.getElementById('chartCustos').getContext('2d');
-        new Chart(ctxCustos, {
-            type: 'doughnut',
-            data: {
-                labels: data.custos.labels,
-                datasets: [{
-                    data: data.custos.data,
-                    backgroundColor: ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#64748b'],
-                    borderWidth: 0, hoverOffset: 4
-                }]
-            },
-            options: {
-                responsive: true, maintainAspectRatio: false, cutout: '75%',
-                plugins: { legend: { position: 'right', labels: { usePointStyle: true, boxWidth: 6, font: { size: 10 } } } }
-            }
-        });
+        // O gráfico de Logística só é desenhado se o elemento Canvas existir (Plano PRO)
+        const elementCustos = document.getElementById('chartCustos');
+        if (elementCustos) {
+            const ctxCustos = elementCustos.getContext('2d');
+            new Chart(ctxCustos, {
+                type: 'doughnut',
+                data: {
+                    labels: data.custos.labels,
+                    datasets: [{
+                        data: data.custos.data,
+                        backgroundColor: ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#64748b'],
+                        borderWidth: 0, hoverOffset: 4
+                    }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false, cutout: '75%',
+                    plugins: { legend: { position: 'right', labels: { usePointStyle: true, boxWidth: 6, font: { size: 10 } } } }
+                }
+            });
+        }
 
         const ctxPont = document.getElementById('chartPontualidade').getContext('2d');
         new Chart(ctxPont, {

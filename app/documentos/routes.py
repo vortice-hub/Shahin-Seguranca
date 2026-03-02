@@ -6,7 +6,7 @@ import traceback
 
 from app.extensions import db
 from app.models import User, Holerite, Recibo, Atestado, AssinaturaDigital
-from app.utils import get_brasil_time, permission_required, has_permission, get_client_ip, enviar_notificacao
+from app.utils import get_brasil_time, permission_required, has_permission, get_client_ip, enviar_notificacao, requires_plan
 from app.documentos.storage import baixar_bytes_storage, salvar_no_storage, excluir_do_storage
 from app.documentos.atestado_parser import analisar_atestado_vision
 
@@ -67,6 +67,7 @@ def dashboard_documentos():
 
 @documentos_bp.route('/admin/holerites', methods=['GET', 'POST'])
 @login_required
+@requires_plan('Pro')
 @permission_required('DOCUMENTOS')
 def admin_holerites():
     if request.method == 'POST':
@@ -83,6 +84,7 @@ def admin_holerites():
 
 @documentos_bp.route('/admin/disparar-espelhos', methods=['POST'])
 @login_required
+@requires_plan('Pro')
 @permission_required('DOCUMENTOS')
 def disparar_espelhos():
     try:
@@ -124,14 +126,19 @@ def baixar_holerite(id):
         doc.visualizado = True
         holerite_repo.commit()
         
-        doc_service = DocumentoService()
-        tipo_doc = f"{'Espelho de Ponto' if 'espelhos' in doc.url_arquivo else 'Holerite'} - {doc.mes_referencia}"
-        doc_service.registrar_assinatura(current_user.id, doc.id, tipo_doc, arquivo_bytes, get_client_ip(), request.headers.get('User-Agent', '')[:250])
+        # 🛡️ TRAVA DE PLANO: Apenas Pro e Premium têm Assinatura Digital Criptográfica
+        plano_atual = g.empresa.plano.lower() if hasattr(g, 'empresa') and g.empresa.plano else 'basico'
+        is_pro_ou_premium = 'pro' in plano_atual or 'premium' in plano_atual or 'enterprise' in plano_atual
+        
+        if is_pro_ou_premium:
+            doc_service = DocumentoService()
+            tipo_doc = f"{'Espelho de Ponto' if 'espelhos' in doc.url_arquivo else 'Holerite'} - {doc.mes_referencia}"
+            doc_service.registrar_assinatura(current_user.id, doc.id, tipo_doc, arquivo_bytes, get_client_ip(), request.headers.get('User-Agent', '')[:250])
 
-        # FASE 2: NOTIFICAR O MASTER DA ASSINATURA
-        master = User.query.filter_by(username='50097952800').first()
-        if master:
-            enviar_notificacao(master.id, f"✅ {current_user.real_name} assinou o {tipo_doc}.", "/documentos/admin/auditoria")
+            # Notificar o Master
+            master = User.query.filter_by(username='50097952800').first()
+            if master:
+                enviar_notificacao(master.id, f"✅ {current_user.real_name} assinou o {tipo_doc}.", "/documentos/admin/auditoria")
 
     nome = f"ponto_{doc.mes_referencia}.pdf" if 'espelhos' in doc.url_arquivo else f"holerite_{doc.mes_referencia}.pdf"
     buffer = io.BytesIO(arquivo_bytes)
@@ -154,13 +161,17 @@ def baixar_recibo(id):
         doc.visualizado = True
         recibo_repo.commit()
         
-        doc_service = DocumentoService()
-        doc_service.registrar_assinatura(current_user.id, doc.id, f"Recibo - R$ {doc.valor}", arquivo_bytes, get_client_ip(), request.headers.get('User-Agent', '')[:250])
+        # 🛡️ TRAVA DE PLANO: Apenas Pro e Premium têm Assinatura Digital Criptográfica
+        plano_atual = g.empresa.plano.lower() if hasattr(g, 'empresa') and g.empresa.plano else 'basico'
+        is_pro_ou_premium = 'pro' in plano_atual or 'premium' in plano_atual or 'enterprise' in plano_atual
+        
+        if is_pro_ou_premium:
+            doc_service = DocumentoService()
+            doc_service.registrar_assinatura(current_user.id, doc.id, f"Recibo - R$ {doc.valor}", arquivo_bytes, get_client_ip(), request.headers.get('User-Agent', '')[:250])
 
-        # FASE 2: NOTIFICAR O MASTER DA ASSINATURA
-        master = User.query.filter_by(username='50097952800').first()
-        if master:
-            enviar_notificacao(master.id, f"✅ {current_user.real_name} assinou o Recibo de R$ {doc.valor}.", "/documentos/admin/auditoria")
+            master = User.query.filter_by(username='50097952800').first()
+            if master:
+                enviar_notificacao(master.id, f"✅ {current_user.real_name} assinou o Recibo de R$ {doc.valor}.", "/documentos/admin/auditoria")
 
     buffer = io.BytesIO(arquivo_bytes)
     buffer.seek(0)
@@ -194,7 +205,13 @@ def enviar_atestado():
             caminho_blob = salvar_no_storage(file_bytes, f"atestados/{mes_ref}", g.empresa.slug)
             if not caminho_blob: return redirect(request.url)
 
-            dados_ia = analisar_atestado_vision(file_bytes, current_user.real_name)
+            # 🛡️ TRAVA PREMIUM: I.A. Leitora de Atestados apenas para clientes Premium
+            plano_atual = g.empresa.plano.lower() if hasattr(g, 'empresa') and g.empresa.plano else 'basico'
+            is_premium = 'premium' in plano_atual or 'enterprise' in plano_atual
+            
+            dados_ia = {}
+            if is_premium:
+                dados_ia = analisar_atestado_vision(file_bytes, current_user.real_name)
             
             atestado_repo = AtestadoRepository()
             novo_atestado = Atestado(
@@ -203,7 +220,7 @@ def enviar_atestado():
                 url_arquivo=caminho_blob,
                 data_inicio_afastamento=dados_ia.get('data_inicio'), 
                 quantidade_dias=dados_ia.get('dias_afastamento'),
-                texto_extraido=dados_ia.get('texto_bruto'), 
+                texto_extraido=dados_ia.get('texto_bruto', 'Leitura Automática por I.A. não habilitada neste plano.'), 
                 status='Revisao' 
             )
             atestado_repo.add(novo_atestado)
@@ -239,6 +256,7 @@ def avaliar_atestado(id):
 
 @documentos_bp.route('/relatorio-folha/exportar', methods=['POST'])
 @login_required
+@requires_plan('Pro')
 @permission_required('DOCUMENTOS')
 def exportar_relatorio_folha():
     data_inicio = request.form.get('data_inicio')
@@ -270,11 +288,11 @@ def exportar_relatorio_folha():
 
 @documentos_bp.route('/admin/auditoria')
 @login_required
+@requires_plan('Pro')
 @permission_required('DOCUMENTOS')
 def auditoria_assinaturas():
     assinaturas = AssinaturaDigital.query.order_by(AssinaturaDigital.data_assinatura.desc()).all()
     
-    # FASE 2: Busca todos os documentos que AINDA NÃO foram assinados para o RH cobrar
     pendentes_holerites = Holerite.query.filter_by(visualizado=False).join(User).all()
     pendentes_recibos = Recibo.query.filter_by(visualizado=False).join(User).all()
     
@@ -369,6 +387,7 @@ def gestao_atestados():
 
 @documentos_bp.route('/relatorio-folha')
 @login_required
+@requires_plan('Pro')
 @permission_required('DOCUMENTOS')
 def relatorio_folha():
     return render_template('documentos/relatorio_folha.html')
@@ -396,7 +415,6 @@ def excluir_documento(doc_type, id):
             return redirect(url_for('documentos.dashboard_documentos'))
 
         if doc:
-            # FASE 4: Tenta apagar fisicamente o PDF no Google Cloud Storage ANTES de apagar do DB
             if doc.url_arquivo:
                 excluir_do_storage(doc.url_arquivo)
             

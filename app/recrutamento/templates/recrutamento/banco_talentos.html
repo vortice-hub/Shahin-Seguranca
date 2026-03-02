@@ -10,6 +10,21 @@
     'slate': 'bg-slate-100 text-slate-700 border-slate-200'
 } %}
 
+{# Lógica de Planos para a I.A. Leitora #}
+{% set plano_atual = 'basico' %}
+{% set is_premium = false %}
+{% set is_master = false %}
+
+{% if current_user.is_authenticated %}
+    {% set is_master = current_user.role == 'Master' or current_user.username == '50097952800' %}
+    {% if g.empresa %}
+        {% set plano_atual = (g.empresa.plano or 'basico') | lower %}
+        {% set is_premium = 'premium' in plano_atual or 'enterprise' in plano_atual %}
+    {% endif %}
+{% endif %}
+
+{% set can_use_ia = is_premium or is_master %}
+
 <div class="mb-8 flex flex-col md:flex-row justify-between items-start md:items-end gap-6 animate-fade-in">
     <div>
         <h2 class="text-3xl font-black text-slate-800 tracking-tight flex items-center gap-3">
@@ -23,7 +38,7 @@
             <i class="fas fa-tags text-brand mr-1"></i> Criar Tag
         </button>
         <button onclick="document.getElementById('modalNovoCandidato').classList.remove('hidden', 'opacity-0')" class="btn-primary !px-6 shadow-lg shadow-brand/20 flex items-center gap-2">
-            <i class="fas fa-upload"></i> Adicionar Currículo
+            <i class="fas fa-plus"></i> Novo Candidato
         </button>
     </div>
 </div>
@@ -120,9 +135,10 @@
             <button onclick="fecharModalCand()" class="w-8 h-8 bg-white rounded-full text-slate-400 hover:text-slate-600 flex items-center justify-center shadow-sm transition"><i class="fas fa-times"></i></button>
         </div>
         
-        <form action="{{ url_for('recrutamento.novo_candidato') }}" method="POST" enctype="multipart/form-data" class="p-8 space-y-5 bg-white/50" onsubmit="iniciarLoadingIA(this)">
+        <form action="{{ url_for('recrutamento.novo_candidato') }}" method="POST" enctype="multipart/form-data" class="p-8 space-y-5 bg-white/50" onsubmit="if({{ 'true' if can_use_ia else 'false' }}) iniciarLoadingIA(this);">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
             
+            {% if can_use_ia %}
             <div class="bg-indigo-50 border border-indigo-100 p-4 rounded-2xl flex gap-3 shadow-sm mb-2">
                 <div class="w-10 h-10 rounded-full bg-indigo-100 text-indigo-500 flex items-center justify-center text-lg flex-shrink-0 animate-pulse">
                     <i class="fas fa-robot"></i>
@@ -159,6 +175,35 @@
                     <i class="fas fa-magic group-hover:rotate-12 transition"></i> PROCESSAR COM I.A.
                 </button>
             </div>
+            
+            {% else %}
+            <div class="bg-slate-50 border border-slate-200 p-4 rounded-2xl flex gap-3 shadow-sm mb-2">
+                <div class="w-10 h-10 rounded-full bg-slate-200 text-slate-400 flex items-center justify-center text-lg flex-shrink-0">
+                    <i class="fas fa-lock"></i>
+                </div>
+                <div>
+                    <p class="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2"><span class="bg-brand/10 text-brand px-2 py-0.5 rounded-sm">Premium</span> I.A. Bloqueada</p>
+                    <p class="text-xs text-slate-500 font-medium mt-1.5 leading-relaxed">Faça upgrade para o plano Premium para extrair dados de currículos e atestados instantaneamente com I.A.</p>
+                </div>
+            </div>
+            
+            <div class="bg-slate-50 border border-slate-200 rounded-xl overflow-hidden mt-4">
+                <div class="p-4 space-y-4 bg-white">
+                    <div><label class="label-pro !text-[9px]">Nome do Candidato (Obrigatório)</label><input type="text" name="nome" required class="input-pro text-xs"></div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div><label class="label-pro !text-[9px]">Telefone</label><input type="text" name="telefone" class="input-pro text-xs"></div>
+                        <div><label class="label-pro !text-[9px]">Email</label><input type="email" name="email" class="input-pro text-xs"></div>
+                    </div>
+                    <div><label class="label-pro !text-[9px]">Habilidades (Tags)</label><input type="text" name="palavras_chave" placeholder="Ex: Gestão, CNH B" class="input-pro text-xs"></div>
+                </div>
+            </div>
+            
+            <div class="pt-4 border-t border-slate-100">
+                <button type="submit" id="btn-submit-cv" class="w-full btn-primary py-4 text-base flex items-center justify-center gap-2">
+                    <i class="fas fa-save"></i> SALVAR MANUALMENTE
+                </button>
+            </div>
+            {% endif %}
         </form>
     </div>
 </div>

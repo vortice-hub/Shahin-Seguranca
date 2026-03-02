@@ -2,7 +2,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from flask_login import login_required, current_user
 from app.extensions import db, csrf
 from app.models import PontoRegistro, PontoResumo, User, PontoAjuste, SolicitacaoAusencia, Empresa
-from app.utils import get_brasil_time, format_minutes_to_hm, data_por_extenso, enviar_notificacao
+from app.utils import get_brasil_time, format_minutes_to_hm, data_por_extenso, enviar_notificacao, requires_plan
 from datetime import datetime, date, timedelta
 import logging
 import calendar
@@ -39,7 +39,6 @@ def cadastrar_biometria():
     """Recebe a foto do celular do funcionário (como Ficheiro Nativo), processa a I.A. e salva no Bucket."""
     if current_user.role == 'Terminal': return jsonify({'error': 'Acesso negado'}), 403
     
-    # ALTERAÇÃO ALTERNATIVA 2: Recebe um ficheiro real em vez de JSON Base64
     if 'image' not in request.files: 
         return jsonify({'error': 'Nenhuma imagem enviada'}), 400
         
@@ -93,7 +92,6 @@ def reconhecer_facial():
     if current_user.role != 'Terminal' and current_user.role != 'Master':
         return jsonify({'error': 'Acesso negado.'}), 403
 
-    # ALTERAÇÃO ALTERNATIVA 2: Recebe ficheiro real
     if 'image' not in request.files: 
         return jsonify({'error': 'Nenhuma imagem enviada'}), 400
         
@@ -426,6 +424,7 @@ def gestao_ausencias():
 
 @ponto_bp.route('/admin/controle-escala', methods=['GET'])
 @login_required
+@requires_plan('Pro')
 def controle_escala():
     if current_user.role != 'Master' and str(current_user.username) != '50097952800': 
         return redirect(url_for('main.dashboard'))
