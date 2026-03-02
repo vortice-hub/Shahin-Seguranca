@@ -21,7 +21,10 @@
 
 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-fade-in" style="animation-delay: 0.1s; animation-fill-mode: both;">
     {% for vaga in vagas %}
-    <div class="glass-panel p-6 flex flex-col justify-between group hover:shadow-lg hover:-translate-y-1 transition duration-300 relative overflow-hidden border-t-4 {{ 'border-t-emerald-500' if vaga.status == 'Aberta' else 'border-t-slate-400' }}">
+    <div class="glass-panel p-6 flex flex-col justify-between group hover:shadow-lg hover:-translate-y-1 transition duration-300 relative overflow-hidden border-t-4 
+        {% if vaga.status == 'Aberta' %}border-t-emerald-500
+        {% elif vaga.status == 'Pausada' %}border-t-amber-400
+        {% else %}border-t-slate-400{% endif %}">
         
         <div class="absolute -right-6 -top-6 text-slate-100 opacity-50 text-7xl pointer-events-none transition-transform group-hover:scale-110 group-hover:rotate-12">
             <i class="fas fa-briefcase"></i>
@@ -29,11 +32,26 @@
         
         <div class="relative z-10 mb-6">
             <div class="flex justify-between items-start mb-3">
-                <span class="text-[9px] font-black uppercase tracking-widest px-2.5 py-1 rounded-md border {{ 'bg-emerald-50 text-emerald-600 border-emerald-200' if vaga.status == 'Aberta' else 'bg-slate-100 text-slate-500 border-slate-200' }}">
+                <span class="text-[9px] font-black uppercase tracking-widest px-2.5 py-1 rounded-md border 
+                    {% if vaga.status == 'Aberta' %}bg-emerald-50 text-emerald-600 border-emerald-200
+                    {% elif vaga.status == 'Pausada' %}bg-amber-50 text-amber-600 border-amber-200
+                    {% else %}bg-slate-100 text-slate-500 border-slate-200{% endif %}">
                     {{ vaga.status }}
                 </span>
-                <div class="w-8 h-8 rounded-full bg-slate-50 text-slate-400 flex items-center justify-center text-xs shadow-inner cursor-pointer hover:bg-brand/10 hover:text-brand transition">
-                    <i class="fas fa-ellipsis-v"></i>
+                
+                <div class="relative group/menu cursor-pointer">
+                    <div class="w-8 h-8 rounded-full bg-slate-50 text-slate-400 flex items-center justify-center text-xs shadow-inner hover:bg-brand/10 hover:text-brand transition">
+                        <i class="fas fa-ellipsis-v"></i>
+                    </div>
+                    <div class="absolute right-0 top-full mt-1 w-36 bg-white rounded-xl shadow-xl shadow-slate-200/50 border border-slate-100 opacity-0 invisible translate-y-2 group-hover/menu:opacity-100 group-hover/menu:visible group-hover/menu:translate-y-0 transition-all duration-200 z-50 overflow-hidden">
+                        <button onclick="abrirModalEditarVaga(this)" data-id="{{ vaga.id }}" data-titulo="{{ vaga.titulo }}" data-local="{{ vaga.local or '' }}" data-salario="{{ vaga.salario or '' }}" data-status="{{ vaga.status }}" data-descricao="{{ vaga.descricao or '' }}" class="w-full text-left px-4 py-3 text-xs font-bold text-slate-600 hover:bg-slate-50 hover:text-brand transition flex items-center gap-2">
+                            <i class="fas fa-edit w-4"></i> Editar Vaga
+                        </button>
+                        <div class="border-t border-slate-100"></div>
+                        <button onclick="confirmarAcao('Tem certeza que deseja apagar a vaga {{ vaga.titulo }}? O funil e as etapas desta vaga serão removidos.', '{{ url_for('recrutamento.excluir_vaga', id=vaga.id) }}')" class="w-full text-left px-4 py-3 text-xs font-bold text-red-500 hover:bg-red-50 transition flex items-center gap-2">
+                            <i class="fas fa-trash-alt w-4"></i> Excluir Vaga
+                        </button>
+                    </div>
                 </div>
             </div>
             
@@ -116,8 +134,66 @@
     </div>
 </div>
 
+<div id="modalEditarVaga" class="hidden fixed inset-0 bg-slate-900/60 z-[100] flex items-center justify-center p-4 backdrop-blur-md opacity-0 transition-opacity duration-300">
+    <div class="glass-panel max-w-lg w-full overflow-hidden shadow-2xl transform scale-95 transition-transform duration-300" id="modalEditVagaContent">
+        <div class="bg-brand/5 p-6 flex justify-between items-center border-b border-brand/10">
+            <h3 class="font-black text-brand tracking-tight text-lg flex items-center gap-2"><i class="fas fa-edit"></i> Editar Vaga</h3>
+            <button onclick="fecharModalEditarVaga()" class="w-8 h-8 bg-white rounded-full text-slate-400 hover:text-slate-600 flex items-center justify-center shadow-sm transition"><i class="fas fa-times"></i></button>
+        </div>
+        
+        <form id="formEditarVaga" method="POST" class="p-8 space-y-5 bg-white/50">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            
+            <div>
+                <label class="label-pro">Título da Vaga</label>
+                <input type="text" id="edit_titulo" name="titulo" required class="input-pro font-bold text-slate-800 text-lg">
+            </div>
+            
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="label-pro">Local/Posto</label>
+                    <div class="relative">
+                        <i class="fas fa-map-marker-alt absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                        <input type="text" id="edit_local" name="local" class="input-pro pl-9 text-sm">
+                    </div>
+                </div>
+                <div>
+                    <label class="label-pro text-emerald-600">Salário</label>
+                    <div class="relative">
+                        <i class="fas fa-dollar-sign absolute left-3 top-1/2 -translate-y-1/2 text-emerald-400"></i>
+                        <input type="text" id="edit_salario" name="salario" class="input-pro pl-9 text-sm border-emerald-200">
+                    </div>
+                </div>
+            </div>
+
+            <div>
+                <label class="label-pro text-brand">Status do Processo Seletivo</label>
+                <div class="relative">
+                    <select name="status" id="edit_status" class="input-pro text-sm font-bold text-slate-700 bg-white cursor-pointer appearance-none">
+                        <option value="Aberta">🟢 Vaga Aberta</option>
+                        <option value="Pausada">🟡 Vaga Pausada</option>
+                        <option value="Fechada">🔴 Vaga Fechada</option>
+                    </select>
+                    <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-slate-400"><i class="fas fa-chevron-down text-xs"></i></div>
+                </div>
+            </div>
+            
+            <div>
+                <label class="label-pro">Descrição Rápida</label>
+                <textarea id="edit_descricao" name="descricao" rows="3" class="input-pro text-sm resize-none"></textarea>
+            </div>
+            
+            <div class="pt-4 border-t border-slate-100">
+                <button type="submit" class="w-full btn-primary py-4 text-base shadow-lg shadow-brand/20 flex items-center justify-center gap-2">
+                    <i class="fas fa-save"></i> SALVAR ALTERAÇÕES
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <script>
-    // Se o modal estiver a carregar aberto por erro, asseguramos que fecha no inicio
+    // Configurações do Modal Nova Vaga
     document.addEventListener("DOMContentLoaded", () => {
         document.getElementById('modalVagaContent').classList.add('scale-100');
     });
@@ -126,6 +202,44 @@
         const modal = document.getElementById('modalNovaVaga');
         document.getElementById('modalVagaContent').classList.remove('scale-100');
         modal.classList.add('opacity-0');
+        setTimeout(() => modal.classList.add('hidden'), 300);
+    }
+
+    // Configurações do Modal Editar Vaga (Injeta os dados dinamicamente)
+    function abrirModalEditarVaga(btn) {
+        // Pega os dados escondidos no botão
+        const id = btn.getAttribute('data-id');
+        const titulo = btn.getAttribute('data-titulo');
+        const local = btn.getAttribute('data-local');
+        const salario = btn.getAttribute('data-salario');
+        const status = btn.getAttribute('data-status');
+        const descricao = btn.getAttribute('data-descricao');
+        
+        // Preenche o formulário
+        document.getElementById('formEditarVaga').action = '/vagas/' + id + '/editar';
+        document.getElementById('edit_titulo').value = titulo;
+        document.getElementById('edit_local').value = local;
+        document.getElementById('edit_salario').value = salario;
+        document.getElementById('edit_status').value = status;
+        document.getElementById('edit_descricao').value = descricao;
+        
+        // Abre o modal com animação
+        const modal = document.getElementById('modalEditarVaga');
+        const content = document.getElementById('modalEditVagaContent');
+        modal.classList.remove('hidden');
+        setTimeout(() => {
+            modal.classList.remove('opacity-0');
+            content.classList.remove('scale-95');
+            content.classList.add('scale-100');
+        }, 10);
+    }
+
+    function fecharModalEditarVaga() {
+        const modal = document.getElementById('modalEditarVaga');
+        const content = document.getElementById('modalEditVagaContent');
+        modal.classList.add('opacity-0');
+        content.classList.remove('scale-100');
+        content.classList.add('scale-95');
         setTimeout(() => modal.classList.add('hidden'), 300);
     }
 </script>

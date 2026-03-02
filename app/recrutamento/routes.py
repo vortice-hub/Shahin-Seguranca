@@ -51,6 +51,35 @@ def nova_vaga():
     flash('Nova vaga criada com sucesso! O funil de seleção já está pronto.', 'success')
     return redirect(url_for('recrutamento.dashboard_vagas'))
 
+@recrutamento_bp.route('/vagas/<int:id>/editar', methods=['POST'])
+@login_required
+def editar_vaga(id):
+    """Atualiza as informações e o status de uma vaga existente."""
+    vaga = Vaga.query.filter_by(id=id, empresa_id=current_user.empresa_id).first_or_404()
+    
+    vaga.titulo = request.form.get('titulo')
+    vaga.descricao = request.form.get('descricao')
+    vaga.local = request.form.get('local')
+    vaga.salario = request.form.get('salario')
+    vaga.status = request.form.get('status')
+    
+    db.session.commit()
+    flash(f'Vaga "{vaga.titulo}" atualizada com sucesso!', 'success')
+    return redirect(url_for('recrutamento.dashboard_vagas'))
+
+@recrutamento_bp.route('/vagas/<int:id>/excluir', methods=['POST'])
+@login_required
+def excluir_vaga(id):
+    """Exclui uma vaga e todo o seu funil de candidaturas associado."""
+    vaga = Vaga.query.filter_by(id=id, empresa_id=current_user.empresa_id).first_or_404()
+    titulo = vaga.titulo
+    
+    db.session.delete(vaga)
+    db.session.commit()
+    
+    flash(f'A vaga "{titulo}" e o seu funil foram excluídos.', 'success')
+    return redirect(url_for('recrutamento.dashboard_vagas'))
+
 # ==============================================================================
 # 🗄️ VORTICE RECRUTAMENTO - BANCO DE TALENTOS E CURRÍCULOS
 # ==============================================================================
