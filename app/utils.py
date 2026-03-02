@@ -6,7 +6,7 @@ import hashlib
 import os
 import json
 from functools import wraps
-from flask import abort, redirect, url_for, flash, request, session, current_app
+from flask import abort, redirect, url_for, flash, request, session, current_app, g
 from flask_login import current_user
 import traceback
 
@@ -121,6 +121,49 @@ def super_admin_required(f):
             return redirect(url_for('super_admin.login'))
         return f(*args, **kwargs)
     return decorated_function
+
+# ==============================================================================
+# 🏢 MOTOR SAAS: CONTROLE DE PLANOS (BÁSICO, PRO, PREMIUM)
+# ==============================================================================
+def requires_plan(min_plan_name):
+    """
+    Bloqueia o acesso a rotas específicas dependendo do plano assinado pela empresa.
+    Ex de uso: @requires_plan('Pro') ou @requires_plan('Premium')
+    """
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            if not current_user.is_authenticated:
+                return redirect(url_for('auth.login'))
+            
+            # O Dono do SaaS (Você) tem sempre acesso livre para auditar clientes
+            if str(current_user.username) == '50097952800':
+                return f(*args, **kwargs)
+
+            # Níveis de hierarquia do software
+            plan_levels = {
+                'basico': 1,
+                'standard': 1, # Retrocompatibilidade com empresas antigas
+                'pro': 2,
+                'premium': 3,
+                'enterprise': 3 # Retrocompatibilidade
+            }
+
+            # Extrai o plano da empresa logada
+            empresa_plano = 'basico'
+            if hasattr(g, 'empresa') and g.empresa and g.empresa.plano:
+                empresa_plano = remove_accents(g.empresa.plano).lower().strip()
+
+            current_level = plan_levels.get(empresa_plano, 1)
+            required_level = plan_levels.get(remove_accents(min_plan_name).lower().strip(), 1)
+
+            if current_level < required_level:
+                flash(f'🔒 Acesso Bloqueado: Esta funcionalidade é exclusiva do Plano {min_plan_name.upper()}. Fale com o suporte da Vortice para realizar o upgrade.', 'warning')
+                return redirect(url_for('main.dashboard'))
+
+            return f(*args, **kwargs)
+        return decorated_function
+    return decorator
 
 # ==============================================================================
 # 🚀 MOTOR DE NOTIFICAÇÕES (ISOLADO E BLINDADO PARA WHITE-LABEL)

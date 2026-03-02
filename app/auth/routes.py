@@ -10,6 +10,11 @@ import string
 
 auth_bp = Blueprint('auth', __name__, template_folder='templates')
 
+def is_staging():
+    """Função auxiliar para identificar se estamos no ambiente de testes ou no domínio oficial"""
+    host = request.host.lower()
+    return '.run.app' in host or 'localhost' in host or '127.0.0.1' in host
+
 # ==============================================================================
 # 🔐 PORTAL DE LOGIN CAMALEÃO (WHITE-LABEL E HÍBRIDO)
 # ==============================================================================
@@ -19,43 +24,41 @@ def login(slug=None):
     if current_user.is_authenticated: 
         return redirect(url_for('main.dashboard'))
     
-    empresa_login = None
-    if slug:
+    # 1. Tenta pegar a empresa que o Porteiro Global (__init__.py) já encontrou pelo Subdomínio
+    empresa_login = getattr(g, 'empresa', None)
+    
+    # 2. Se não tem subdomínio (Staging), tenta pegar pelo slug na URL
+    if not empresa_login and slug:
         repo = EmpresaRepository()
         empresa_login = repo.get_by_slug(slug)
         if not empresa_login or not empresa_login.ativa:
             flash('Portal de cliente não encontrado ou desativado.', 'error')
             return redirect(url_for('auth.login'))
-        
-        # Injeta a empresa no contexto global para cores dinâmicas no template
         g.empresa = empresa_login
     
     if request.method == 'POST':
         raw_input = request.form.get('username', '').strip()
         password = request.form.get('password')
         
-        # --- CORREÇÃO DE VALIDAÇÃO DE LOGIN ---
-        # 1. Se começar por "terminal_", é o acesso de portaria (Mantém o '_')
+        # Validação de Login
         if raw_input.startswith('terminal_'):
             username = raw_input 
-        # 2. Se for um e-mail (Mantém '@' e '.')
         elif '@' in raw_input:
              username = raw_input
-        # 3. Caso contrário, é um CPF (Remove pontos e traços para igualar à base de dados)
         else:
             username = re.sub(r'[^0-9a-zA-Z]', '', raw_input)
         
-        # Tenta procurar o usuário
         user = User.query.filter_by(username=username).first()
         if not user:
-            # Tenta procurar pelo campo CPF, caso o username seja diferente
             user = User.query.filter_by(cpf=username).first()
             
         if user and user.check_password(password):
-            # Se o login foi por slug, verifica se o user pertence a essa empresa
-            if slug and user.empresa_id != empresa_login.id and user.role != 'Master':
+            # Se o login está no contexto de uma empresa, garante que o usuário pertence a ela
+            if empresa_login and user.empresa_id != empresa_login.id and user.role != 'Master':
                 flash('Acesso negado: Utilizador não pertence a esta empresa.', 'error')
-                return redirect(url_for('auth.login', slug=slug))
+                if is_staging() and empresa_login.slug:
+                    return redirect(url_for('auth.login', slug=empresa_login.slug))
+                return redirect(url_for('auth.login'))
                 
             login_user(user, remember=True)
             next_page = request.args.get('next')
@@ -68,10 +71,11 @@ def login(slug=None):
 @auth_bp.route('/logout')
 @login_required
 def logout():
-    # Guarda a empresa antes de apagar a sessão para não perder a cor/logo
     slug = g.empresa.slug if hasattr(g, 'empresa') and g.empresa else None
     logout_user()
-    if slug:
+    
+    # Se for Staging, volta para o link com slug. Se for Produção (subdomínio), volta para a raiz do domínio limpa.
+    if slug and is_staging():
         return redirect(url_for('auth.login', slug=slug))
     return redirect(url_for('auth.login'))
 
@@ -96,15 +100,14 @@ def primeiro_acesso():
         current_user.set_password(nova_senha)
         current_user.is_first_access = False
         
-        # --- CEREBRO: Guarda o slug ANTES de fazer logout ---
         slug = g.empresa.slug if hasattr(g, 'empresa') and g.empresa else None
         
         db.session.commit()
         logout_user()
         flash('Senha registada com sucesso! Faça o login para continuar.', 'success')
         
-        # --- Redirecionamento Inteligente para o portal correto ---
-        if slug:
+        # Redirecionamento Inteligente Híbrido
+        if slug and is_staging():
             return redirect(url_for('auth.login', slug=slug))
         return redirect(url_for('auth.login'))
         
@@ -120,10 +123,16 @@ def auto_cadastro():
     
     if request.method == 'POST':
         cpf_input = request.form.get('cpf', '').replace('.', '').replace('-', '').strip()
-        pre = PreCadastro.query.filter_by(cpf=cpf_input).first()
+        
+        # 🛡️ PROTEÇÃO MULTI-TENANT: Se tem subdomínio, busca apenas na empresa certa
+        empresa_atual = getattr(g, 'empresa', None)
+        if empresa_atual:
+            pre = PreCadastro.query.filter_by(cpf=cpf_input, empresa_id=empresa_atual.id).first()
+        else:
+            pre = PreCadastro.query.filter_by(cpf=cpf_input).first()
         
         if not pre:
-            flash('CPF não encontrado no sistema. Contacte os Recursos Humanos.', 'error')
+            flash('CPF não encontrado na lista de espera da empresa. Contacte os Recursos Humanos.', 'error')
             return redirect(url_for('auth.auto_cadastro'))
             
         email = request.form.get('email')
@@ -166,7 +175,12 @@ def auto_cadastro():
         return render_template('auth/auto_cadastro_sucesso.html', username=cpf_input, nome=pre.nome_previsto)
         
     if step == 2 and cpf:
-        pre = PreCadastro.query.filter_by(cpf=cpf).first()
+        empresa_atual = getattr(g, 'empresa', None)
+        if empresa_atual:
+            pre = PreCadastro.query.filter_by(cpf=cpf, empresa_id=empresa_atual.id).first()
+        else:
+            pre = PreCadastro.query.filter_by(cpf=cpf).first()
+            
         if pre:
             return render_template('auth/auto_cadastro.html', step=2, cpf=cpf, nome=pre.nome_previsto)
             
@@ -181,14 +195,18 @@ def esqueci_senha():
         cpf_input = request.form.get('cpf', '').replace('.', '').replace('-', '').strip()
         data_admissao_input = request.form.get('data_admissao')
         
-        user = User.query.filter_by(cpf=cpf_input).first()
+        # 🛡️ PROTEÇÃO MULTI-TENANT
+        empresa_atual = getattr(g, 'empresa', None)
+        if empresa_atual:
+            user = User.query.filter_by(cpf=cpf_input, empresa_id=empresa_atual.id).first()
+        else:
+            user = User.query.filter_by(cpf=cpf_input).first()
         
         if user and user.data_admissao and str(user.data_admissao) == data_admissao_input:
             senha_temporaria = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
             user.set_password(senha_temporaria)
             user.is_first_access = True
             
-            # Puxa a empresa do user para redirecionar corretamente
             slug = None
             if user.empresa_id:
                 empresa = Empresa.query.get(user.empresa_id)
@@ -198,7 +216,7 @@ def esqueci_senha():
             
             flash(f'ACESSO RECUPERADO! Sua senha temporária é: {senha_temporaria}', 'success')
             
-            if slug:
+            if slug and is_staging():
                 return redirect(url_for('auth.login', slug=slug))
             return redirect(url_for('auth.login'))
         else:
