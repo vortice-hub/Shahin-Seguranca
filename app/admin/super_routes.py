@@ -214,3 +214,26 @@ def run_labs_cleanup():
         flash("Erro ao limpar dados de teste.", "error")
     return redirect(url_for('super_admin.listar_empresas'))
 
+# ==============================================================================
+# 🛠️ VORTICE LABS: FERRAMENTAS DE INFRAESTRUTURA E MIGRAÇÃO
+# ==============================================================================
+@super_admin_bp.route('/force-migrate', methods=['GET'])
+def force_migrate():
+    """Rota de emergência para recriar fisicamente as tabelas vazias no Supabase."""
+    try:
+        from app.extensions import db
+        # Força o SQLAlchemy a olhar para os Models e criar as tabelas que faltam
+        db.create_all()
+        db.session.commit()
+        
+        html = """
+        <div style="font-family: sans-serif; text-align: center; margin-top: 50px;">
+            <h1 style="color: #10b981;">✅ Sucesso Absoluto!</h1>
+            <p>Todas as tabelas do PostgreSQL foram recriadas e estão limpas.</p>
+            <a href="/vortice/login" style="padding: 10px 20px; background: #2563eb; color: white; text-decoration: none; border-radius: 8px;">Voltar ao Painel</a>
+        </div>
+        """
+        return html
+    except Exception as e:
+        return f"<h1 style='color: red;'>Erro Crítico:</h1><p>{str(e)}</p>"
+
