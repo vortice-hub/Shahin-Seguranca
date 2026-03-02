@@ -3,22 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% if g.empresa %}{{ g.empresa.nome }}{% else %}Vortice SaaS{% endif %} - Operacional</title>
+    <title>{% if g.empresa %}{{ g.empresa.nome }}{% else %}Vortice SaaS{% endif %} - Portal</title>
     
-    <link rel="manifest" href="/manifest.json?v=1.2{% if g.empresa %}&slug={{ g.empresa.slug }}{% elif empresa_login %}&slug={{ empresa_login.slug }}{% endif %}">
-    
-    <meta name="theme-color" content="{{ (g.empresa.config_json or {}).get('cor_primaria', '#0f172a') if g.empresa else '#0f172a' }}">
-    
+    <link rel="manifest" href="/manifest.json?v=1.3{% if g.empresa %}&slug={{ g.empresa.slug }}{% elif empresa_login %}&slug={{ empresa_login.slug }}{% endif %}">
+    <meta name="theme-color" content="{{ (g.empresa.config_json or {}).get('cor_primaria', '#ffffff') if g.empresa else '#ffffff' }}">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="{% if g.empresa %}{{ g.empresa.nome }}{% else %}Vortice App{% endif %}">
+    <meta name="apple-mobile-web-app-title" content="{% if g.empresa %}{{ g.empresa.nome }}{% else %}Vortice{% endif %}">
     
     {% set apple_icon = (g.empresa.config_json or {}).get('logo_url', '/static/icons/vortice-icon.png') if g.empresa else '/static/icons/vortice-icon.png' %}
     <link rel="apple-touch-icon" href="{{ apple_icon }}">
     
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
     
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
@@ -26,61 +24,28 @@
     {% if g.empresa %}
     <style>
         :root {
-            /* Cores Dinâmicas injetadas pelo sistema */
+            /* V3.0 Cores Semânticas Injetadas */
             --primary-color: {{ (g.empresa.config_json or {}).get('cor_primaria', '#2563eb') }};
             --primary-hover: {{ (g.empresa.config_json or {}).get('cor_hover', '#1d4ed8') }};
-            
-            /* Sidebar Adaptativa baseada na cor da empresa */
-            --sidebar-bg: color-mix(in srgb, var(--primary-color) 20%, #0f172a); 
-            --sidebar-header: color-mix(in srgb, var(--primary-color) 15%, #020617);
-            --sidebar-hover: color-mix(in srgb, var(--primary-color) 30%, #1e293b);
-            --sidebar-border: color-mix(in srgb, var(--primary-color) 40%, transparent);
         }
-        /* Sobrescrita de classes Tailwind para White-Label */
-        .bg-blue-600, .bg-indigo-600 { background-color: var(--primary-color) !important; }
-        .hover\:bg-blue-700:hover, .hover\:bg-indigo-700:hover { background-color: var(--primary-hover) !important; }
-        .text-blue-600, .text-indigo-600, .text-blue-500 { color: var(--primary-color) !important; }
-        .border-blue-600, .border-indigo-600 { border-color: var(--primary-color) !important; }
-        .bg-indigo-900\/40 { background-color: color-mix(in srgb, var(--primary-color), transparent 60%) !important; }
-        .group:hover .group-hover\:text-blue-500, .group:hover .group-hover\:text-blue-400 { color: var(--primary-color) !important; }
+        .text-brand { color: var(--primary-color) !important; }
+        .bg-brand { background-color: var(--primary-color) !important; }
+        .hover\:bg-brand-hover:hover { background-color: var(--primary-hover) !important; }
+        .border-brand { border-color: var(--primary-color) !important; }
+        .ring-brand:focus { box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary-color) 15%, transparent) !important; }
+        
+        .text-blue-600 { color: var(--primary-color) !important; }
+        .bg-blue-600 { background-color: var(--primary-color) !important; }
+        .bg-blue-50 { background-color: color-mix(in srgb, var(--primary-color) 5%, transparent) !important; }
+        .border-blue-100 { border-color: color-mix(in srgb, var(--primary-color) 15%, transparent) !important; }
     </style>
     {% endif %}
-    
-    <script>
-        function toggleSidebar() {
-            const sb = document.getElementById('sidebar');
-            const ov = document.getElementById('overlay');
-            if (sb.classList.contains('-translate-x-full')) { 
-                sb.classList.remove('-translate-x-full'); ov.classList.remove('hidden'); 
-            } else { 
-                sb.classList.add('-translate-x-full'); ov.classList.add('hidden'); 
-            }
-        }
-        function toggleSubmenu(id, iconId) {
-            const menu = document.getElementById(id);
-            const icon = document.getElementById(iconId);
-            if (menu.classList.contains('open')) {
-                menu.classList.remove('open');
-                setTimeout(() => menu.classList.add('hidden'), 300);
-                if(icon) icon.classList.remove('rotate-180');
-            } else {
-                menu.classList.remove('hidden');
-                setTimeout(() => menu.classList.add('open'), 10);
-                if(icon) icon.classList.add('rotate-180');
-            }
-        }
-        function toggleNotificacoes() {
-            const painel = document.getElementById('painel-notificacoes');
-            painel.classList.toggle('hidden');
-        }
-    </script>
 </head>
-<body class="bg-slate-100 text-slate-800">
+<body class="bg-slate-50 text-slate-800 antialiased min-h-screen flex flex-col relative selection:bg-[var(--primary-color)] selection:text-white">
 
     {% set clean_username = "" %}
     {% set is_master = false %}
     {% set perms = "" %}
-    
     {% set feat_ponto = true %}
     {% set feat_docs = true %}
     {% set feat_estoque = true %}
@@ -89,7 +54,6 @@
         {% set clean_username = current_user.username | string | replace('.', '') | replace('-', '') %}
         {% set is_master = current_user.role == 'Master' or clean_username == '50097952800' %}
         {% set perms = current_user.permissions or "" %}
-        
         {% if g.empresa and g.empresa.features_json %}
             {% set feat_ponto = g.empresa.features_json.get('ponto', true) %}
             {% set feat_docs = g.empresa.features_json.get('documentos', true) %}
@@ -98,224 +62,274 @@
     {% endif %}
 
     {% if current_user.is_authenticated and not current_user.is_first_access and not request.path.startswith('/vortice') %}
-    <div class="md:hidden bg-white border-b border-slate-200 p-4 flex justify-between items-center sticky top-0 z-40">
-        <button onclick="toggleSidebar()" class="text-slate-600 focus:outline-none"><i class="fas fa-bars text-xl"></i></button>
-        <span class="font-bold text-lg text-slate-800">{{ g.empresa.nome.split(' ')[0] if g.empresa else 'Vortice' }}</span>
-        <button onclick="toggleNotificacoes()" class="relative text-slate-500 hover:text-blue-600 focus:outline-none w-8">
-            <i class="fas fa-bell text-xl" id="bell-icon-mobile"></i>
-            <span id="badge-notif-mobile" class="hidden absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full border border-white">0</span>
-        </button>
-    </div>
-    <div id="overlay" onclick="toggleSidebar()" class="fixed inset-0 bg-black bg-opacity-50 z-40 hidden md:hidden"></div>
-    {% endif %}
+    
+    <nav class="glass-nav fixed top-3 left-3 right-3 md:left-6 md:right-6 z-50 rounded-2xl px-4 md:px-6 py-3 flex justify-between items-center shadow-sm transition-all">
+        <a href="/" class="flex items-center gap-3 transition transform active:scale-95 group">
+            <img src="{{ (g.empresa.config_json or {}).get('logo_url', '/static/icons/vortice-icon.png') if g.empresa else '/static/icons/vortice-icon.png' }}" 
+                 alt="Logo" class="w-8 h-8 rounded-lg shadow-sm object-cover bg-white group-hover:shadow-md transition">
+            <span class="font-bold text-xl text-slate-800 tracking-tight hidden sm:block">{{ g.empresa.nome.split(' ')[0] if g.empresa else 'Vortice' }}</span>
+        </a>
 
-    <div class="{% if current_user.is_authenticated and not current_user.is_first_access %}flex h-screen overflow-hidden{% endif %}">
-        
-        {% if current_user.is_authenticated and not current_user.is_first_access and not request.path.startswith('/vortice') %}
-        <aside id="sidebar" class="sidebar fixed inset-y-0 left-0 z-50 w-64 bg-[var(--sidebar-bg,#0f172a)] text-slate-300 transform -translate-x-full md:translate-x-0 md:static md:flex-shrink-0 flex flex-col shadow-2xl h-full transition-transform duration-300 ease-in-out border-r border-[var(--sidebar-border,#1e293b)]">
+        {% if current_user.role != 'Terminal' %}
+        <div class="hidden md:flex items-center gap-8 font-semibold text-sm text-slate-500">
+            <a href="/" class="hover:text-brand transition {% if request.path == '/' %}text-brand border-b-2 border-brand pb-0.5{% endif %}">Início</a>
             
-            <div class="h-16 flex items-center px-6 bg-[var(--sidebar-header,#020617)] border-b border-[var(--sidebar-border,#1e293b)]">
-                <img src="{{ (g.empresa.config_json or {}).get('logo_url', '/static/icons/vortice-icon.png') if g.empresa else '/static/icons/vortice-icon.png' }}" 
-                     alt="{{ g.empresa.nome if g.empresa else 'Vortice' }}" 
-                     class="w-8 h-8 rounded-lg mr-3 object-cover shadow-sm bg-white">
-                <span class="font-bold text-xl text-white tracking-tight">{{ g.empresa.nome.split(' ')[0] if g.empresa else 'Vortice' }}</span>
-            </div>
-            
-            <div class="p-6 border-b border-[var(--sidebar-border,#1e293b)]">
-                {% if not is_master %}
-                    <div class="text-xs font-bold text-slate-400 uppercase mb-1">Colaborador</div>
-                {% endif %}
-                <div class="text-sm font-bold text-white truncate">{{ current_user.real_name }}</div>
-                <div class="text-[10px] text-blue-400 font-mono mt-1 uppercase">{{ current_user.role }}</div>
-            </div>
-
-            <nav class="flex-1 overflow-y-auto py-4">
-                <ul class="space-y-1">
-                    {% if current_user.role == 'Terminal' %}
-                        {% if feat_ponto %}
-                        <li><a href="/ponto/scanner" class="flex items-center px-6 py-3 hover:bg-[var(--sidebar-hover,#1e293b)] hover:text-white transition group"><i class="fas fa-qrcode w-6 text-center mr-2 text-blue-500"></i><span class="font-medium">Abrir Leitor</span></a></li>
-                        {% endif %}
-                    {% else %}
-                        <li><a href="/" class="flex items-center px-6 py-3 hover:bg-[var(--sidebar-hover,#1e293b)] hover:text-white transition group"><i class="fas fa-home w-6 text-center mr-2 text-slate-400 group-hover:text-blue-500"></i><span class="font-medium">Início</span></a></li>
-                        
-                        <li class="pt-4 pb-2 px-6 text-[10px] font-bold uppercase text-slate-500">Área Pessoal</li>
-                        
-                        {% if feat_ponto %}
-                        <li><a href="/ponto/registrar" class="flex items-center px-6 py-3 hover:bg-[var(--sidebar-hover,#1e293b)] hover:text-white transition group"><i class="fas fa-fingerprint w-6 text-center mr-2 text-slate-400 group-hover:text-purple-500"></i><span class="font-medium">Registar Ponto</span></a></li>
-                        <li><a href="/ponto/espelho" class="flex items-center px-6 py-3 hover:bg-[var(--sidebar-hover,#1e293b)] hover:text-white transition group"><i class="fas fa-file-invoice w-6 text-center mr-2 text-slate-400 group-hover:text-blue-400"></i><span class="font-medium">Espelho de Ponto</span></a></li>
-                        <li><a href="/ponto/escala" class="flex items-center px-6 py-3 hover:bg-[var(--sidebar-hover,#1e293b)] hover:text-white transition group"><i class="fas fa-calendar-alt w-6 text-center mr-2 text-slate-400 group-hover:text-emerald-400"></i><span class="font-medium">Minha Escala</span></a></li>
-                        {% endif %}
-                        
-                        {% if feat_ponto or feat_estoque %}
-                        <li>
-                            <button onclick="toggleSubmenu('submenu-solic', 'icon-solic')" class="w-full flex items-center justify-between px-6 py-3 hover:bg-[var(--sidebar-hover,#1e293b)] hover:text-white transition group focus:outline-none">
-                                <div class="flex items-center">
-                                    <i class="fas fa-paper-plane w-6 text-center mr-2 text-slate-400 group-hover:text-white"></i>
-                                    <span class="font-medium">Solicitações</span>
-                                </div>
-                                <i id="icon-solic" class="fas fa-chevron-down text-xs transition-transform duration-300"></i>
-                            </button>
-                            <ul id="submenu-solic" class="submenu hidden bg-[var(--sidebar-header,#020617)]">
-                                {% if feat_ponto %}
-                                <li><a href="/ponto/solicitar-ajuste" class="block pl-16 pr-6 py-2 text-sm text-slate-400 hover:text-white hover:bg-[var(--sidebar-hover,#1e293b)] transition border-l-2 border-transparent hover:border-yellow-500">Ajuste de Ponto</a></li>
-                                <li><a href="/ponto/solicitar-ferias" class="block pl-16 pr-6 py-2 text-sm text-slate-400 hover:text-white hover:bg-[var(--sidebar-hover,#1e293b)] transition border-l-2 border-transparent hover:border-emerald-500">Férias e Licenças</a></li>
-                                {% endif %}
-                                {% if feat_estoque %}
-                                <li><a href="/estoque/solicitar-uniforme" class="block pl-16 pr-6 py-2 text-sm text-slate-400 hover:text-white hover:bg-[var(--sidebar-hover,#1e293b)] transition border-l-2 border-transparent hover:border-blue-400">Uniforme e EPI</a></li>
-                                {% endif %}
-                            </ul>
-                        </li>
-                        {% endif %}
-
-                        {% if feat_docs %}
-                        <li><a href="/documentos/meus-documentos" class="flex items-center px-6 py-3 hover:bg-[var(--sidebar-hover,#1e293b)] hover:text-white transition group"><i class="fas fa-folder-open w-6 text-center mr-2 text-slate-400 group-hover:text-yellow-400"></i><span class="font-medium">Meus Documentos</span></a></li>
-                        <li><a href="/documentos/atestados/meus" class="flex items-center px-6 py-3 hover:bg-[var(--sidebar-hover,#1e293b)] hover:text-white transition group"><i class="fas fa-file-medical w-6 text-center mr-2 text-slate-400 group-hover:text-teal-400"></i><span class="font-medium">Meus Atestados</span></a></li>
-                        {% endif %}
-
-                        {% if is_master or 'DOCUMENTOS' in perms or 'PONTO' in perms or 'ESTOQUE' in perms or 'USUARIOS' in perms %}
-                        <li class="pt-6 pb-2 px-6 text-[10px] font-bold uppercase text-slate-500 border-t border-[var(--sidebar-border,#1e293b)] mt-4">Administração</li>
-                        
-                        {% if feat_ponto and (is_master or 'PONTO' in perms) %}
-                        <li><a href="/ponto/admin/controle-escala" class="flex items-center px-6 py-3 hover:bg-[var(--sidebar-hover,#1e293b)] hover:text-white transition group"><i class="fas fa-users w-6 text-center mr-2 text-slate-400 group-hover:text-blue-400"></i><span class="font-medium">Controle de Escala</span></a></li>
-                        <li>
-                            <button onclick="toggleSubmenu('submenu-ponto', 'icon-ponto')" class="w-full flex items-center justify-between px-6 py-3 hover:bg-[var(--sidebar-hover,#1e293b)] hover:text-white transition group focus:outline-none">
-                                <div class="flex items-center">
-                                    <i class="fas fa-inbox w-6 text-center mr-2 text-slate-400 group-hover:text-white"></i>
-                                    <span class="font-medium">Central Solicitações</span>
-                                </div>
-                                <i id="icon-ponto" class="fas fa-chevron-down text-xs transition-transform duration-300"></i>
-                            </button>
-                            <ul id="submenu-ponto" class="submenu hidden bg-[var(--sidebar-header,#020617)]">
-                                <li><a href="/admin/solicitacoes" class="block pl-16 pr-6 py-2 text-sm text-slate-400 hover:text-white hover:bg-[var(--sidebar-hover,#1e293b)] transition border-l-2 border-transparent hover:border-yellow-500">Aprovar Ajustes</a></li>
-                                <li><a href="/ponto/admin/ausencias" class="block pl-16 pr-6 py-2 text-sm text-slate-400 hover:text-white hover:bg-[var(--sidebar-hover,#1e293b)] transition border-l-2 border-transparent hover:border-emerald-500">Gestão de Férias</a></li>
-                            </ul>
-                        </li>
-                        {% endif %}
-
-                        {% if feat_docs and (is_master or 'DOCUMENTOS' in perms) %}
-                        <li>
-                            <button onclick="toggleSubmenu('submenu-documentos', 'icon-documentos')" class="w-full flex items-center justify-between px-6 py-3 hover:bg-[var(--sidebar-hover,#1e293b)] hover:text-white transition group focus:outline-none">
-                                <div class="flex items-center">
-                                    <i class="fas fa-file-contract w-6 text-center mr-2 text-slate-400 group-hover:text-white"></i>
-                                    <span class="font-medium">Central Documentos</span>
-                                </div>
-                                <i id="icon-documentos" class="fas fa-chevron-down text-xs transition-transform duration-300"></i>
-                            </button>
-                            <ul id="submenu-documentos" class="submenu hidden bg-[var(--sidebar-header,#020617)]">
-                                <li><a href="/documentos/admin" class="block pl-16 pr-6 py-2 text-sm text-slate-400 hover:text-white hover:bg-[var(--sidebar-hover,#1e293b)] transition border-l-2 border-transparent hover:border-blue-600">Envio de Documentos</a></li>
-                                <li><a href="/documentos/admin/atestados" class="block pl-16 pr-6 py-2 text-sm text-slate-400 hover:text-white hover:bg-[var(--sidebar-hover,#1e293b)] transition border-l-2 border-transparent hover:border-teal-500">Atestados Médicos</a></li>
-                                <li><a href="/documentos/relatorio-folha" class="block pl-16 pr-6 py-2 text-sm text-slate-400 hover:text-white hover:bg-[var(--sidebar-hover,#1e293b)] transition border-l-2 border-transparent hover:border-yellow-400">Fechamento de Folha</a></li>
-                                {% if is_master or 'AUDITORIA' in perms %}
-                                <li><a href="/documentos/admin/auditoria" class="block pl-16 pr-6 py-2 text-sm text-slate-400 hover:text-white hover:bg-[var(--sidebar-hover,#1e293b)] transition border-l-2 border-transparent hover:border-purple-500">Auditoria (Assinaturas)</a></li>
-                                {% endif %}
-                            </ul>
-                        </li>
-                        {% endif %}
-
-                        {% if feat_estoque and (is_master or 'ESTOQUE' in perms) %}
-                        <li>
-                            <button onclick="toggleSubmenu('submenu-estoque', 'icon-estoque')" class="w-full flex items-center justify-between px-6 py-3 hover:bg-[var(--sidebar-hover,#1e293b)] hover:text-white transition group focus:outline-none">
-                                <div class="flex items-center">
-                                    <i class="fas fa-box w-6 text-center mr-2 text-slate-400 group-hover:text-white"></i>
-                                    <span class="font-medium">Controle de Estoque</span>
-                                </div>
-                                <i id="icon-estoque" class="fas fa-chevron-down text-xs transition-transform duration-300"></i>
-                            </button>
-                            <ul id="submenu-estoque" class="submenu hidden bg-[var(--sidebar-header,#020617)]">
-                                <li><a href="/estoque/gerenciar" class="block pl-16 pr-6 py-2 text-sm text-slate-400 hover:text-white hover:bg-[var(--sidebar-hover,#1e293b)] transition border-l-2 border-transparent hover:border-emerald-500">Inventário Geral</a></li>
-                                <li><a href="/estoque/admin/solicitacoes" class="block pl-16 pr-6 py-2 text-sm text-slate-400 hover:text-white hover:bg-[var(--sidebar-hover,#1e293b)] transition border-l-2 border-transparent hover:border-blue-500">Pedidos de EPI/Uniforme</a></li>
-                            </ul>
-                        </li>
-                        {% endif %}
-
-                        {% if is_master or 'USUARIOS' in perms %}
-                        <li><a href="/admin/usuarios" class="flex items-center px-6 py-3 hover:bg-[var(--sidebar-hover,#1e293b)] hover:text-white transition group"><i class="fas fa-users-cog w-6 text-center mr-2 text-slate-400 group-hover:text-blue-400"></i><span class="font-medium">Funcionários</span></a></li>
-                        <li><a href="/admin/cargos" class="flex items-center px-6 py-3 hover:bg-[var(--sidebar-hover,#1e293b)] hover:text-white transition group"><i class="fas fa-user-shield w-6 text-center mr-2 text-slate-400 group-hover:text-purple-400"></i><span class="font-medium">Cargos (RBAC)</span></a></li>
-                        {% endif %}
-                        {% endif %}
-                    {% endif %}
-                    
-                    <li id="pwa-install-container" class="hidden mt-6 mx-4">
-                        <button id="pwa-install-btn" class="w-full flex items-center justify-center px-4 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl shadow-lg transition-transform transform active:scale-95 group">
-                            <i class="fas fa-download mr-2 group-hover:animate-bounce"></i>
-                            <span class="font-bold text-xs tracking-wide uppercase">Instalar App</span>
-                        </button>
-                    </li>
-
-                    <li id="push-subscribe-container" class="mt-4 mb-2 mx-4 hidden">
-                        <button id="push-subscribe-btn" class="w-full flex items-center justify-center px-4 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl shadow-lg transition-transform transform active:scale-95 group border border-indigo-500/50">
-                            <i class="fas fa-bell mr-2 group-hover:animate-pulse"></i>
-                            <span class="font-bold text-xs tracking-wide uppercase">Ativar Alertas</span>
-                        </button>
-                    </li>
-                    
-                    <li class="{% if current_user.role != 'Terminal' %}mt-2{% endif %}"><a href="/logout" class="flex items-center px-6 py-3 hover:bg-red-900/20 hover:text-red-400 transition group border-t border-[var(--sidebar-border,#1e293b)]"><i class="fas fa-sign-out-alt w-6 text-center mr-2 text-slate-400 group-hover:text-red-400"></i><span class="font-medium">Sair</span></a></li>
-                </ul>
-            </nav>
-        </aside>
-        {% endif %} 
-
-        <div class="flex-1 h-full overflow-y-auto bg-slate-50 relative w-full">
-            
-            {% if current_user.is_authenticated and not current_user.is_first_access and not request.path.startswith('/vortice') %}
-            <div class="hidden md:flex justify-end items-center px-8 py-4 bg-white/50 border-b border-slate-200 sticky top-0 z-30 backdrop-blur-md">
-                <div class="relative">
-                    <button onclick="toggleNotificacoes()" class="relative text-slate-500 hover:text-blue-600 focus:outline-none transition group bg-white p-2.5 rounded-full border border-slate-200 shadow-sm hover:shadow">
-                        <i class="fas fa-bell text-lg" id="bell-icon-desktop"></i>
-                        <span id="badge-notif-desktop" class="hidden absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full border border-white shadow-sm transition-transform scale-0">0</span>
-                    </button>
-                    
-                    <div id="painel-notificacoes" class="hidden absolute right-0 mt-3 w-80 bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden transform origin-top-right transition-all">
-                        <div class="bg-blue-600 px-5 py-3 flex justify-between items-center">
-                            <h3 class="font-bold text-white text-sm flex items-center gap-2"><i class="fas fa-inbox opacity-70"></i> Notificações</h3>
-                            <div class="flex gap-3">
-                                <button onclick="lerTodasNotificacoes()" class="text-[10px] text-blue-200 hover:text-white uppercase font-bold tracking-wider transition" title="Marcar todas como lidas"><i class="fas fa-check-double mr-1"></i> Ler Tudo</button>
-                                <button onclick="limparNotificacoes()" class="text-[10px] text-red-300 hover:text-red-100 uppercase font-bold tracking-wider transition" title="Excluir histórico de notificações"><i class="fas fa-trash-alt mr-1"></i> Limpar</button>
-                            </div>
-                        </div>
-                        <div id="lista-notificacoes" class="max-h-[400px] overflow-y-auto divide-y divide-slate-100 bg-slate-50">
-                            <div class="p-8 text-center text-slate-400 text-xs font-medium"><i class="fas fa-spinner fa-spin mr-2"></i> Carregando novidades...</div>
-                        </div>
+            {% if feat_ponto %}
+            <div class="relative group cursor-pointer py-2">
+                <span class="hover:text-brand transition flex items-center gap-1.5">Ponto <i class="fas fa-chevron-down text-[10px] opacity-50 group-hover:rotate-180 transition-transform"></i></span>
+                <div class="absolute top-full left-1/2 -translate-x-1/2 mt-1 w-52 bg-white rounded-2xl shadow-xl shadow-slate-200/50 border border-slate-100 opacity-0 invisible translate-y-2 scale-95 group-hover:opacity-100 group-hover:visible group-hover:translate-y-0 group-hover:scale-100 transition-all duration-200 ease-out z-50">
+                    <div class="p-2 space-y-1">
+                        <a href="/ponto/registrar" class="block px-4 py-2.5 text-xs font-medium text-slate-600 rounded-xl hover:bg-slate-50 hover:text-brand transition"><i class="fas fa-fingerprint w-5 text-center opacity-50 mr-1"></i> Bater Ponto</a>
+                        <a href="/ponto/espelho" class="block px-4 py-2.5 text-xs font-medium text-slate-600 rounded-xl hover:bg-slate-50 hover:text-brand transition"><i class="fas fa-file-invoice w-5 text-center opacity-50 mr-1"></i> Meu Espelho</a>
+                        <a href="/ponto/escala" class="block px-4 py-2.5 text-xs font-medium text-slate-600 rounded-xl hover:bg-slate-50 hover:text-brand transition"><i class="fas fa-calendar-alt w-5 text-center opacity-50 mr-1"></i> Minha Escala</a>
                     </div>
                 </div>
             </div>
             {% endif %}
 
-            <div class="{% if request.path.startswith('/vortice') %}w-full px-4 md:px-8{% else %}max-w-5xl mx-auto p-4 md:p-8{% endif %} pb-20 pt-6">
-                {% with messages = get_flashed_messages(with_categories=true) %}
-                    {% if messages %}
-                        {% for category, message in messages %}
-                            <div class="hidden" id="flask-msg-{{ loop.index }}" data-cat="{{ category }}">{{ message }}</div>
-                        {% endfor %}
-                    {% endif %}
-                {% endwith %}
-                
-                {% block content %}{% endblock %}
+            {% if feat_docs %}
+            <div class="relative group cursor-pointer py-2">
+                <span class="hover:text-brand transition flex items-center gap-1.5">Documentos <i class="fas fa-chevron-down text-[10px] opacity-50 group-hover:rotate-180 transition-transform"></i></span>
+                <div class="absolute top-full left-1/2 -translate-x-1/2 mt-1 w-56 bg-white rounded-2xl shadow-xl shadow-slate-200/50 border border-slate-100 opacity-0 invisible translate-y-2 scale-95 group-hover:opacity-100 group-hover:visible group-hover:translate-y-0 group-hover:scale-100 transition-all duration-200 ease-out z-50">
+                    <div class="p-2 space-y-1">
+                        <a href="/documentos/meus-documentos" class="block px-4 py-2.5 text-xs font-medium text-slate-600 rounded-xl hover:bg-slate-50 hover:text-brand transition"><i class="fas fa-folder-open w-5 text-center opacity-50 mr-1"></i> Holerites e Recibos</a>
+                        <a href="/documentos/atestados/meus" class="block px-4 py-2.5 text-xs font-medium text-slate-600 rounded-xl hover:bg-slate-50 hover:text-brand transition"><i class="fas fa-file-medical w-5 text-center opacity-50 mr-1"></i> Histórico de Atestados</a>
+                        <div class="border-t border-slate-100 my-1"></div>
+                        <a href="/documentos/atestado/novo" class="block px-4 py-2.5 text-xs font-bold text-brand bg-brand/5 rounded-xl hover:bg-brand/10 transition"><i class="fas fa-plus w-5 text-center mr-1"></i> Enviar Novo Atestado</a>
+                    </div>
+                </div>
             </div>
-            
-            {% if current_user.is_authenticated and not current_user.is_first_access and not request.path.startswith('/vortice') %}
-            <footer class="py-6 text-center text-xs text-slate-400">&copy; 2026 {{ g.empresa.nome if g.empresa else 'Vortice SaaS' }}</footer>
+            {% endif %}
+
+            {% if feat_ponto or feat_estoque %}
+            <div class="relative group cursor-pointer py-2">
+                <span class="hover:text-brand transition flex items-center gap-1.5">Pedidos <i class="fas fa-chevron-down text-[10px] opacity-50 group-hover:rotate-180 transition-transform"></i></span>
+                <div class="absolute top-full left-1/2 -translate-x-1/2 mt-1 w-52 bg-white rounded-2xl shadow-xl shadow-slate-200/50 border border-slate-100 opacity-0 invisible translate-y-2 scale-95 group-hover:opacity-100 group-hover:visible group-hover:translate-y-0 group-hover:scale-100 transition-all duration-200 ease-out z-50">
+                    <div class="p-2 space-y-1">
+                        {% if feat_ponto %}
+                        <a href="/ponto/solicitar-ajuste" class="block px-4 py-2.5 text-xs font-medium text-slate-600 rounded-xl hover:bg-slate-50 hover:text-brand transition"><i class="fas fa-clock w-5 text-center opacity-50 mr-1"></i> Ajuste de Ponto</a>
+                        <a href="/ponto/solicitar-ferias" class="block px-4 py-2.5 text-xs font-medium text-slate-600 rounded-xl hover:bg-slate-50 hover:text-brand transition"><i class="fas fa-plane-departure w-5 text-center opacity-50 mr-1"></i> Férias/Licenças</a>
+                        {% endif %}
+                        {% if feat_estoque %}
+                        <a href="/estoque/solicitar-uniforme" class="block px-4 py-2.5 text-xs font-medium text-slate-600 rounded-xl hover:bg-slate-50 hover:text-brand transition"><i class="fas fa-tshirt w-5 text-center opacity-50 mr-1"></i> Uniforme/EPI</a>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            {% if is_master or 'DOCUMENTOS' in perms or 'PONTO' in perms or 'ESTOQUE' in perms or 'USUARIOS' in perms %}
+            <div class="relative group cursor-pointer py-2">
+                <span class="hover:text-brand transition flex items-center gap-1.5 bg-slate-100 px-3 py-1.5 rounded-lg text-slate-700 font-bold">Workspace <i class="fas fa-chevron-down text-[10px] opacity-50 group-hover:rotate-180 transition-transform"></i></span>
+                <div class="absolute top-full right-0 mt-1 w-64 bg-white rounded-2xl shadow-xl shadow-slate-200/50 border border-slate-100 opacity-0 invisible translate-y-2 scale-95 group-hover:opacity-100 group-hover:visible group-hover:translate-y-0 group-hover:scale-100 transition-all duration-200 ease-out z-50">
+                    <div class="p-3 space-y-1">
+                        <div class="px-3 pb-2 pt-1 text-[9px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 mb-2">Painel de Gestão</div>
+                        
+                        {% if is_master or 'USUARIOS' in perms %}
+                        <a href="/admin/usuarios" class="block px-3 py-2.5 text-xs font-medium text-slate-600 rounded-xl hover:bg-slate-50 hover:text-brand transition"><i class="fas fa-users w-6 text-center opacity-50"></i> Equipe e Cargos</a>
+                        <a href="/vagas" class="block px-3 py-2.5 text-xs font-medium text-slate-600 rounded-xl hover:bg-slate-50 hover:text-brand transition"><i class="fas fa-briefcase w-6 text-center opacity-50"></i> Recrutamento (ATS)</a>
+                        {% endif %}
+                        
+                        {% if feat_ponto and (is_master or 'PONTO' in perms) %}
+                        <a href="/ponto/admin/controle-escala" class="block px-3 py-2.5 text-xs font-medium text-slate-600 rounded-xl hover:bg-slate-50 hover:text-brand transition"><i class="fas fa-business-time w-6 text-center opacity-50"></i> Escalas e Ponto</a>
+                        <a href="/admin/solicitacoes" class="block px-3 py-2.5 text-xs font-medium text-slate-600 rounded-xl hover:bg-slate-50 hover:text-brand transition"><i class="fas fa-inbox w-6 text-center opacity-50"></i> Caixa de Aprovações</a>
+                        {% endif %}
+                        
+                        {% if feat_docs and (is_master or 'DOCUMENTOS' in perms) %}
+                        <a href="/documentos/admin" class="block px-3 py-2.5 text-xs font-medium text-slate-600 rounded-xl hover:bg-slate-50 hover:text-brand transition"><i class="fas fa-folder-open w-6 text-center opacity-50"></i> Central Documentos</a>
+                        <a href="/documentos/relatorio-folha" class="block px-3 py-2.5 text-xs font-medium text-slate-600 rounded-xl hover:bg-slate-50 hover:text-brand transition"><i class="fas fa-file-excel w-6 text-center opacity-50"></i> Fechamento Folha</a>
+                        {% endif %}
+                        
+                        {% if feat_estoque and (is_master or 'ESTOQUE' in perms) %}
+                        <a href="/estoque/gerenciar" class="block px-3 py-2.5 text-xs font-medium text-slate-600 rounded-xl hover:bg-slate-50 hover:text-brand transition"><i class="fas fa-box-open w-6 text-center opacity-50"></i> Controle de Estoque</a>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
             {% endif %}
         </div>
-    </div>
+        {% endif %}
 
-    <div id="modal-confirmacao" class="hidden fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm transition-opacity">
-        <div class="bg-white rounded-3xl shadow-2xl max-w-sm w-full mx-4 overflow-hidden transform scale-95 transition-transform duration-200 ease-out" id="modal-content">
-            <div class="p-8 text-center">
-                <div class="w-20 h-20 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-5">
-                    <i class="fas fa-exclamation-triangle text-red-500 text-4xl"></i>
-                </div>
-                <h3 class="text-2xl font-black text-slate-800 mb-2">Atenção!</h3>
-                <p id="modal-mensagem" class="text-sm text-slate-500 mb-8 leading-relaxed">Tem certeza que deseja continuar com esta ação?</p>
+        <div class="flex items-center gap-1 md:gap-3">
+            
+            <div class="relative">
+                <button onclick="toggleNotificacoes()" class="relative text-slate-400 hover:text-brand focus:outline-none transition p-2.5 rounded-full hover:bg-slate-100/50">
+                    <i class="fas fa-bell text-[1.1rem]" id="bell-icon-desktop"></i>
+                    <span id="badge-notif-desktop" class="hidden absolute top-1 right-1.5 bg-red-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full border border-white shadow-sm">0</span>
+                </button>
                 
-                <div class="flex gap-4">
-                    <button onclick="fecharModalConfirmacao()" class="flex-1 py-3.5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-xl transition">
+                <div id="painel-notificacoes" class="absolute right-0 mt-3 w-80 glass-panel overflow-hidden z-50 opacity-0 invisible translate-y-2 scale-95 transition-all duration-200">
+                    <div class="bg-brand px-5 py-3.5 flex justify-between items-center text-white">
+                        <h3 class="font-bold text-sm flex items-center gap-2"><i class="fas fa-inbox opacity-80"></i> Atualizações</h3>
+                        <div class="flex gap-3">
+                            <button onclick="lerTodasNotificacoes()" class="text-[9px] uppercase font-black tracking-wider opacity-80 hover:opacity-100 transition" title="Marcar lidas"><i class="fas fa-check-double mr-1"></i> Ler Tudo</button>
+                            <button onclick="limparNotificacoes()" class="text-[9px] uppercase font-black tracking-wider opacity-80 hover:opacity-100 transition" title="Limpar histórico"><i class="fas fa-trash-alt mr-1"></i> Limpar</button>
+                        </div>
+                    </div>
+                    <div id="lista-notificacoes" class="max-h-[350px] overflow-y-auto divide-y divide-slate-100 bg-white/50">
+                        <div class="p-8 text-center text-slate-400 text-xs font-medium"><i class="fas fa-spinner fa-spin mr-2"></i> A carregar...</div>
+                    </div>
+                </div>
+            </div>
+
+            <button onclick="toggleMobileMenu()" class="md:hidden text-slate-500 p-2 ml-1 focus:outline-none hover:bg-slate-100 rounded-lg"><i class="fas fa-bars text-xl"></i></button>
+
+            <div class="hidden md:block relative group cursor-pointer ml-1">
+                <div class="flex items-center gap-2 bg-white border border-slate-200 rounded-full py-1 px-1 pr-3 shadow-sm hover:shadow-md transition duration-200">
+                    <div class="w-8 h-8 rounded-full bg-brand text-white flex items-center justify-center font-bold text-xs shadow-inner uppercase tracking-wider">
+                        {{ current_user.real_name[0:2] }}
+                    </div>
+                    <span class="text-xs font-bold text-slate-700 max-w-[100px] truncate">{{ current_user.real_name.split(' ')[0] }}</span>
+                    <i class="fas fa-chevron-down text-[10px] text-slate-400"></i>
+                </div>
+                <div class="absolute top-full right-0 mt-2 w-52 bg-white rounded-2xl shadow-xl shadow-slate-200/50 border border-slate-100 opacity-0 invisible translate-y-2 scale-95 group-hover:opacity-100 group-hover:visible group-hover:translate-y-0 group-hover:scale-100 transition-all duration-200 ease-out z-50">
+                    <div class="p-4 border-b border-slate-100 bg-slate-50 rounded-t-2xl">
+                        <p class="text-sm font-bold text-slate-800 truncate">{{ current_user.real_name }}</p>
+                        <p class="text-[10px] text-brand font-black uppercase mt-1 tracking-widest">{{ current_user.role }}</p>
+                    </div>
+                    <div class="p-2">
+                        <a href="/logout" class="flex items-center gap-2 px-3 py-2.5 text-xs font-bold text-red-600 rounded-xl hover:bg-red-50 transition"><i class="fas fa-sign-out-alt w-4 text-center"></i> Encerrar Sessão</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div id="mobile-overlay" onclick="toggleMobileMenu()" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[90] hidden transition-opacity duration-300 opacity-0"></div>
+    <div id="mobile-drawer" class="fixed inset-y-0 right-0 w-72 bg-white shadow-2xl z-[100] transform translate-x-full transition-transform duration-300 flex flex-col border-l border-slate-100">
+        <div class="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-full bg-brand text-white flex items-center justify-center font-bold text-sm shadow-inner uppercase tracking-wider">{{ current_user.real_name[0:2] }}</div>
+                <div>
+                    <p class="text-sm font-bold text-slate-800 leading-tight">{{ current_user.real_name.split(' ')[0] }}</p>
+                    <p class="text-[10px] font-black text-brand uppercase tracking-widest">{{ current_user.role }}</p>
+                </div>
+            </div>
+            <button onclick="toggleMobileMenu()" class="text-slate-400 hover:text-slate-600 w-8 h-8 flex items-center justify-center rounded-full bg-white shadow-sm border border-slate-200"><i class="fas fa-times"></i></button>
+        </div>
+        
+        <div class="flex-1 overflow-y-auto p-6 space-y-6">
+            {% if current_user.role == 'Terminal' %}
+                {% if feat_ponto %}
+                <a href="/ponto/scanner" class="flex items-center gap-3 text-sm font-bold text-slate-700 hover:text-brand"><div class="w-8 h-8 rounded-lg bg-slate-100 text-brand flex items-center justify-center"><i class="fas fa-qrcode"></i></div> Abrir Leitor</a>
+                {% endif %}
+            {% else %}
+                <a href="/" class="flex items-center gap-3 text-sm font-bold text-slate-700 hover:text-brand"><div class="w-8 h-8 rounded-lg bg-slate-100 text-slate-500 flex items-center justify-center"><i class="fas fa-home"></i></div> Dashboard Inicial</a>
+                
+                {% if feat_ponto %}
+                <div>
+                    <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 pl-1 border-l-2 border-brand">Ponto & Jornada</p>
+                    <div class="space-y-4 pl-3">
+                        <a href="/ponto/registrar" class="block text-sm font-medium text-slate-600 hover:text-brand">Registrar Ponto</a>
+                        <a href="/ponto/espelho" class="block text-sm font-medium text-slate-600 hover:text-brand">Meu Espelho</a>
+                        <a href="/ponto/escala" class="block text-sm font-medium text-slate-600 hover:text-brand">Minha Escala</a>
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if feat_docs %}
+                <div>
+                    <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 pl-1 border-l-2 border-brand">Documentos</p>
+                    <div class="space-y-4 pl-3">
+                        <a href="/documentos/meus-documentos" class="block text-sm font-medium text-slate-600 hover:text-brand">Holerites e Recibos</a>
+                        <a href="/documentos/atestados/meus" class="block text-sm font-medium text-slate-600 hover:text-brand">Meus Atestados</a>
+                        <a href="/documentos/atestado/novo" class="block text-sm font-bold text-brand">Enviar Atestado</a>
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if feat_ponto or feat_estoque %}
+                <div>
+                    <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 pl-1 border-l-2 border-brand">Solicitações</p>
+                    <div class="space-y-4 pl-3">
+                        {% if feat_ponto %}
+                        <a href="/ponto/solicitar-ajuste" class="block text-sm font-medium text-slate-600 hover:text-brand">Ajuste de Ponto</a>
+                        <a href="/ponto/solicitar-ferias" class="block text-sm font-medium text-slate-600 hover:text-brand">Férias/Licenças</a>
+                        {% endif %}
+                        {% if feat_estoque %}
+                        <a href="/estoque/solicitar-uniforme" class="block text-sm font-medium text-slate-600 hover:text-brand">Uniforme/EPI</a>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if is_master or 'DOCUMENTOS' in perms or 'PONTO' in perms or 'ESTOQUE' in perms or 'USUARIOS' in perms %}
+                <div class="bg-slate-50 -mx-6 p-6 border-y border-slate-100">
+                    <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-1"><i class="fas fa-lock text-brand"></i> Área de Gestão</p>
+                    <div class="space-y-4 pl-3">
+                        {% if is_master or 'USUARIOS' in perms %}
+                        <a href="/admin/usuarios" class="block text-sm font-bold text-slate-700 hover:text-brand">Equipe e Cargos</a>
+                        <a href="/vagas" class="block text-sm font-bold text-slate-700 hover:text-brand">Recrutamento (ATS)</a>
+                        {% endif %}
+                        
+                        {% if feat_ponto and (is_master or 'PONTO' in perms) %}
+                        <a href="/ponto/admin/controle-escala" class="block text-sm font-bold text-slate-700 hover:text-brand">Central de Ponto</a>
+                        <a href="/admin/solicitacoes" class="block text-sm font-bold text-slate-700 hover:text-brand">Caixa de Aprovações</a>
+                        {% endif %}
+                        
+                        {% if feat_docs and (is_master or 'DOCUMENTOS' in perms) %}
+                        <a href="/documentos/admin" class="block text-sm font-bold text-slate-700 hover:text-brand">Central Documentos</a>
+                        <a href="/documentos/relatorio-folha" class="block text-sm font-bold text-slate-700 hover:text-brand">Fechamento Folha</a>
+                        {% endif %}
+                        
+                        {% if feat_estoque and (is_master or 'ESTOQUE' in perms) %}<a href="/estoque/gerenciar" class="block text-sm font-bold text-slate-700 hover:text-brand">Inventário (Logística)</a>{% endif %}
+                    </div>
+                </div>
+                {% endif %}
+            {% endif %}
+
+            <div id="pwa-install-container-mobile" class="hidden pt-4">
+                <button id="pwa-install-btn-mobile" class="w-full btn-primary text-xs py-3">
+                    <i class="fas fa-download"></i> Instalar App
+                </button>
+            </div>
+            
+        </div>
+        <div class="p-6 border-t border-slate-100 bg-white">
+            <a href="/logout" class="flex items-center justify-center gap-2 w-full py-3 rounded-xl font-bold text-sm text-red-600 bg-red-50 hover:bg-red-100 transition">
+                <i class="fas fa-sign-out-alt"></i> Sair
+            </a>
+        </div>
+    </div>
+    {% endif %}
+
+    <main class="flex-1 w-full pt-24 md:pt-28 pb-16 px-4 md:px-8 max-w-7xl mx-auto z-10 {% if not current_user.is_authenticated or current_user.is_first_access or request.path.startswith('/vortice') %}!pt-8 !max-w-4xl{% endif %}">
+        
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="hidden" id="flask-msg-{{ loop.index }}" data-cat="{{ category }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+        
+        {% block content %}{% endblock %}
+
+    </main>
+    
+    {% if current_user.is_authenticated and not current_user.is_first_access and not request.path.startswith('/vortice') %}
+    <footer class="py-8 text-center z-10 mt-auto">
+        <p class="text-[11px] font-medium text-slate-400">&copy; {{ g.empresa.nome if g.empresa else 'Vortice SaaS' }} - Sistema Integrado</p>
+    </footer>
+    {% endif %}
+
+    <div id="modal-confirmacao" class="hidden fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm transition-opacity opacity-0">
+        <div class="glass-panel max-w-sm w-full mx-4 overflow-hidden transform scale-95 transition-transform duration-300 ease-out" id="modal-content">
+            <div class="p-8 text-center bg-white/80">
+                <div class="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4 border border-red-100">
+                    <i class="fas fa-exclamation-triangle text-red-500 text-2xl"></i>
+                </div>
+                <h3 class="text-xl font-black text-slate-800 mb-2">Atenção!</h3>
+                <p id="modal-mensagem" class="text-sm text-slate-500 mb-8 leading-relaxed">Tem certeza que deseja continuar?</p>
+                
+                <div class="flex gap-3">
+                    <button onclick="fecharModalConfirmacao()" class="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-xl transition text-sm">
                         Cancelar
                     </button>
                     <form id="form-confirmacao" method="POST" class="flex-1">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                        <button type="submit" class="w-full h-full py-3.5 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl shadow-lg shadow-red-200 transition transform active:scale-95 flex items-center justify-center gap-2">
-                            <i class="fas fa-trash-alt"></i> Confirmar
+                        <button type="submit" class="w-full h-full py-3 bg-red-500 hover:bg-red-600 text-white font-bold rounded-xl shadow-lg shadow-red-200 transition transform active:scale-95 flex items-center justify-center gap-2 text-sm border border-red-600">
+                            <i class="fas fa-check"></i> Confirmar
                         </button>
                     </form>
                 </div>
@@ -325,7 +339,42 @@
 
     <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
     <script>
-        // Lógica do Modal de Confirmação 
+        // --- 1. Utilidades de Interface ---
+        function toggleMobileMenu() {
+            const drawer = document.getElementById('mobile-drawer');
+            const overlay = document.getElementById('mobile-overlay');
+            if (drawer.classList.contains('translate-x-full')) {
+                drawer.classList.remove('translate-x-full');
+                overlay.classList.remove('hidden');
+                setTimeout(() => overlay.classList.remove('opacity-0'), 10);
+            } else {
+                drawer.classList.add('translate-x-full');
+                overlay.classList.add('opacity-0');
+                setTimeout(() => overlay.classList.add('hidden'), 300);
+            }
+        }
+
+        function toggleNotificacoes() {
+            const painel = document.getElementById('painel-notificacoes');
+            if (painel.classList.contains('opacity-0')) {
+                painel.classList.remove('opacity-0', 'invisible', 'translate-y-2', 'scale-95');
+                painel.classList.add('opacity-100', 'visible', 'translate-y-0', 'scale-100');
+            } else {
+                painel.classList.add('opacity-0', 'invisible', 'translate-y-2', 'scale-95');
+                painel.classList.remove('opacity-100', 'visible', 'translate-y-0', 'scale-100');
+            }
+        }
+
+        document.addEventListener('click', function(event) {
+            const btn = document.getElementById('bell-icon-desktop')?.parentElement;
+            const painel = document.getElementById('painel-notificacoes');
+            if (painel && btn && !btn.contains(event.target) && !painel.contains(event.target)) {
+                painel.classList.add('opacity-0', 'invisible', 'translate-y-2', 'scale-95');
+                painel.classList.remove('opacity-100', 'visible', 'translate-y-0', 'scale-100');
+            }
+        });
+
+        // --- 2. Modal de Confirmação ---
         function confirmarAcao(mensagem, actionUrl) {
             document.getElementById('modal-mensagem').innerText = mensagem;
             document.getElementById('form-confirmacao').action = actionUrl;
@@ -333,6 +382,7 @@
             const content = document.getElementById('modal-content');
             modal.classList.remove('hidden');
             setTimeout(() => {
+                modal.classList.remove('opacity-0');
                 content.classList.remove('scale-95');
                 content.classList.add('scale-100');
             }, 10);
@@ -341,29 +391,32 @@
         function fecharModalConfirmacao() {
             const modal = document.getElementById('modal-confirmacao');
             const content = document.getElementById('modal-content');
+            modal.classList.add('opacity-0');
             content.classList.remove('scale-100');
             content.classList.add('scale-95');
-            setTimeout(() => { modal.classList.add('hidden'); }, 200);
+            setTimeout(() => { modal.classList.add('hidden'); }, 300);
         }
 
-        // Lógica de Mensagens Flash e Notificações
+        // --- 3. Mensagens Flash (Toastify) ---
         document.addEventListener('DOMContentLoaded', function() {
             document.querySelectorAll('[id^="flask-msg-"]').forEach(el => {
                 const msg = el.innerText;
                 const cat = el.getAttribute('data-cat');
                 Toastify({
                     text: msg, duration: 4000, close: true, gravity: "top", position: "right", 
-                    style: { background: cat === 'error' ? "linear-gradient(to right, #ef4444, #b91c1c)" : "linear-gradient(to right, var(--primary-color, #3b82f6), var(--primary-hover, #2563eb))", borderRadius: "8px", fontSize: "14px" },
+                    style: { background: cat === 'error' ? "linear-gradient(to right, #ef4444, #b91c1c)" : "linear-gradient(to right, var(--primary-color, #3b82f6), var(--primary-hover, #2563eb))", borderRadius: "12px", fontSize: "13px", fontWeight: "600", padding: "12px 20px", boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.1)" },
                 }).showToast();
             });
 
             {% if current_user.is_authenticated and not current_user.is_first_access and not request.path.startswith('/vortice') %}
             buscarNotificacoes();
-            setInterval(buscarNotificacoes, 120000); 
+            setInterval(buscarNotificacoes, 30000); 
             {% endif %}
         });
 
-        // Funções de Notificação
+        // --- 4. Sistema de Notificações ---
+        let lastQtdNotificacoes = parseInt(sessionStorage.getItem('notif_qtd')) || 0;
+
         async function buscarNotificacoes() {
             try {
                 const req = await fetch('/api/notificacoes');
@@ -376,39 +429,39 @@
         function atualizarBadge(qtd) {
             const bDesktop = document.getElementById('badge-notif-desktop');
             const iDesktop = document.getElementById('bell-icon-desktop');
-            const bMobile = document.getElementById('badge-notif-mobile');
-            const iMobile = document.getElementById('bell-icon-mobile');
+            
             if (qtd > 0) {
-                if(bDesktop) { bDesktop.innerText = qtd; bDesktop.classList.remove('hidden'); bDesktop.style.transform = 'scale(1)'; }
-                if(bMobile) { bMobile.innerText = qtd; bMobile.classList.remove('hidden'); }
-                if(iDesktop) iDesktop.classList.add('bell-ring');
-                if(iMobile) iMobile.classList.add('bell-ring');
+                if(bDesktop) { bDesktop.innerText = qtd; bDesktop.classList.remove('hidden', 'scale-0'); }
+                if (qtd > lastQtdNotificacoes) {
+                    if(iDesktop) { iDesktop.classList.remove('bell-ring'); void iDesktop.offsetWidth; iDesktop.classList.add('bell-ring'); }
+                    if(bDesktop) { bDesktop.classList.remove('badge-pop'); void bDesktop.offsetWidth; bDesktop.classList.add('badge-pop'); }
+                }
             } else {
-                if(bDesktop) { bDesktop.classList.add('hidden'); bDesktop.style.transform = 'scale(0)'; }
-                if(bMobile) bMobile.classList.add('hidden');
-                if(iDesktop) iDesktop.classList.remove('bell-ring');
-                if(iMobile) iMobile.classList.remove('bell-ring');
+                if(bDesktop) { bDesktop.classList.add('hidden', 'scale-0'); bDesktop.classList.remove('badge-pop'); }
             }
+            lastQtdNotificacoes = qtd;
+            sessionStorage.setItem('notif_qtd', qtd);
         }
 
         function renderizarLista(itens) {
             const lista = document.getElementById('lista-notificacoes');
             if (itens.length === 0) {
-                lista.innerHTML = '<div class="p-8 text-center text-slate-400 text-xs flex flex-col items-center gap-2"><i class="fas fa-check-circle text-2xl opacity-20"></i> Tudo lido por aqui!</div>';
+                lista.innerHTML = '<div class="p-8 text-center text-slate-400 text-xs flex flex-col items-center gap-3"><div class="w-12 h-12 bg-slate-50 rounded-full flex items-center justify-center"><i class="fas fa-check text-xl opacity-40"></i></div> Tudo lido por aqui!</div>';
                 return;
             }
             lista.innerHTML = '';
             itens.forEach(n => {
-                const corBg = n.lida ? 'bg-white' : 'bg-blue-50/50';
-                const corBolinha = n.lida ? 'bg-transparent' : 'bg-blue-500';
+                const corBg = n.lida ? 'bg-transparent' : 'bg-brand/5';
+                const corBolinha = n.lida ? 'bg-slate-200' : 'bg-brand';
+                const fw = n.lida ? 'font-medium' : 'font-bold';
                 const linkAttr = n.link ? `onclick="clicarNotificacao(${n.id}, '${n.link}')" class="cursor-pointer hover:bg-slate-50 block transition"` : `class="block"`;
                 lista.innerHTML += `
                     <a ${linkAttr}>
                         <div class="px-5 py-4 flex gap-3 ${corBg}">
-                            <div class="mt-1 w-2 h-2 rounded-full ${corBolinha} flex-shrink-0"></div>
+                            <div class="mt-1.5 w-2 h-2 rounded-full ${corBolinha} flex-shrink-0"></div>
                             <div>
-                                <p class="text-[11px] font-bold text-slate-700 leading-snug">${n.mensagem}</p>
-                                <span class="text-[9px] font-bold uppercase text-slate-400 mt-1 block"><i class="far fa-clock mr-1"></i> ${n.tempo}</span>
+                                <p class="text-[12px] ${fw} text-slate-700 leading-snug">${n.mensagem}</p>
+                                <span class="text-[9px] font-bold uppercase text-slate-400 mt-1.5 block"><i class="far fa-clock mr-1"></i> ${n.tempo}</span>
                             </div>
                         </div>
                     </a>
@@ -432,134 +485,33 @@
                 if (this.action.includes('/api/notificacoes/limpar')) {
                     e.preventDefault();
                     try {
-                        const response = await fetch(`/api/notificacoes/limpar`, { 
-                            method: 'POST', 
-                            headers: { 'X-CSRFToken': '{{ csrf_token() }}' } 
-                        });
+                        const response = await fetch(`/api/notificacoes/limpar`, { method: 'POST', headers: { 'X-CSRFToken': '{{ csrf_token() }}' } });
                         const data = await response.json();
-                        if(data.success) {
-                            Toastify({ text: "Histórico limpo.", style: { background: "#10b981" } }).showToast();
-                            buscarNotificacoes();
-                            fecharModalConfirmacao();
-                        }
+                        if(data.success) { Toastify({ text: "Histórico limpo.", style: { background: "#10b981" } }).showToast(); buscarNotificacoes(); fecharModalConfirmacao(); }
                     } catch (err) { console.error(err); }
                 }
             };
         }
 
-        // ==============================================================================
-        // ⚙️ LÓGICA DO PWA E NOTIFICAÇÕES PUSH
-        // ==============================================================================
-        
-        // --- INSTALAÇÃO DO PWA ---
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', function() {
-                navigator.serviceWorker.register('/sw.js').then(function(registration) {
-                    console.log('ServiceWorker White-Label registado com sucesso!');
-                    // Após registar, verifica se o Push está ativo
-                    verificarInscricaoPush();
-                }, function(err) {
-                    console.log('Falha no registo do ServiceWorker:', err);
-                });
-            });
-        }
-
+        // --- 5. PWA Install & Push ---
         let deferredPrompt;
-        const installContainer = document.getElementById('pwa-install-container');
-        const installBtn = document.getElementById('pwa-install-btn');
+        const installBtnMobile = document.getElementById('pwa-install-btn-mobile');
 
         window.addEventListener('beforeinstallprompt', (e) => {
             e.preventDefault();
             deferredPrompt = e;
-            if(installContainer) installContainer.classList.remove('hidden');
+            if(document.getElementById('pwa-install-container-mobile')) document.getElementById('pwa-install-container-mobile').classList.remove('hidden');
         });
 
-        if(installBtn) {
-            installBtn.addEventListener('click', async () => {
+        if(installBtnMobile) {
+            installBtnMobile.addEventListener('click', async () => {
                 if (deferredPrompt) {
                     deferredPrompt.prompt();
                     const { outcome } = await deferredPrompt.userChoice;
                     deferredPrompt = null;
-                    installContainer.classList.add('hidden');
+                    document.getElementById('pwa-install-container-mobile').classList.add('hidden');
                 }
             });
-        }
-
-        window.addEventListener('appinstalled', () => {
-            if(installContainer) installContainer.classList.add('hidden');
-            deferredPrompt = null;
-        });
-
-        // --- ATIVAÇÃO DE ALERTAS PUSH ---
-        
-        const PUBLIC_VAPID_KEY = 'BLj7nNHVn8NIHL4lHkVOS03nYmMGdOQ4L4wO8_4H58oF0COavknccVgUUUfpClHhQegJjC9p6ZjFz3LH98Xupxo'; 
-
-        function urlBase64ToUint8Array(base64String) {
-            const padding = '='.repeat((4 - base64String.length % 4) % 4);
-            const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
-            const rawData = window.atob(base64);
-            const outputArray = new Uint8Array(rawData.length);
-            for (let i = 0; i < rawData.length; ++i) {
-                outputArray[i] = rawData.charCodeAt(i);
-            }
-            return outputArray;
-        }
-
-        async function verificarInscricaoPush() {
-            if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
-            
-            try {
-                const registration = await navigator.serviceWorker.ready;
-                const subscription = await registration.pushManager.getSubscription();
-                const btnContainer = document.getElementById('push-subscribe-container');
-                
-                // Se NÃO tem inscrição e o utilizador NÃO bloqueou as notificações, mostra o botão
-                if (!subscription && Notification.permission !== 'denied') {
-                    if(btnContainer) btnContainer.classList.remove('hidden');
-                }
-            } catch (err) { console.error("Erro ao verificar Push:", err); }
-        }
-
-        async function ativarAlertas() {
-            try {
-                const registration = await navigator.serviceWorker.ready;
-                
-                // 1. Pede a inscrição encriptada usando a chave pública
-                const subscription = await registration.pushManager.subscribe({
-                    userVisibleOnly: true,
-                    applicationServerKey: urlBase64ToUint8Array(PUBLIC_VAPID_KEY)
-                });
-
-                // 2. Envia a assinatura para o nosso backend gravar (rota /api/push/subscribe)
-                const response = await fetch('/api/push/subscribe', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': '{{ csrf_token() }}'
-                    },
-                    body: JSON.stringify(subscription)
-                });
-
-                const data = await response.json();
-                if (data.success) {
-                    Toastify({ text: "Alertas ativados com sucesso! 🔔", style: { background: "#10b981" } }).showToast();
-                    document.getElementById('push-subscribe-container').classList.add('hidden');
-                } else {
-                    Toastify({ text: "Erro ao ativar alertas.", style: { background: "#ef4444" } }).showToast();
-                }
-            } catch (error) {
-                console.error('Erro na subscrição Push:', error);
-                if (Notification.permission === 'denied') {
-                    Toastify({ text: "Tem de permitir notificações nas definições do navegador.", style: { background: "#ef4444", fontSize: "12px" } }).showToast();
-                    document.getElementById('push-subscribe-container').classList.add('hidden');
-                }
-            }
-        }
-
-        // Liga a função ao clique do botão
-        const pushBtn = document.getElementById('push-subscribe-btn');
-        if(pushBtn) {
-            pushBtn.addEventListener('click', ativarAlertas);
         }
     </script>
 </body>

@@ -9,13 +9,17 @@ class UserRepository(BaseRepository):
         return self.get_query().filter_by(cpf=cpf).first()
 
     def get_active_users_paginated(self, page, per_page=15):
+        # Filtro profissional baseado no Role (Cargo) em vez do username
         return self.get_query().filter(
-            User.username != '12345678900', 
-            User.username != 'terminal'
+            User.role != 'Terminal', 
+            User.username != '50097952800'
         ).order_by(User.real_name).paginate(page=page, per_page=per_page, error_out=False)
 
     def get_gestores(self, exclude_id=None):
-        q = self.get_query().filter(User.username != '12345678900', User.username != 'terminal')
+        q = self.get_query().filter(
+            User.role != 'Terminal', 
+            User.username != '50097952800'
+        )
         if exclude_id:
             q = q.filter(User.id != exclude_id)
         return q.order_by(User.real_name).all()

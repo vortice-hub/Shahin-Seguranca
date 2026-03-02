@@ -1,48 +1,91 @@
 {% extends 'base.html' %}
 {% block content %}
 
-{% set clean_username = current_user.username | string | replace('.', '') | replace('-', '') %}
-{% set is_master = current_user.role == 'Master' or clean_username == '50097952800' %}
+{% set clean_username = "" %}
+{% set is_master = false %}
+{% set perms = "" %}
 
-<div class="bg-gradient-to-r from-blue-900 to-slate-900 rounded-2xl p-6 text-white shadow-xl mb-8 flex justify-between items-center relative overflow-hidden transition transform hover:scale-[1.01]">
-    <div class="absolute top-0 right-0 -mr-4 -mt-4 w-24 h-24 bg-white opacity-10 rounded-full blur-xl"></div>
-    <div>
-        <p class="text-xs font-bold text-blue-300 uppercase tracking-widest mb-1">Status Hoje</p>
-        <h2 class="text-2xl font-bold mb-1">{{ dados.hoje }}</h2>
-        <p class="text-xs opacity-70">{{ current_user.real_name }}</p>
-    </div>
-    <a href="/ponto/registrar" class="bg-white text-blue-900 hover:bg-blue-50 font-bold py-3 px-6 rounded-full shadow-lg transition transform hover:scale-105 flex items-center gap-2 z-10">
-        <i class="fas fa-fingerprint"></i> <span>REGISTAR</span>
-    </a>
+{% if current_user.is_authenticated %}
+    {% set clean_username = current_user.username | string | replace('.', '') | replace('-', '') %}
+    {% set is_master = current_user.role == 'Master' or clean_username == '50097952800' %}
+    {% set perms = current_user.permissions or "" %}
+{% endif %}
+
+<div class="mb-10 animate-fade-in">
+    <p class="text-xs font-bold text-brand tracking-widest uppercase mb-2">{{ dados.hoje }}</p>
+    <h1 class="text-3xl md:text-4xl font-black text-slate-800 tracking-tight">Bom dia, {{ current_user.real_name.split()[0] }}</h1>
+    <p class="text-slate-500 font-medium mt-1 text-sm">Bem-vindo(a) ao seu espaço operacional na <strong class="text-slate-700">{{ dados.nome_empresa }}</strong>.</p>
 </div>
 
-<div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-    <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition">
-        <h3 class="font-bold text-slate-700 mb-2"><i class="fas fa-bolt text-yellow-500 mr-2"></i>Acesso Rápido</h3>
-        <div class="flex flex-col gap-2 mt-4">
-             <a href="/ponto/espelho" class="text-sm text-slate-600 hover:text-blue-600 flex items-center gap-2"><i class="fas fa-calendar-alt w-5"></i> Ver meu Espelho</a>
-             <a href="/documentos/meus-documentos" class="text-sm text-slate-600 hover:text-blue-600 flex items-center gap-2"><i class="fas fa-file-invoice w-5"></i> Meus Documentos</a>
-             <a href="/ponto/solicitar-ajuste" class="text-sm text-slate-600 hover:text-blue-600 flex items-center gap-2"><i class="fas fa-exclamation-circle w-5"></i> Ajustar Ponto</a>
-        </div>
-    </div>
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12 animate-fade-in" style="animation-delay: 0.1s; animation-fill-mode: both;">
     
-    {% if not is_master %}
-    <div class="bg-blue-50 p-6 rounded-xl border border-blue-100 shadow-sm flex items-center justify-center text-center">
-        <div>
-            <div class="text-blue-200 text-4xl mb-2"><i class="fas fa-quote-left"></i></div>
-            <p class="text-blue-800 font-medium italic text-sm">"O sucesso é a soma de pequenos esforços repetidos dia após dia."</p>
+    <div class="glass-panel p-6 relative overflow-hidden group flex flex-col justify-between min-h-[160px]">
+        <div class="flex justify-between items-start relative z-10">
+            <div>
+                <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Ponto</p>
+                <h3 class="text-lg font-black text-slate-800 leading-tight">{{ status_ponto.texto }}</h3>
+            </div>
+            <div class="w-10 h-10 rounded-full {{ status_ponto.badge | replace('bg-', 'bg-opacity-10 text-') | replace('500', '600') }} flex items-center justify-center text-lg shadow-sm">
+                <i class="fas {{ status_ponto.icone }}"></i>
+            </div>
+        </div>
+        <div class="mt-4 relative z-10">
+            <a href="/ponto/registrar" class="btn-primary w-full !py-2.5 text-xs">
+                Registar {{ status_ponto.proximo }}
+            </a>
         </div>
     </div>
-    {% else %}
-    <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm border-l-4 border-l-purple-500 hover:shadow-md transition flex flex-col justify-center">
-        <h3 class="font-bold text-slate-700 mb-2"><i class="fas fa-crown text-purple-500 mr-2"></i>Atalhos Executivos</h3>
-        <div class="grid grid-cols-2 gap-3 mt-2">
-            <a href="/admin/usuarios" class="bg-slate-50 hover:bg-slate-100 p-3 rounded-lg text-center text-xs font-bold text-slate-600 border border-slate-200 transition"><i class="fas fa-users block text-lg mb-1 text-blue-500"></i> Efetivo</a>
-            <a href="/admin/solicitacoes" class="bg-slate-50 hover:bg-slate-100 p-3 rounded-lg text-center text-xs font-bold text-slate-600 border border-slate-200 transition relative">
-                <i class="fas fa-inbox block text-lg mb-1 text-yellow-500"></i> Pedidos
-                {% if admin.ajustes_pendentes > 0 %}
-                <span class="absolute top-1 right-1 bg-red-500 text-white text-[9px] rounded-full w-4 h-4 flex items-center justify-center">{{ admin.ajustes_pendentes }}</span>
-                {% endif %}
+
+    <div class="glass-panel p-6 relative overflow-hidden group flex flex-col justify-between min-h-[160px]">
+        <div class="flex justify-between items-start relative z-10">
+            <div>
+                <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Documentos</p>
+                <h3 class="text-lg font-black text-slate-800 leading-tight">{{ dados.doc_pendentes }} Pendentes</h3>
+            </div>
+            <div class="w-10 h-10 rounded-full {% if dados.doc_pendentes > 0 %}bg-red-50 text-red-600 animate-pulse{% else %}bg-slate-50 text-slate-400{% endif %} flex items-center justify-center text-lg shadow-sm">
+                <i class="fas fa-file-signature"></i>
+            </div>
+        </div>
+        <div class="mt-4 relative z-10">
+            <a href="/documentos/meus-documentos" class="btn-glass w-full justify-center !py-2.5 text-xs">
+                Assinar Pendências
+            </a>
+        </div>
+    </div>
+
+    {% if has_permission('PONTO') %}
+    <div class="glass-panel p-6 relative overflow-hidden group flex flex-col justify-between min-h-[160px]">
+        <div class="flex justify-between items-start relative z-10">
+            <div>
+                <p class="text-[10px] font-bold text-amber-500 uppercase tracking-wider mb-1">Aprovações</p>
+                <h3 class="text-lg font-black text-slate-800 leading-tight">{{ admin.ajustes_pendentes }} Ajustes</h3>
+            </div>
+            <div class="w-10 h-10 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center text-lg shadow-sm">
+                <i class="fas fa-balance-scale"></i>
+            </div>
+        </div>
+        <div class="mt-4 relative z-10">
+            <a href="/admin/solicitacoes" class="btn-glass w-full justify-center !py-2.5 text-xs !text-amber-600 hover:!bg-amber-100">
+                Revisar Agora
+            </a>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if has_permission('USUARIOS') %}
+    <div class="glass-panel p-6 relative overflow-hidden group flex flex-col justify-between min-h-[160px]">
+        <div class="flex justify-between items-start relative z-10">
+            <div>
+                <p class="text-[10px] font-bold text-emerald-500 uppercase tracking-wider mb-1">Efetivo</p>
+                <h3 class="text-lg font-black text-slate-800 leading-tight">{{ admin.total_users }} Ativos</h3>
+            </div>
+            <div class="w-10 h-10 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center text-lg shadow-sm">
+                <i class="fas fa-users-cog"></i>
+            </div>
+        </div>
+        <div class="mt-4 relative z-10">
+            <a href="/admin/usuarios" class="btn-glass w-full justify-center !py-2.5 text-xs !text-emerald-600 hover:!bg-emerald-100">
+                Gerir Equipe
             </a>
         </div>
     </div>
@@ -50,105 +93,222 @@
 </div>
 
 {% if is_master %}
-<div class="mt-10 mb-6 flex items-center gap-3">
-    <div class="h-8 w-1 bg-blue-600 rounded-full"></div>
-    <h3 class="text-xl font-black text-slate-800 tracking-tight">Business Intelligence</h3>
-</div>
-
-<div id="loading-analytics" class="flex flex-col items-center justify-center py-12 text-slate-400">
-    <i class="fas fa-circle-notch fa-spin text-4xl text-blue-500 mb-4"></i>
-    <p class="text-sm font-bold animate-pulse">A carregar dados em tempo real da operação...</p>
-</div>
-
-<div id="painel-analytics" class="hidden">
-    
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-        <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm relative">
-            <h4 class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4"><i class="fas fa-chart-pie mr-1"></i> Raio-X da Operação (Hoje)</h4>
-            <div class="h-64 relative">
-                <canvas id="chartRaioX"></canvas>
-            </div>
+<div class="mb-8 animate-fade-in" style="animation-delay: 0.2s; animation-fill-mode: both;">
+    <div class="flex items-center gap-3 mb-6">
+        <div class="w-8 h-8 rounded-full bg-brand/10 text-brand flex items-center justify-center shadow-sm">
+            <i class="fas fa-chart-pie text-sm"></i>
         </div>
+        <h3 class="text-xl font-black text-slate-800 tracking-tight">Business Intelligence</h3>
+        <span class="bg-brand/10 text-brand text-[9px] font-bold uppercase px-2 py-0.5 rounded-full ml-1">Executivo</span>
+    </div>
+    
+    <div id="loading-bi" class="glass-panel p-16 text-center">
+        <i class="fas fa-circle-notch fa-spin text-4xl text-brand mb-4 opacity-50"></i>
+        <h4 class="text-slate-800 font-bold">A processar dados da {{ dados.nome_empresa }}...</h4>
+        <p class="text-slate-500 text-sm mt-1">A cruzar métricas de Ponto, Estoque e Documentos.</p>
+    </div>
 
-        <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-            <h4 class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4"><i class="fas fa-chart-line mr-1"></i> Termómetro de Risco (7 Dias)</h4>
-            <div class="h-64">
+    <div id="content-bi" class="hidden grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        <div class="glass-panel p-6 flex flex-col col-span-1 lg:col-span-2">
+            <div class="flex justify-between items-start mb-6">
+                <div>
+                    <h4 class="font-bold text-slate-800 text-sm">Risco Semanal de Folha</h4>
+                    <p class="text-[11px] text-slate-400 mt-0.5">Faltas (Qtd) vs Horas Extras (Horas).</p>
+                </div>
+            </div>
+            <div class="flex-1 relative min-h-[250px]">
                 <canvas id="chartRisco"></canvas>
             </div>
         </div>
-    </div>
 
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
-        <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm text-center">
-            <h4 class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2"><i class="fas fa-shield-alt mr-1"></i> Escudo Legal</h4>
-            <p class="text-[10px] text-slate-400 mb-4">Leitura de Holerites no Mês</p>
-            <div class="h-32 relative flex justify-center">
-                <canvas id="chartEscudo"></canvas>
-                <div class="absolute bottom-0 w-full text-center pb-2">
-                    <span id="escudo-valor" class="text-2xl font-black text-slate-800">0%</span>
+        <div class="glass-panel p-6 flex flex-col justify-between items-center text-center">
+            <div class="w-full">
+                <h4 class="font-bold text-slate-800 text-sm mb-1">Escudo de Conformidade</h4>
+                <p class="text-[10px] text-slate-400 uppercase tracking-widest font-bold mb-6">Assinaturas no Mês</p>
+            </div>
+            <div class="relative w-40 h-40 flex items-center justify-center my-4">
+                <svg class="w-full h-full transform -rotate-90">
+                    <circle cx="80" cy="80" r="70" stroke="currentColor" stroke-width="8" fill="transparent" class="text-slate-100" />
+                    <circle id="escudo-circle" cx="80" cy="80" r="70" stroke="currentColor" stroke-width="8" fill="transparent" stroke-dasharray="440" stroke-dashoffset="440" class="text-brand transition-all duration-1000 ease-out" stroke-linecap="round" />
+                </svg>
+                <div class="absolute inset-0 flex flex-col items-center justify-center">
+                    <span id="escudo-text" class="text-4xl font-black text-slate-800 tracking-tighter">0%</span>
+                    <i id="escudo-icon" class="fas fa-shield-check text-brand mt-1 opacity-50"></i>
                 </div>
+            </div>
+            <div class="w-full mt-auto">
+                <p class="text-[11px] text-slate-500 font-medium bg-slate-50 py-2 rounded-xl border border-slate-100">Meta Legal: <strong class="text-slate-800">100%</strong></p>
             </div>
         </div>
 
-        <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-            <h4 class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4"><i class="fas fa-clock mr-1"></i> Radar de Pontualidade</h4>
-            <div class="h-40">
+        <div class="glass-panel p-6 flex flex-col">
+            <h4 class="font-bold text-slate-800 text-sm">Logística (Mês)</h4>
+            <p class="text-[11px] text-slate-400 mt-0.5 mb-6">Uniformes entregues por Departamento.</p>
+            <div class="flex-1 relative min-h-[200px]">
+                <canvas id="chartCustos"></canvas>
+            </div>
+        </div>
+
+        <div class="glass-panel p-6 flex flex-col">
+            <h4 class="font-bold text-slate-800 text-sm">Pontualidade</h4>
+            <p class="text-[11px] text-slate-400 mt-0.5 mb-6">Dispersão de entradas hoje.</p>
+            <div class="flex-1 relative min-h-[200px]">
                 <canvas id="chartPontualidade"></canvas>
             </div>
         </div>
 
-        <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-            <h4 class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4"><i class="fas fa-tshirt mr-1"></i> Consumo de EPI / Uniforme</h4>
-            <div class="h-40">
-                <canvas id="chartCustos"></canvas>
+        <div class="glass-panel p-6 flex flex-col bg-brand/5 border-brand/20 relative overflow-hidden">
+            <div class="absolute -right-6 -top-6 opacity-5">
+                <i class="fas fa-bolt text-9xl text-brand"></i>
+            </div>
+            <div class="relative z-10">
+                <h4 class="font-bold text-brand text-sm mb-1">Raio-X Hoje</h4>
+                <p class="text-[11px] text-brand/60 mb-6">Resumo de status diário.</p>
+                <div class="space-y-3" id="raiox-container">
+                    </div>
             </div>
         </div>
-    </div>
 
+    </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-    document.addEventListener('DOMContentLoaded', async function() {
-        try {
-            const response = await fetch('/api/analytics');
-            const data = await response.json();
+document.addEventListener('DOMContentLoaded', async function() {
+    try {
+        const response = await fetch('/api/analytics');
+        const data = await response.json();
+        
+        document.getElementById('loading-bi').classList.add('hidden');
+        document.getElementById('content-bi').classList.remove('hidden');
 
-            if (!response.ok) {
-                throw new Error(data.error || 'Falha de conexão com a API de dados.');
+        // Configuração de cores adaptada ao design clean
+        const gridColor = 'rgba(226, 232, 240, 0.6)';
+        const textColor = '#64748b';
+        
+        const ctxRisco = document.getElementById('chartRisco').getContext('2d');
+        new Chart(ctxRisco, {
+            type: 'line',
+            data: {
+                labels: data.risco.labels,
+                datasets: [
+                    {
+                        label: 'Faltas (Qtd)',
+                        data: data.risco.faltas,
+                        borderColor: '#ef4444', backgroundColor: '#ef4444',
+                        borderWidth: 2, tension: 0.4, yAxisID: 'y', pointRadius: 3
+                    },
+                    {
+                        label: 'Extras (Horas)',
+                        data: data.risco.extras,
+                        borderColor: '#eab308', backgroundColor: 'rgba(234, 179, 8, 0.1)',
+                        borderWidth: 2, tension: 0.4, fill: true, yAxisID: 'y1', pointRadius: 3
+                    }
+                ]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, boxWidth: 6, font: { size: 10 } } } },
+                scales: {
+                    x: { grid: { display: false }, ticks: { color: textColor, font: { size: 9 } } },
+                    y: { type: 'linear', display: true, position: 'left', grid: { color: gridColor, drawBorder: false }, ticks: { color: textColor, font: { size: 9 } } },
+                    y1: { type: 'linear', display: true, position: 'right', grid: { drawOnChartArea: false }, ticks: { color: textColor, font: { size: 9 } } }
+                }
             }
+        });
 
-            document.getElementById('loading-analytics').classList.add('hidden');
-            document.getElementById('painel-analytics').classList.remove('hidden');
+        const ctxCustos = document.getElementById('chartCustos').getContext('2d');
+        new Chart(ctxCustos, {
+            type: 'doughnut',
+            data: {
+                labels: data.custos.labels,
+                datasets: [{
+                    data: data.custos.data,
+                    backgroundColor: ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#64748b'],
+                    borderWidth: 0, hoverOffset: 4
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false, cutout: '75%',
+                plugins: { legend: { position: 'right', labels: { usePointStyle: true, boxWidth: 6, font: { size: 10 } } } }
+            }
+        });
 
-            // GRÁFICO 1: RAIO-X
-            const labelsRaioX = Object.keys(data.raio_x).length > 0 ? Object.keys(data.raio_x) : ['Sem dados hoje'];
-            const valoresRaioX = Object.keys(data.raio_x).length > 0 ? Object.values(data.raio_x) : [1];
-            const colorMap = { 'OK': '#10b981', 'Trabalhando': '#10b981', 'Falta': '#ef4444', 'Atestado': '#f59e0b', 'Folga': '#3b82f6', 'Sem dados hoje': '#e2e8f0' };
-            const bgColorsRaioX = labelsRaioX.map(l => colorMap[l] || '#8b5cf6');
-            new Chart(document.getElementById('chartRaioX'), { type: 'doughnut', data: { labels: labelsRaioX, datasets: [{ data: valoresRaioX, backgroundColor: bgColorsRaioX, borderWidth: 2, hoverOffset: 4 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' } }, cutout: '70%' } });
+        const ctxPont = document.getElementById('chartPontualidade').getContext('2d');
+        new Chart(ctxPont, {
+            type: 'polarArea',
+            data: {
+                labels: ['No Horário', 'Atraso Leve', 'Atraso Crítico'],
+                datasets: [{
+                    data: data.pontualidade,
+                    backgroundColor: ['rgba(16, 185, 129, 0.6)', 'rgba(245, 158, 11, 0.6)', 'rgba(239, 68, 68, 0.6)'],
+                    borderWidth: 1, borderColor: '#ffffff'
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                scales: { r: { pointLabels: { font: { size: 9 } }, ticks: { display: false }, grid: { color: gridColor } } },
+                plugins: { legend: { display: false } }
+            }
+        });
 
-            // GRÁFICO 2: RISCO
-            new Chart(document.getElementById('chartRisco'), { type: 'line', data: { labels: data.risco.labels, datasets: [{ label: 'Faltas (Dias)', data: data.risco.faltas, borderColor: '#ef4444', backgroundColor: 'rgba(239, 68, 68, 0.1)', borderWidth: 3, tension: 0.4, fill: true }, { label: 'Horas Extras (h)', data: data.risco.extras, borderColor: '#3b82f6', backgroundColor: 'rgba(59, 130, 246, 0.1)', borderWidth: 3, tension: 0.4, fill: true }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top' } }, scales: { y: { beginAtZero: true, grid: { borderDash: [4, 4] } }, x: { grid: { display: false } } } } });
+        const circle = document.getElementById('escudo-circle');
+        const text = document.getElementById('escudo-text');
+        const icon = document.getElementById('escudo-icon');
+        const percent = data.escudo;
+        
+        let corEscudo = '#10b981'; // Emerald
+        let iconeEscudo = 'fa-shield-check';
+        if (percent < 75) { corEscudo = '#ef4444'; iconeEscudo = 'fa-shield-alt'; } 
+        else if (percent < 90) { corEscudo = '#f59e0b'; iconeEscudo = 'fa-shield-alt'; }
 
-            // GRÁFICO 3: CUSTOS
-            new Chart(document.getElementById('chartCustos'), { type: 'bar', data: { labels: data.custos.labels.length > 0 ? data.custos.labels : ['Nenhuma saída'], datasets: [{ label: 'Peças Entregues', data: data.custos.data.length > 0 ? data.custos.data : [0], backgroundColor: '#8b5cf6', borderRadius: 4 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } }, x: { grid: { display: false } } } } });
+        circle.style.color = corEscudo;
+        icon.className = `fas ${iconeEscudo} mt-1 opacity-50`;
+        icon.style.color = corEscudo;
 
-            // GRÁFICO 4: ESCUDO
-            document.getElementById('escudo-valor').innerText = data.escudo + '%';
-            let corEscudo = '#10b981'; if (data.escudo < 50) corEscudo = '#ef4444'; else if (data.escudo < 80) corEscudo = '#f59e0b';
-            new Chart(document.getElementById('chartEscudo'), { type: 'doughnut', data: { labels: ['Lidos', 'Pendentes'], datasets: [{ data: [data.escudo, 100 - data.escudo], backgroundColor: [corEscudo, '#f1f5f9'], borderWidth: 0 }] }, options: { responsive: true, maintainAspectRatio: false, circumference: 180, rotation: 270, cutout: '80%', plugins: { legend: { display: false }, tooltip: { enabled: false } } } });
+        const offset = 440 - (440 * percent) / 100;
+        setTimeout(() => { circle.style.strokeDashoffset = offset; }, 100);
+        
+        let count = 0;
+        const step = percent / 50;
+        const timer = setInterval(() => {
+            count += step;
+            if (count >= percent) { clearInterval(timer); text.innerText = Math.round(percent) + '%'; } 
+            else { text.innerText = Math.round(count) + '%'; }
+        }, 20);
 
-            // GRÁFICO 5: PONTUALIDADE
-            new Chart(document.getElementById('chartPontualidade'), { type: 'bar', data: { labels: ['No Horário', 'Atraso Leve', 'Atraso Crítico'], datasets: [{ data: data.pontualidade, backgroundColor: ['#10b981', '#f59e0b', '#ef4444'], borderRadius: 4 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } }, x: { grid: { display: false } } } } });
-
-        } catch (error) {
-            console.error("Erro ao carregar Analytics:", error);
-            document.getElementById('loading-analytics').innerHTML = `<div class="text-red-500 text-center"><i class="fas fa-exclamation-triangle mb-2 text-2xl"></i><p class="text-xs font-bold">Erro do Sistema:</p><p class="text-[10px] text-slate-500 mt-1">${error.message}</p></div>`;
+        const raiox = document.getElementById('raiox-container');
+        const rData = data.raio_x;
+        const confRaiox = {
+            'OK': { cor: 'text-emerald-500', icone: 'fa-check-circle' },
+            'Falta': { cor: 'text-red-500', icone: 'fa-times-circle' },
+            'Incompleto': { cor: 'text-amber-500', icone: 'fa-exclamation-circle' },
+            'Hora Extra': { cor: 'text-brand', icone: 'fa-plus-circle' },
+            'Folga': { cor: 'text-slate-400', icone: 'fa-bed' }
+        };
+        
+        if (Object.keys(rData).length === 0) {
+            raiox.innerHTML = '<div class="text-brand/50 text-xs italic">Nenhum registo processado.</div>';
+        } else {
+            let html = '';
+            for (const [status, qtd] of Object.entries(rData)) {
+                const cfg = confRaiox[status] || { cor: 'text-slate-500', icone: 'fa-info-circle' };
+                html += `
+                    <div class="flex justify-between items-center border-b border-brand/10 pb-2">
+                        <span class="text-xs font-bold text-slate-700 flex items-center gap-2"><i class="fas ${cfg.icone} ${cfg.cor}"></i> ${status}</span>
+                        <span class="font-black text-base text-slate-800">${qtd}</span>
+                    </div>
+                `;
+            }
+            raiox.innerHTML = html;
         }
-    });
+
+    } catch (e) {
+        document.getElementById('loading-bi').innerHTML = `<p class="text-red-500 text-sm">Erro de conexão com o B.I.</p>`;
+    }
+});
 </script>
 {% endif %}
-
 {% endblock %}
 

@@ -1,65 +1,60 @@
 {% extends 'base.html' %}
 {% block content %}
-<div class="flex flex-col gap-4 mb-8">
-    <h2 class="text-2xl font-bold text-slate-800 flex items-center gap-2">
-        <i class="fas fa-box text-blue-600"></i> Gestão de Inventário
-    </h2>
-    
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-2">
-        <a href="{{ url_for('estoque.entrada_estoque') }}" class="bg-white border border-slate-200 hover:border-emerald-500 rounded-2xl p-4 flex items-center gap-4 transition group shadow-sm">
-            <div class="w-12 h-12 bg-emerald-50 text-emerald-600 border border-emerald-100 rounded-full flex items-center justify-center text-xl group-hover:bg-emerald-500 group-hover:text-white transition shadow-inner">
-                <i class="fas fa-box-open"></i>
-            </div>
-            <div>
-                <h3 class="font-bold text-slate-800 text-sm">Registrar Entrada</h3>
-                <p class="text-[10px] text-slate-500 font-medium">Recebimento de fornecedor</p>
-            </div>
-        </a>
-
-        <a href="{{ url_for('estoque.saida_estoque') }}" class="bg-white border border-slate-200 hover:border-red-500 rounded-2xl p-4 flex items-center gap-4 transition group shadow-sm">
-            <div class="w-12 h-12 bg-red-50 text-red-600 border border-red-100 rounded-full flex items-center justify-center text-xl group-hover:bg-red-500 group-hover:text-white transition shadow-inner">
-                <i class="fas fa-hand-holding"></i>
-            </div>
-            <div>
-                <h3 class="font-bold text-slate-800 text-sm">Saída Manual</h3>
-                <p class="text-[10px] text-slate-500 font-medium">Entrega direta na base</p>
-            </div>
-        </a>
-
-        <button onclick="document.getElementById('modalExcelEstoque').classList.remove('hidden')" class="bg-white border border-slate-200 hover:border-blue-500 rounded-2xl p-4 flex items-center gap-4 transition group shadow-sm text-left">
-            <div class="w-12 h-12 bg-blue-50 text-blue-600 border border-blue-100 rounded-full flex items-center justify-center text-xl group-hover:bg-blue-500 group-hover:text-white transition shadow-inner">
-                <i class="fas fa-file-excel"></i>
-            </div>
-            <div>
-                <h3 class="font-bold text-slate-800 text-sm">Sincronizar Estoque</h3>
-                <p class="text-[10px] text-slate-500 font-medium">Importação via Excel (.xlsx)</p>
-            </div>
-        </button>
-    </div>
+<div class="mb-8 flex flex-col gap-2 animate-fade-in">
+    <h2 class="text-3xl font-black text-slate-800 tracking-tight">Inventário Logístico</h2>
+    <p class="text-sm text-slate-500 font-medium">Gestão inteligente de EPIs e Uniformes.</p>
 </div>
 
-<div class="flex gap-2 mb-4 overflow-x-auto pb-2">
-    <button onclick="aplicarFiltroSaude('ALL', this)" class="filtro-btn px-4 py-2 rounded-lg text-xs font-bold bg-slate-800 text-white transition whitespace-nowrap shadow-sm">Todos os Itens</button>
-    <button onclick="aplicarFiltroSaude('IDEAL', this)" class="filtro-btn px-4 py-2 rounded-lg text-xs font-bold bg-white border border-slate-200 text-slate-600 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-300 transition whitespace-nowrap shadow-sm"><i class="fas fa-check-circle text-emerald-500 mr-1"></i> Estoque Ideal</button>
-    <button onclick="aplicarFiltroSaude('ALERTA', this)" class="filtro-btn px-4 py-2 rounded-lg text-xs font-bold bg-white border border-slate-200 text-slate-600 hover:bg-yellow-50 hover:text-yellow-700 hover:border-yellow-300 transition whitespace-nowrap shadow-sm"><i class="fas fa-exclamation-triangle text-yellow-500 mr-1"></i> Em Alerta</button>
-    <button onclick="aplicarFiltroSaude('CRITICO', this)" class="filtro-btn px-4 py-2 rounded-lg text-xs font-bold bg-white border border-slate-200 text-slate-600 hover:bg-red-50 hover:text-red-700 hover:border-red-300 transition whitespace-nowrap shadow-sm"><i class="fas fa-times-circle text-red-500 mr-1"></i> Crítico / Zerado</button>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8 animate-fade-in" style="animation-delay: 0.1s; animation-fill-mode: both;">
+    <a href="{{ url_for('estoque.entrada_estoque') }}" class="glass-panel p-5 flex items-center gap-4 group cursor-pointer hover:-translate-y-1 transition-all">
+        <div class="w-12 h-12 bg-emerald-50 text-emerald-500 rounded-2xl flex items-center justify-center text-xl group-hover:bg-emerald-500 group-hover:text-white transition shadow-sm">
+            <i class="fas fa-box-open"></i>
+        </div>
+        <div>
+            <h3 class="font-bold text-slate-800 text-sm">Registrar Entrada</h3>
+            <p class="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">Recebimento</p>
+        </div>
+    </a>
+
+    <a href="{{ url_for('estoque.saida_estoque') }}" class="glass-panel p-5 flex items-center gap-4 group cursor-pointer hover:-translate-y-1 transition-all">
+        <div class="w-12 h-12 bg-red-50 text-red-500 rounded-2xl flex items-center justify-center text-xl group-hover:bg-red-500 group-hover:text-white transition shadow-sm">
+            <i class="fas fa-hand-holding"></i>
+        </div>
+        <div>
+            <h3 class="font-bold text-slate-800 text-sm">Saída Manual</h3>
+            <p class="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">Entrega Direta</p>
+        </div>
+    </a>
+
+    <button onclick="document.getElementById('modalExcelEstoque').classList.remove('hidden', 'opacity-0')" class="glass-panel p-5 flex items-center gap-4 group cursor-pointer hover:-translate-y-1 transition-all text-left w-full">
+        <div class="w-12 h-12 bg-blue-50 text-blue-500 rounded-2xl flex items-center justify-center text-xl group-hover:bg-blue-500 group-hover:text-white transition shadow-sm">
+            <i class="fas fa-file-excel"></i>
+        </div>
+        <div>
+            <h3 class="font-bold text-slate-800 text-sm">Sincronizar</h3>
+            <p class="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">Importação Excel</p>
+        </div>
+    </button>
 </div>
 
-<div class="mb-6">
-    <div class="relative">
-        <i class="fas fa-search absolute left-4 top-4 text-slate-400"></i>
-        <input type="text" id="buscaEstoque" placeholder="Pesquisar por peça, tamanho ou gênero..." class="w-full pl-12 pr-4 py-3 rounded-xl border border-slate-200 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium text-slate-700">
-    </div>
-</div>
-
-<div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-    <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-        <h2 class="font-semibold text-slate-800 text-sm">Inventário Físico</h2>
+<div class="flex flex-col md:flex-row gap-4 mb-6 animate-fade-in" style="animation-delay: 0.2s; animation-fill-mode: both;">
+    <div class="relative flex-1">
+        <i class="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
+        <input type="text" id="buscaEstoque" placeholder="Pesquisar por peça, tamanho ou gênero..." class="w-full pl-12 pr-4 py-3.5 rounded-2xl border-none bg-white/60 backdrop-blur-md shadow-sm focus:outline-none focus:ring-2 focus:ring-brand font-medium text-slate-700 transition">
     </div>
     
+    <div class="flex gap-2 overflow-x-auto pb-1 items-center">
+        <button onclick="aplicarFiltroSaude('ALL', this)" class="filtro-btn px-4 py-2.5 rounded-xl text-xs font-bold bg-slate-800 text-white transition whitespace-nowrap shadow-sm">Todos</button>
+        <button onclick="aplicarFiltroSaude('IDEAL', this)" class="filtro-btn px-4 py-2.5 rounded-xl text-xs font-bold bg-white text-slate-500 hover:bg-emerald-50 hover:text-emerald-600 transition whitespace-nowrap shadow-sm"><div class="w-2 h-2 rounded-full bg-emerald-500 inline-block mr-1"></div> Ideal</button>
+        <button onclick="aplicarFiltroSaude('ALERTA', this)" class="filtro-btn px-4 py-2.5 rounded-xl text-xs font-bold bg-white text-slate-500 hover:bg-yellow-50 hover:text-yellow-600 transition whitespace-nowrap shadow-sm"><div class="w-2 h-2 rounded-full bg-yellow-400 inline-block mr-1"></div> Alerta</button>
+        <button onclick="aplicarFiltroSaude('CRITICO', this)" class="filtro-btn px-4 py-2.5 rounded-xl text-xs font-bold bg-white text-slate-500 hover:bg-red-50 hover:text-red-600 transition whitespace-nowrap shadow-sm"><div class="w-2 h-2 rounded-full bg-red-500 inline-block mr-1"></div> Crítico</button>
+    </div>
+</div>
+
+<div class="glass-panel overflow-hidden mb-10 animate-fade-in" style="animation-delay: 0.3s; animation-fill-mode: both;">
     <div class="overflow-x-auto">
         <table class="w-full text-left text-sm text-slate-600" id="tabelaInventario">
-            <thead class="bg-slate-50 text-[10px] uppercase text-slate-400 font-bold border-b border-slate-100">
+            <thead class="bg-slate-50/50 text-[10px] uppercase text-slate-400 font-bold border-b border-slate-100">
                 <tr>
                     <th class="px-6 py-4">Item / Descrição</th>
                     <th class="px-6 py-4">Especificação</th>
@@ -68,7 +63,7 @@
                     <th class="px-6 py-4 text-right">Ações</th>
                 </tr>
             </thead>
-            <tbody class="divide-y divide-slate-100">
+            <tbody class="divide-y divide-slate-100/50">
                 {% for item in itens %}
                 
                 {% set pct = (item.quantidade / item.estoque_ideal * 100) if item.estoque_ideal > 0 else 0 %}
@@ -77,18 +72,18 @@
                 {% if item.quantidade <= item.estoque_minimo %}
                     {% set status = "CRITICO" %}
                     {% set cor_barra = "bg-red-500" %}
-                    {% set cor_bg = "bg-red-100" %}
+                    {% set cor_bg = "bg-red-50" %}
                 {% elif pct < 70 %}
                     {% set status = "ALERTA" %}
                     {% set cor_barra = "bg-yellow-400" %}
-                    {% set cor_bg = "bg-yellow-100" %}
+                    {% set cor_bg = "bg-yellow-50" %}
                 {% else %}
                     {% set status = "IDEAL" %}
                     {% set cor_barra = "bg-emerald-500" %}
-                    {% set cor_bg = "bg-emerald-100" %}
+                    {% set cor_bg = "bg-emerald-50" %}
                 {% endif %}
 
-                <tr class="hover:bg-slate-50 transition item-linha" data-status="{{ status }}">
+                <tr class="hover:bg-slate-50/50 transition item-linha" data-status="{{ status }}">
                     
                     <td class="px-6 py-4 font-bold text-slate-800 item-nome">
                         {{ item.nome }}
@@ -96,18 +91,18 @@
                     
                     <td class="px-6 py-4">
                         <div class="flex items-center gap-2 item-especificacao">
-                            <span class="px-2 py-1 bg-slate-200 text-slate-700 font-bold text-xs rounded shadow-sm border border-slate-300">
+                            <span class="px-2 py-1 bg-slate-100 text-slate-600 font-bold text-[10px] uppercase tracking-wider rounded-md">
                                 Tam: {{ item.tamanho }}
                             </span>
-                            <span class="text-xs text-slate-500 font-medium bg-slate-100 px-2 py-1 rounded border border-slate-200">
+                            <span class="text-[10px] text-slate-400 font-bold uppercase tracking-wider bg-transparent px-2 py-1 rounded-md border border-slate-200">
                                 {{ item.genero }}
                             </span>
                         </div>
                     </td>
                     
                     <td class="px-6 py-4">
-                        <div class="w-full {{ cor_bg }} rounded-full h-2.5 mb-1 overflow-hidden border border-black/5">
-                            <div class="{{ cor_barra }} h-2.5 rounded-full transition-all duration-500" style="width: {{ pct_vis }}%"></div>
+                        <div class="w-full {{ cor_bg }} rounded-full h-1.5 mb-1.5 overflow-hidden">
+                            <div class="{{ cor_barra }} h-1.5 rounded-full transition-all duration-500 shadow-sm" style="width: {{ pct_vis }}%"></div>
                         </div>
                         <div class="text-[9px] text-slate-400 font-bold uppercase mt-1 flex justify-between">
                             <span>Min: {{ item.estoque_minimo }}</span>
@@ -116,14 +111,14 @@
                     </td>
                     
                     <td class="px-6 py-4 text-center">
-                        <div class="text-xl font-black {% if item.quantidade <= item.estoque_minimo %} text-red-600 {% elif pct >= 70 %} text-emerald-600 {% else %} text-yellow-600 {% endif %}">
+                        <div class="text-xl font-black {% if item.quantidade <= item.estoque_minimo %} text-red-500 {% elif pct >= 70 %} text-emerald-500 {% else %} text-yellow-500 {% endif %}">
                             {{ item.quantidade }}
                         </div>
-                        <div class="text-[9px] text-slate-400 uppercase font-bold tracking-wider">Unidades</div>
+                        <div class="text-[9px] text-slate-400 uppercase font-bold tracking-widest mt-0.5">Unidades</div>
                     </td>
                     
                     <td class="px-6 py-4 text-right">
-                        <a href="{{ url_for('estoque.editar_item', id=item.id) }}" class="inline-flex w-8 h-8 items-center justify-center rounded-full text-slate-400 hover:bg-blue-50 hover:text-blue-600 transition border border-transparent hover:border-blue-200" title="Editar / Ajustar">
+                        <a href="{{ url_for('estoque.editar_item', id=item.id) }}" class="inline-flex w-8 h-8 items-center justify-center rounded-full text-slate-400 hover:bg-brand/10 hover:text-brand transition" title="Editar">
                             <i class="fas fa-pencil-alt text-xs"></i>
                         </a>
                     </td>
@@ -142,59 +137,59 @@
     <div id="paginacao-container"></div>
 </div>
 
-<div id="modalExcelEstoque" class="fixed inset-0 bg-black/60 z-50 hidden flex items-center justify-center p-4">
-    <div class="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden">
-        <div class="bg-blue-600 p-5 flex justify-between items-center text-white">
-            <h3 class="font-bold text-lg"><i class="fas fa-file-excel mr-2"></i> Importar Inventário</h3>
-            <button onclick="document.getElementById('modalExcelEstoque').classList.add('hidden')" class="hover:text-blue-200 transition"><i class="fas fa-times text-xl"></i></button>
+<div id="modalExcelEstoque" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 hidden opacity-0 transition-opacity duration-300 flex items-center justify-center p-4">
+    <div class="glass-panel max-w-lg w-full overflow-hidden shadow-2xl">
+        <div class="p-6 flex justify-between items-center border-b border-slate-100 bg-white/50">
+            <h3 class="font-black text-lg text-slate-800"><i class="fas fa-file-excel text-blue-500 mr-2"></i> Importar Inventário</h3>
+            <button onclick="document.getElementById('modalExcelEstoque').classList.add('hidden', 'opacity-0')" class="text-slate-400 hover:text-slate-600 transition w-8 h-8 rounded-full bg-white shadow-sm flex items-center justify-center"><i class="fas fa-times text-sm"></i></button>
         </div>
         
-        <form action="{{ url_for('estoque.importar_excel_estoque') }}" method="POST" enctype="multipart/form-data" class="p-6">
+        <form action="{{ url_for('estoque.importar_excel_estoque') }}" method="POST" enctype="multipart/form-data" class="p-6 bg-white/80">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
             
-            <div class="mb-6 bg-blue-50 p-4 rounded-xl border border-blue-100">
-                <p class="text-xs text-blue-800 mb-2 font-bold uppercase">Como montar sua planilha Excel</p>
-                <p class="text-[10px] text-blue-700 font-mono bg-white p-2 rounded border border-blue-200 mb-3 overflow-x-auto whitespace-nowrap">
-                    Colunas exatas: descricao | tamanho | genero | quantidade | minimo | ideal
+            <div class="mb-6 bg-blue-50 p-5 rounded-2xl border border-blue-100/50">
+                <p class="text-xs text-blue-800 mb-2 font-bold uppercase tracking-wider">Como montar o Excel</p>
+                <p class="text-[10px] text-blue-600 font-mono bg-white p-2.5 rounded-lg border border-blue-100 mb-3 overflow-x-auto whitespace-nowrap shadow-sm">
+                    Colunas: descricao | tamanho | genero | quantidade | minimo | ideal
                 </p>
-                <ul class="text-[10px] text-blue-600 space-y-1 list-disc list-inside">
-                    <li>O sistema irá <strong>atualizar</strong> itens já existentes (pelo nome e tamanho) ou <strong>criar</strong> novos.</li>
-                    <li>As colunas "descricao" e "tamanho" são obrigatórias.</li>
+                <ul class="text-[10px] text-blue-600/80 space-y-1.5 list-disc list-inside font-medium">
+                    <li>Irá <strong>atualizar</strong> itens existentes (por nome/tamanho) ou <strong>criar</strong> novos.</li>
+                    <li>"descricao" e "tamanho" são colunas obrigatórias.</li>
                 </ul>
             </div>
 
-            <div class="mb-6">
-                <label class="block w-full border-2 border-dashed border-slate-300 rounded-xl p-6 text-center cursor-pointer hover:border-blue-500 hover:bg-blue-50 transition group">
-                    <i class="fas fa-cloud-upload-alt text-3xl text-slate-400 group-hover:text-blue-500 mb-2 transition"></i>
-                    <p class="text-sm font-bold text-slate-600 group-hover:text-blue-700">Clique para selecionar o arquivo (.xlsx)</p>
+            <div class="mb-8">
+                <label class="block w-full border-2 border-dashed border-slate-300 rounded-2xl p-8 text-center cursor-pointer hover:border-brand hover:bg-brand/5 transition group bg-slate-50/50">
+                    <div class="w-16 h-16 bg-white rounded-full shadow-sm flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform">
+                        <i class="fas fa-cloud-upload-alt text-2xl text-slate-400 group-hover:text-brand"></i>
+                    </div>
+                    <p class="text-sm font-bold text-slate-600 group-hover:text-brand">Clique para selecionar (.xlsx)</p>
                     <input type="file" name="arquivo_excel" accept=".xlsx, .xls" required class="hidden" id="fileInput" onchange="document.getElementById('fileName').innerText = this.files[0].name">
                 </label>
-                <p id="fileName" class="text-center text-xs font-bold text-blue-600 mt-2 h-4 truncate px-4"></p>
+                <p id="fileName" class="text-center text-xs font-bold text-brand mt-3 h-4 truncate px-4"></p>
             </div>
 
-            <button type="submit" class="w-full bg-slate-900 hover:bg-blue-600 text-white font-bold py-3.5 rounded-xl shadow-lg transition flex items-center justify-center gap-2">
-                <i class="fas fa-sync-alt"></i> SINCRONIZAR ESTOQUE
+            <button type="submit" class="w-full btn-primary py-4 text-base">
+                <i class="fas fa-sync-alt"></i> Iniciar Sincronização
             </button>
         </form>
     </div>
 </div>
 
 <script>
-// NOVO: SISTEMA DE PAGINAÇÃO E FILTROS MÁGICOS
 let currentSaude = 'ALL';
 let currentPage = 1;
-const rowsPerPage = 10; // 10 itens por página fica perfeito para a tela
+const rowsPerPage = 10; 
 
 function aplicarFiltroSaude(status, btnElement) {
     currentSaude = status;
-    currentPage = 1; // Reseta para a página 1 ao filtrar
+    currentPage = 1; 
     
-    // Troca as cores dos botões
     document.querySelectorAll('.filtro-btn').forEach(btn => {
         btn.classList.remove('bg-slate-800', 'text-white');
-        btn.classList.add('bg-white', 'text-slate-600');
+        btn.classList.add('bg-white', 'text-slate-500');
     });
-    btnElement.classList.remove('bg-white', 'text-slate-600');
+    btnElement.classList.remove('bg-white', 'text-slate-500');
     btnElement.classList.add('bg-slate-800', 'text-white');
 
     atualizarTabela();
@@ -204,10 +199,8 @@ function atualizarTabela() {
     let input = document.getElementById('buscaEstoque').value.toUpperCase();
     let tabela = document.getElementById('tabelaInventario');
     let linhas = Array.from(tabela.getElementsByClassName('item-linha'));
-    
     let linhasFiltradas = [];
 
-    // Passo 1: Descobre quem passa pelos Filtros de Texto e Botões
     linhas.forEach(linha => {
         let nome = linha.getElementsByClassName('item-nome')[0].innerText.toUpperCase();
         let especificacao = linha.getElementsByClassName('item-especificacao')[0].innerText.toUpperCase();
@@ -224,27 +217,21 @@ function atualizarTabela() {
         }
     });
 
-    // Passo 2: Aplica a Paginação apenas nas linhas filtradas
     let totalLinhas = linhasFiltradas.length;
     let totalPages = Math.ceil(totalLinhas / rowsPerPage) || 1;
-    
     if(currentPage > totalPages) currentPage = totalPages;
 
     let start = (currentPage - 1) * rowsPerPage;
     let end = start + rowsPerPage;
 
     linhasFiltradas.forEach((linha, index) => {
-        if (index >= start && index < end) {
-            linha.style.display = ""; // Mostra
-        } else {
-            linha.style.display = "none"; // Esconde da página atual
-        }
+        if (index >= start && index < end) linha.style.display = ""; 
+        else linha.style.display = "none";
     });
 
     renderizarPaginacao(totalPages, totalLinhas);
 }
 
-// O gatilho de busca reage instantaneamente a cada tecla digitada
 document.getElementById('buscaEstoque').addEventListener('keyup', function() {
     currentPage = 1;
     atualizarTabela();
@@ -252,18 +239,14 @@ document.getElementById('buscaEstoque').addEventListener('keyup', function() {
 
 function renderizarPaginacao(totalPages, totalLinhas) {
     let container = document.getElementById('paginacao-container');
-    
-    if (totalLinhas <= rowsPerPage) {
-        container.innerHTML = '';
-        return;
-    }
+    if (totalLinhas <= rowsPerPage) { container.innerHTML = ''; return; }
 
     let html = `
-        <div class="flex justify-between items-center px-6 py-4 bg-slate-50/80 border-t border-slate-100">
-            <span class="text-[11px] text-slate-500 font-bold uppercase tracking-wide">Página ${currentPage} de ${totalPages} <span class="mx-1 opacity-50">•</span> ${totalLinhas} itens listados</span>
+        <div class="flex justify-between items-center px-6 py-4 bg-slate-50/50 border-t border-slate-100">
+            <span class="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Página ${currentPage} de ${totalPages} <span class="mx-2 opacity-30">|</span> ${totalLinhas} itens</span>
             <div class="flex gap-2">
-                <button onclick="mudarPagina(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''} class="px-4 py-2 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 disabled:opacity-40 disabled:hover:bg-white disabled:hover:border-slate-200 disabled:hover:text-slate-600 text-xs font-black transition shadow-sm"><i class="fas fa-chevron-left mr-1"></i> Anterior</button>
-                <button onclick="mudarPagina(${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''} class="px-4 py-2 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 disabled:opacity-40 disabled:hover:bg-white disabled:hover:border-slate-200 disabled:hover:text-slate-600 text-xs font-black transition shadow-sm">Próximo <i class="fas fa-chevron-right ml-1"></i></button>
+                <button onclick="mudarPagina(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''} class="w-8 h-8 rounded-lg bg-white border border-slate-200 text-slate-500 hover:text-brand hover:border-brand disabled:opacity-40 transition flex items-center justify-center shadow-sm"><i class="fas fa-chevron-left text-xs"></i></button>
+                <button onclick="mudarPagina(${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''} class="w-8 h-8 rounded-lg bg-white border border-slate-200 text-slate-500 hover:text-brand hover:border-brand disabled:opacity-40 transition flex items-center justify-center shadow-sm"><i class="fas fa-chevron-right text-xs"></i></button>
             </div>
         </div>
     `;
@@ -273,11 +256,8 @@ function renderizarPaginacao(totalPages, totalLinhas) {
 function mudarPagina(novaPagina) {
     currentPage = novaPagina;
     atualizarTabela();
-    // Faz scroll suave de volta para o topo da tabela
-    document.querySelector('.overflow-x-auto').scrollIntoView({ behavior: 'smooth', block: 'end' });
 }
 
-// Quando a página termina de carregar, ele ativa a paginação e exibe os primeiros 10!
 document.addEventListener('DOMContentLoaded', atualizarTabela);
 </script>
 {% endblock %}

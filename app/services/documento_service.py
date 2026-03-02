@@ -23,7 +23,8 @@ class DocumentoService:
         self.user_repo = UserRepository()
         self.resumo_repo = PontoResumoRepository()
 
-    def processar_holerites_lote(self, file_bytes):
+    # Adicionamos o 'empresa_slug' como parâmetro recebido da rota
+    def processar_holerites_lote(self, file_bytes, empresa_slug):
         """Lê o PDF mestre e fatia em holerites individuais."""
         reader = PdfReader(io.BytesIO(file_bytes))
         sucesso, revisao = 0, 0
@@ -40,7 +41,8 @@ class DocumentoService:
             nome_identificado = dados.get('nome', '')
             mes_ref = dados.get('mes_referencia', '2026-02')
 
-            caminho_blob = salvar_no_storage(pdf_bytes_page, f"holerites/{mes_ref}")
+            # Repassamos o empresa_slug para o motor de storage
+            caminho_blob = salvar_no_storage(pdf_bytes_page, f"holerites/{mes_ref}", empresa_slug)
             if not caminho_blob: continue
 
             user_id = usuarios_map.get(nome_identificado)
@@ -152,9 +154,15 @@ class DocumentoService:
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
             df.to_excel(writer, index=False, sheet_name='Fechamento Folha')
             worksheet = writer.sheets['Fechamento Folha']
+            
+            # --- CORREÇÃO PONTO 5: CÁLCULO BLINDADO DE LARGURA DE COLUNA ---
             for i, col in enumerate(df.columns):
-                max_len = max(df[col].astype(str).map(len).max(), len(col)) + 2
-                worksheet.column_dimensions[chr(65 + i)].width = max_len
+                # Usamos uma "List Comprehension" para forçar que todos os itens na coluna,
+                # e o próprio nome da coluna, sejam lidos estritamente como texto (str).
+                larguras = [len(str(v)) for v in df[col].values] + [len(str(col))]
+                max_len = max(larguras) + 2
+                # Limita a largura máxima para não gerar colunas bizarras
+                worksheet.column_dimensions[chr(65 + i)].width = min(max_len, 50)
 
         output.seek(0)
         return output

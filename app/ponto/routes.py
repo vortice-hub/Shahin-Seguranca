@@ -1,15 +1,16 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app, g
 from flask_login import login_required, current_user
 from app.extensions import db, csrf
-from app.models import PontoRegistro, PontoResumo, User, PontoAjuste, SolicitacaoAusencia
+from app.models import PontoRegistro, PontoResumo, User, PontoAjuste, SolicitacaoAusencia, Empresa
 from app.utils import get_brasil_time, format_minutes_to_hm, data_por_extenso, enviar_notificacao
 from datetime import datetime, date, timedelta
-from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadSignature
 import logging
 import calendar
 
 # --- IMPORTAÇÃO DOS NOVOS SERVICES E REPOSITORIES ---
 from app.services.ponto_service import PontoService
+from app.services.face_service import FaceService
+from app.documentos.storage import salvar_imagem_storage
 from app.repositories.ponto_repository import PontoRegistroRepository, PontoAjusteRepository, PontoResumoRepository, SolicitacaoAusenciaRepository
 from app.repositories.user_repository import UserRepository
 
@@ -17,120 +18,182 @@ logger = logging.getLogger(__name__)
 
 ponto_bp = Blueprint('ponto', __name__, template_folder='templates', url_prefix='/ponto')
 
-@ponto_bp.route('/api/gerar-token', methods=['GET'])
+# ==============================================================================
+# 📸 MÓDULO: CADASTRO BIOMÉTRICO (App do Funcionário)
+# ==============================================================================
+@ponto_bp.route('/registrar', methods=['GET'])
 @login_required
-def gerar_token_qrcode():
-    if current_user.role == 'Terminal': return jsonify({'error': 'Terminal não gera token'}), 403
-    s = URLSafeTimedSerializer(current_app.secret_key)
-    token = s.dumps({'user_id': current_user.id, 'timestamp': get_brasil_time().timestamp()})
-    return jsonify({'token': token})
-
-@ponto_bp.route('/api/check-status', methods=['GET'])
-@login_required
-def check_status_ponto():
-    if current_user.role == 'Terminal': return jsonify({'status': 'ignorar'})
-    agora = get_brasil_time()
+def registrar_ponto():
+    """Tela do App do funcionário para cadastrar a biometria."""
+    if current_user.role == 'Terminal': return redirect(url_for('ponto.terminal_scanner'))
     
-    reg_repo = PontoRegistroRepository()
-    ultimo_ponto = reg_repo.get_last_by_user(current_user.id)
-    
-    if ultimo_ponto:
-        dt_ponto = datetime.combine(ultimo_ponto.data_registro, ultimo_ponto.hora_registro)
-        if (agora - dt_ponto).total_seconds() < 15:
-            return jsonify({'marcado': True, 'tipo': ultimo_ponto.tipo, 'hora': ultimo_ponto.hora_registro.strftime('%H:%M')})
-    return jsonify({'marcado': False})
+    # Verifica se o funcionário já tem o rosto salvo no banco
+    biometria_cadastrada = current_user.face_encoding is not None
+        
+    return render_template('ponto/registro.html', biometria_cadastrada=biometria_cadastrada)
 
-@ponto_bp.route('/api/registrar-leitura', methods=['POST'])
+@ponto_bp.route('/api/cadastrar-biometria', methods=['POST'])
 @login_required
 @csrf.exempt
-def registrar_leitura_terminal():
-    if current_user.role != 'Terminal' and current_user.role != 'Master': return jsonify({'error': 'Acesso negado.'}), 403
-    token = request.json.get('token')
-    if not token: return jsonify({'error': 'Token vazio'}), 400
+def cadastrar_biometria():
+    """Recebe a foto do celular do funcionário (como Ficheiro Nativo), processa a I.A. e salva no Bucket."""
+    if current_user.role == 'Terminal': return jsonify({'error': 'Acesso negado'}), 403
     
-    s = URLSafeTimedSerializer(current_app.secret_key)
+    # ALTERAÇÃO ALTERNATIVA 2: Recebe um ficheiro real em vez de JSON Base64
+    if 'image' not in request.files: 
+        return jsonify({'error': 'Nenhuma imagem enviada'}), 400
+        
+    file = request.files['image']
+    raw_bytes = file.read()
+
+    face_service = FaceService()
+    sucesso, resultado = face_service.cadastrar_face(raw_bytes)
+
+    if not sucesso:
+        return jsonify({'success': False, 'error': resultado})
+
     try:
-        dados = s.loads(token, max_age=35)
+        empresa = Empresa.query.get(current_user.empresa_id)
+        nome_arquivo = f"biometria_user_{current_user.id}.jpg"
+        
+        # Salva a imagem visual no Bucket GCS
+        caminho_gcs = salvar_imagem_storage(resultado['image_bytes'], 'biometria', empresa.slug, nome_arquivo)
+
+        if not caminho_gcs:
+            return jsonify({'success': False, 'error': 'Erro de infraestrutura ao salvar a foto segura.'})
+
+        # Salva o mapa matemático na base de dados
         user_repo = UserRepository()
-        user_alvo = user_repo.get_by_id(dados['user_id'])
-        if not user_alvo: return jsonify({'error': 'Usuário inválido'}), 404
-        
-        tempo_agora = get_brasil_time()
-        hoje = tempo_agora.date()
-        
-        ponto_service = PontoService()
-        reg_repo = PontoRegistroRepository()
-        
-        ultimo = reg_repo.get_last_by_user_and_date(user_alvo.id, hoje)
-        if ultimo:
-            dt_ultimo = datetime.combine(hoje, ultimo.hora_registro)
-            if (tempo_agora - dt_ultimo).total_seconds() < 60:
-                 return jsonify({'error': f'Aguarde antes de bater o ponto novamente.'}), 400
+        user = user_repo.get_by_id(current_user.id)
+        user.face_encoding = resultado['encoding']
+        user.foto_biometria_url = caminho_gcs
+        user_repo.commit()
 
-        proxima = ponto_service.determinar_proxima_batida(user_alvo.id, hoje)
-        
-        novo = PontoRegistro(
-            user_id=user_alvo.id, data_registro=hoje, hora_registro=tempo_agora.time(), 
-            tipo=proxima, latitude='QR-Code', longitude='Presencial'
-        )
-        reg_repo.add(novo)
-        reg_repo.commit()
-        
-        ponto_service.calcular_dia(user_alvo.id, hoje)
-        
-        return jsonify({
-            'success': True, 'message': f'Ponto registrado: {proxima}', 
-            'funcionario': user_alvo.real_name, 'hora': novo.hora_registro.strftime('%H:%M'), 'tipo': proxima
-        })
-    except SignatureExpired: return jsonify({'error': 'QR Code expirado.'}), 400
-    except BadSignature: return jsonify({'error': 'QR Code inválido.'}), 400
-    except Exception as e: return jsonify({'error': f'Erro interno: {str(e)}'}), 500
+        return jsonify({'success': True, 'message': 'Biometria Facial validada e cadastrada com sucesso!'})
+    except Exception as e:
+        logger.error(f"Erro no cadastro biométrico: {e}")
+        return jsonify({'success': False, 'error': 'Erro interno ao gravar dados.'})
 
+# ==============================================================================
+# 🏢 MÓDULO: TERMINAL INTELIGENTE (Tablet na Portaria)
+# ==============================================================================
 @ponto_bp.route('/scanner')
 @login_required
 def terminal_scanner():
-    if current_user.username != '12345678900' and current_user.role != 'Master': return redirect(url_for('main.dashboard'))
+    """Abre a tela do Terminal que fica com a câmera ligada."""
+    if current_user.role != 'Terminal' and current_user.role != 'Master': 
+        return redirect(url_for('main.dashboard'))
     return render_template('ponto/terminal_leitura.html')
 
-@ponto_bp.route('/registrar', methods=['GET', 'POST'])
+@ponto_bp.route('/api/reconhecer-facial', methods=['POST'])
 @login_required
-def registrar_ponto():
-    if current_user.username == '12345678900': return redirect(url_for('ponto.terminal_scanner'))
-    
-    agora_br = get_brasil_time()
-    hoje = agora_br.date()
-    hoje_extenso = data_por_extenso(hoje)
-    
+@csrf.exempt
+def reconhecer_facial():
+    """Recebe a foto do Terminal (Ficheiro Nativo) e procura quem é o funcionário."""
+    if current_user.role != 'Terminal' and current_user.role != 'Master':
+        return jsonify({'error': 'Acesso negado.'}), 403
+
+    # ALTERAÇÃO ALTERNATIVA 2: Recebe ficheiro real
+    if 'image' not in request.files: 
+        return jsonify({'error': 'Nenhuma imagem enviada'}), 400
+        
+    file = request.files['image']
+    raw_bytes = file.read()
+
+    # Busca apenas os funcionários da mesma empresa do Terminal
+    usuarios_empresa = User.query.filter_by(empresa_id=current_user.empresa_id).all()
+
+    face_service = FaceService()
+    user_id = face_service.reconhecer_face(raw_bytes, usuarios_empresa)
+
+    if not user_id:
+        return jsonify({'success': False, 'error': 'Rosto não reconhecido ou baixa similaridade.'})
+
+    user_repo = UserRepository()
+    user_alvo = user_repo.get_by_id(user_id)
+    ponto_service = PontoService()
+    hoje = get_brasil_time().date()
+
+    # Verifica se o funcionário está bloqueado (ex: Férias)
+    bloqueado, motivo = ponto_service.verificar_bloqueio_ponto(user_alvo, hoje)
+    if bloqueado:
+        return jsonify({'success': False, 'error': f"Bloqueado: {motivo}"})
+
+    # Calcula qual é a próxima batida dele (Entrada, Saída, etc)
+    proxima = ponto_service.determinar_proxima_batida(user_id, hoje)
+    hora_atual = get_brasil_time().strftime('%H:%M')
+
+    return jsonify({
+        'success': True,
+        'user_id': user_id,
+        'nome': user_alvo.real_name,
+        'tipo': proxima,
+        'hora': hora_atual
+    })
+
+@ponto_bp.route('/api/confirmar-ponto', methods=['POST'])
+@login_required
+@csrf.exempt
+def confirmar_ponto():
+    """Grava o ponto oficialmente após o funcionário apertar 'SIM' na tela."""
+    if current_user.role != 'Terminal' and current_user.role != 'Master':
+        return jsonify({'error': 'Acesso negado.'}), 403
+
+    user_id = request.json.get('user_id')
+    if not user_id: 
+        return jsonify({'error': 'ID do usuário não fornecido.'}), 400
+
+    user_repo = UserRepository()
+    user_alvo = user_repo.get_by_id(user_id)
+
+    # Trava de Segurança Multi-Tenant
+    if not user_alvo or user_alvo.empresa_id != current_user.empresa_id:
+        return jsonify({'error': 'Tentativa de fraude bloqueada.'}), 403
+
+    tempo_agora = get_brasil_time()
+    hoje = tempo_agora.date()
+
     ponto_service = PontoService()
     reg_repo = PontoRegistroRepository()
-    
-    bloqueado, motivo = ponto_service.verificar_bloqueio_ponto(current_user, hoje)
-    prox = ponto_service.determinar_proxima_batida(current_user.id, hoje)
-    pontos = reg_repo.get_by_user_and_date(current_user.id, hoje)
 
-    if request.method == 'POST':
-        if bloqueado: return redirect(url_for('main.dashboard'))
-        novo_registro = PontoRegistro(
-            user_id=current_user.id, data_registro=hoje, hora_registro=agora_br.time(), 
-            tipo=prox, latitude=request.form.get('latitude'), longitude=request.form.get('longitude')
-        )
-        reg_repo.add(novo_registro)
-        reg_repo.commit()
-        
-        ponto_service.calcular_dia(current_user.id, hoje)
-        return redirect(url_for('main.dashboard'))
-        
-    return render_template('ponto/registro.html', proxima_acao=prox, hoje_extenso=hoje_extenso, pontos=pontos, bloqueado=bloqueado, motivo=motivo, hoje=hoje)
+    # Trava de Anti-Spam (Evita bater 2 vezes em menos de 1 minuto)
+    ultimo = reg_repo.get_last_by_user_and_date(user_alvo.id, hoje)
+    if ultimo:
+        dt_ultimo = datetime.combine(hoje, ultimo.hora_registro)
+        if (tempo_agora - dt_ultimo).total_seconds() < 60:
+             return jsonify({'error': 'Aguarde um minuto antes de bater o ponto novamente.'}), 400
 
+    proxima = ponto_service.determinar_proxima_batida(user_alvo.id, hoje)
+
+    novo = PontoRegistro(
+        user_id=user_alvo.id, data_registro=hoje, hora_registro=tempo_agora.time(),
+        tipo=proxima, latitude='Biometria Facial', longitude='Terminal Portaria',
+        empresa_id=current_user.empresa_id
+    )
+    reg_repo.add(novo)
+    reg_repo.commit()
+
+    # Recalcula o espelho de ponto imediatamente
+    ponto_service.calcular_dia(user_alvo.id, hoje)
+
+    return jsonify({'success': True})
+
+# ==============================================================================
+# 📊 OUTRAS ROTAS (ESPELHO, ESCALA, FÉRIAS) - [MANTIDAS INTACTAS]
+# ==============================================================================
 @ponto_bp.route('/espelho')
 @login_required
 def espelho_ponto():
     target_user_id = request.args.get('user_id', type=int) or current_user.id
-    if target_user_id != current_user.id and current_user.role != 'Master': return redirect(url_for('main.dashboard'))
+    
+    if target_user_id != current_user.id and current_user.role != 'Master': 
+        return redirect(url_for('main.dashboard'))
     
     user_repo = UserRepository()
     user = user_repo.get_by_id(target_user_id)
-    if not user: return redirect(url_for('main.dashboard'))
+    
+    if not user or user.empresa_id != current_user.empresa_id:
+        return redirect(url_for('main.dashboard'))
     
     agora_br = get_brasil_time()
     mes_ref = request.args.get('mes_ref') or agora_br.strftime('%Y-%m')
@@ -170,21 +233,22 @@ def solicitar_ajuste():
             try:
                 dt_obj = datetime.strptime(request.form.get('data_ref'), '%Y-%m-%d').date()
                 p_id = int(request.form.get('ponto_id')) if request.form.get('ponto_id') else None
+                
                 solic = PontoAjuste(
                     user_id=current_user.id, data_referencia=dt_obj, ponto_original_id=p_id, 
                     novo_horario=request.form.get('novo_horario'), tipo_batida=request.form.get('tipo_batida'), 
-                    tipo_solicitacao=request.form.get('tipo_solicitacao'), justificativa=request.form.get('justificativa')
+                    tipo_solicitacao=request.form.get('tipo_solicitacao'), justificativa=request.form.get('justificativa'),
+                    empresa_id=current_user.empresa_id
                 )
                 ajuste_repo.add(solic); ajuste_repo.commit()
                 
-                # 🚀 CORREÇÃO WHITE-LABEL: Busca o Master da EMPRESA ATUAL (Isolamento de Dados)
                 master_empresa = User.query.filter_by(empresa_id=current_user.empresa_id, role='Master').first()
                 if master_empresa:
                     enviar_notificacao(master_empresa.id, f"{current_user.real_name} solicitou um Ajuste de Ponto.", "/ponto/admin/solicitacoes")
                 
-                flash('Enviado!')
+                flash('Solicitação de ajuste enviada com sucesso!')
                 return redirect(url_for('ponto.solicitar_ajuste'))
-            except: pass
+            except: flash('Erro ao processar solicitação.', 'error')
             
     dados_extras = {}
     for p in meus_ajustes:
@@ -226,7 +290,7 @@ def minha_escala():
 @login_required
 def solicitar_ferias():
     if not current_user.data_admissao:
-        flash("Sua data de admissão não está cadastrada. Solicite ao RH para regularizar.", "warning")
+        flash("Sua data de admissão não está cadastrada. Solicite ao RH.", "warning")
 
     resumo_repo = PontoResumoRepository()
     ausencia_repo = SolicitacaoAusenciaRepository()
@@ -250,16 +314,15 @@ def solicitar_ferias():
         else: dias_direito = 0
 
         ausencias_ano = ausencia_repo.get_by_user_and_type(current_user.id, 'Férias')
-        dias_usados = sum(a.quantidade_dias + a.dias_abono for a in ausencias_ano)
+        dias_usados = sum(a.quantidade_dias + a.dias_abono for a in ausencias_ano if a.status == 'Aprovado')
         saldo = dias_direito - dias_usados
 
     if request.method == 'POST':
         try:
              tipo = ponto_service.processar_solicitacao_ferias(current_user, request.form, saldo)
-             # 🚀 CORREÇÃO WHITE-LABEL: Busca o Master da EMPRESA ATUAL (Isolamento de Dados)
              master_empresa = User.query.filter_by(empresa_id=current_user.empresa_id, role='Master').first()
              if master_empresa:
-                 enviar_notificacao(master_empresa.id, f"{current_user.real_name} enviou uma solicitação de {tipo}.", "/ponto/admin/ausencias")
+                  enviar_notificacao(master_empresa.id, f"{current_user.real_name} enviou uma solicitação de {tipo}.", "/ponto/admin/ausencias")
              flash("Solicitação validada e enviada com sucesso ao RH!", "success")
         except ValueError as ve:
              flash(str(ve), "error")
@@ -271,7 +334,8 @@ def solicitar_ferias():
 @ponto_bp.route('/admin/ausencias', methods=['GET', 'POST'])
 @login_required
 def gestao_ausencias():
-    if current_user.role != 'Master' and current_user.username != '50097952800': return redirect(url_for('main.dashboard'))
+    if current_user.role != 'Master' and str(current_user.username) != '50097952800': 
+        return redirect(url_for('main.dashboard'))
 
     ausencia_repo = SolicitacaoAusenciaRepository()
     resumo_repo = PontoResumoRepository()
@@ -294,35 +358,35 @@ def gestao_ausencias():
                         ponto.minutos_esperados = 0
                         ponto.minutos_saldo = ponto.minutos_trabalhados
                     else:
-                        novo_ponto = PontoResumo(user_id=solicitacao.user_id, data_referencia=dia_atual, minutos_trabalhados=0, minutos_esperados=0, minutos_saldo=0, status_dia=solicitacao.tipo_ausencia)
+                        novo_ponto = PontoResumo(user_id=solicitacao.user_id, data_referencia=dia_atual, minutos_trabalhados=0, minutos_esperados=0, minutos_saldo=0, status_dia=solicitacao.tipo_ausencia, empresa_id=g.empresa_id)
                         resumo_repo.add(novo_ponto)
                 
                 enviar_notificacao(solicitacao.user_id, f"A sua solicitação de {solicitacao.tipo_ausencia} foi APROVADA.", "/ponto/solicitar-ferias")
-                flash(f"Solicitação aprovada. O ponto foi atualizado.", "success")
+                flash(f"Solicitação aprovada e ponto atualizado.", "success")
                 
             elif acao == 'recusar':
                 solicitacao.status = 'Recusado'
-                enviar_notificacao(solicitacao.user_id, f"A sua solicitação de {solicitacao.tipo_ausencia} foi RECUSADA pelo RH.", "/ponto/solicitar-ferias")
+                enviar_notificacao(solicitacao.user_id, f"A sua solicitação de {solicitacao.tipo_ausencia} foi RECUSADA.", "/ponto/solicitar-ferias")
                 flash("Solicitação recusada.", "success")
-                
+              
             elif acao == 'remover':
                 if solicitacao.status == 'Aprovado':
-                    user = user_repo.get_by_id(solicitacao.user_id)
+                    target_user = user_repo.get_by_id(solicitacao.user_id)
                     for i in range(solicitacao.quantidade_dias):
                         dia_atual = solicitacao.data_inicio + timedelta(days=i)
                         ponto = resumo_repo.get_by_user_and_date(solicitacao.user_id, dia_atual)
                         if ponto and ponto.status_dia == solicitacao.tipo_ausencia:
-                            meta = user.carga_horaria or 528
-                            if user.escala == '5x2' and dia_atual.weekday() >= 5: meta = 0
-                            elif user.escala == '12x36' and user.data_inicio_escala:
-                                if (dia_atual - user.data_inicio_escala).days % 2 != 0: meta = 0
+                            meta = target_user.carga_horaria or 528
+                            if target_user.escala == '5x2' and dia_atual.weekday() >= 5: meta = 0
+                            elif target_user.escala == '12x36' and target_user.data_inicio_escala:
+                                if (dia_atual - target_user.data_inicio_escala).days % 2 != 0: meta = 0
                                 else: meta = 720
                             ponto.status_dia = 'OK'
                             ponto.minutos_esperados = meta
                             ponto.minutos_saldo = ponto.minutos_trabalhados - meta
                 solicitacao.status = 'Cancelado'
-                enviar_notificacao(solicitacao.user_id, f"O seu período de {solicitacao.tipo_ausencia} foi CANCELADO pela empresa.", "/ponto/solicitar-ferias")
-                flash("Férias revogadas com sucesso. O espelho de ponto foi restaurado.", "success")
+                enviar_notificacao(solicitacao.user_id, f"O seu período de {solicitacao.tipo_ausencia} foi CANCELADO.", "/ponto/solicitar-ferias")
+                flash("Férias revogadas e espelho de ponto restaurado.", "success")
                 
             ausencia_repo.commit()
         except Exception as e:
@@ -334,35 +398,28 @@ def gestao_ausencias():
     alertas_vencimento = []
     hoje = get_brasil_time().date()
     usuarios_clt = user_repo.get_all() 
-    usuarios_clt = [u for u in usuarios_clt if u.username != '12345678900' and u.data_admissao is not None]
     
     for u in usuarios_clt:
-        dias_trabalhados = (hoje - u.data_admissao).days
-        anos_completos = dias_trabalhados // 365
-        
-        if anos_completos >= 1:
-            ausencias = ausencia_repo.get_by_user_and_type(u.id, 'Férias')
-            ausencias_aprovadas = [a for a in ausencias if a.status == 'Aprovado']
-            dias_usados = sum(a.quantidade_dias + a.dias_abono for a in ausencias_aprovadas)
+        if u.data_admissao:
+            dias_trabalhados = (hoje - u.data_admissao).days
+            anos_completos = dias_trabalhados // 365
             
-            saldo_teorico = (anos_completos * 30) - dias_usados
-            
-            if saldo_teorico > 0:
-                ciclos_pendentes = saldo_teorico / 30.0
-                ciclo_critico = anos_completos - int(ciclos_pendentes) + 1
-                anos_para_somar = ciclo_critico + 1
+            if anos_completos >= 1:
+                ausencias = ausencia_repo.get_by_user_and_type(u.id, 'Férias')
+                dias_usados = sum(a.quantidade_dias + a.dias_abono for a in ausencias if a.status == 'Aprovado')
+                saldo_teorico = (anos_completos * 30) - dias_usados
                 
-                try:
-                    data_limite = u.data_admissao.replace(year=u.data_admissao.year + anos_para_somar)
-                except ValueError:
+                if saldo_teorico > 0:
+                    ciclos_pendentes = saldo_teorico / 30.0
+                    ciclo_critico = anos_completos - int(ciclos_pendentes) + 1
+                    anos_para_somar = ciclo_critico + 1
                     data_limite = u.data_admissao + timedelta(days=365 * anos_para_somar)
+                    dias_vencimento = (data_limite - hoje).days
                     
-                dias_vencimento = (data_limite - hoje).days
-                
-                if dias_vencimento < 0:
-                    alertas_vencimento.append({'user': u, 'status': 'Vencidas', 'dias': abs(dias_vencimento), 'msg': 'Prazo concessivo estourado. Risco alto de multa/dobro!'})
-                elif dias_vencimento <= 90:
-                    alertas_vencimento.append({'user': u, 'status': 'A Vencer', 'dias': dias_vencimento, 'msg': f'Vence em {dias_vencimento} dias (Data limite: {data_limite.strftime("%d/%m/%Y")}).'})
+                    if dias_vencimento < 0:
+                        alertas_vencimento.append({'user': u, 'status': 'Vencidas', 'msg': 'Risco alto de multa/dobro!'})
+                    elif dias_vencimento <= 90:
+                        alertas_vencimento.append({'user': u, 'status': 'A Vencer', 'msg': f'Vence em {dias_vencimento} dias.'})
 
     todas_solicitacoes = ausencia_repo.get_todas()
     return render_template('ponto/gestao_ausencias.html', solicitacoes=todas_solicitacoes, alertas=alertas_vencimento)
@@ -370,7 +427,9 @@ def gestao_ausencias():
 @ponto_bp.route('/admin/controle-escala', methods=['GET'])
 @login_required
 def controle_escala():
-    if current_user.role != 'Master' and current_user.username != '50097952800': return redirect(url_for('main.dashboard'))
+    if current_user.role != 'Master' and str(current_user.username) != '50097952800': 
+        return redirect(url_for('main.dashboard'))
+        
     data_str = request.args.get('data_ref')
     if data_str: data_ref = datetime.strptime(data_str, '%Y-%m-%d').date()
     else: data_ref = get_brasil_time().date()
@@ -394,9 +453,12 @@ def controle_escala():
         status_batida = f"{len(pontos)} marcações" if pontos else "Sem marcação"
         info = {'user': u, 'ausencia': ausencia, 'batidas': status_batida}
         
-        if ausencia: info['motivo'] = ausencia.tipo_ausencia; folga.append(info)
-        elif not escala_trabalho: info['motivo'] = 'Folga Escala'; folga.append(info)
-        else: trabalhando.append(info)
+        if ausencia: 
+            info['motivo'] = ausencia.tipo_ausencia; folga.append(info)
+        elif not escala_trabalho: 
+            info['motivo'] = 'Folga Escala'; folga.append(info)
+        else: 
+            trabalhando.append(info)
             
     return render_template('ponto/controle_escala.html', trabalhando=trabalhando, folga=folga, data_ref=data_ref)
 

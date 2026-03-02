@@ -1,26 +1,42 @@
 {% extends 'base.html' %}
 {% block content %}
-<div class="bg-white rounded-xl border border-slate-200 shadow-lg p-8 max-w-lg mx-auto">
-    <h2 class="text-xl font-bold text-slate-800 mb-6 text-center">Gerenciar Item</h2>
-    
-    <form action="/gerenciar/selecao" method="POST" class="space-y-6">
-        <div>
-            <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Selecione o Item para Editar/Excluir</label>
-            <div class="relative">
-                <select name="item_id" class="w-full appearance-none bg-slate-50 border border-slate-200 rounded-lg px-4 py-4 text-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500" required onchange="this.form.submit()">
-                    <option value="" disabled selected>Clique para selecionar...</option>
-                    {% for item in itens %}
-                    <option value="{{ item.id }}">{{ item.nome }} - {{ item.tamanho }} ({{ item.genero }})</option>
-                    {% endfor %}
-                </select>
-                <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-slate-500">
-                    <i class="fas fa-chevron-down"></i>
-                </div>
+<div class="flex flex-col items-center justify-center min-h-[60vh] px-4 animate-fade-in">
+    <div class="glass-panel max-w-lg w-full p-10 relative overflow-hidden shadow-xl text-center">
+        <div class="absolute -top-10 -right-10 w-32 h-32 bg-brand/10 rounded-full blur-2xl"></div>
+        <div class="absolute -bottom-10 -left-10 w-32 h-32 bg-blue-500/10 rounded-full blur-2xl"></div>
+        
+        <div class="relative z-10">
+            <div class="w-16 h-16 bg-white rounded-2xl flex items-center justify-center mx-auto mb-6 text-brand shadow-sm border border-slate-100">
+                <i class="fas fa-box-open text-2xl"></i>
             </div>
+            <h2 class="text-2xl font-black text-slate-800 tracking-tight mb-2">Gerenciar Item</h2>
+            <p class="text-sm text-slate-500 mb-8 font-medium">Selecione uma peça do inventário para ajustar as quantidades ou excluí-la do sistema.</p>
+            
+            <form action="/gerenciar/selecao" method="POST" class="space-y-6 text-left">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <div>
+                    <label class="label-pro mb-3 text-center w-full block">Procurar Peça</label>
+                    <div class="relative">
+                        <select name="item_id" class="input-pro font-bold text-slate-700 cursor-pointer appearance-none bg-white shadow-sm" required onchange="this.form.submit()">
+                            <option value="" disabled selected>Toque para abrir a lista...</option>
+                            {% for item in itens %}
+                            <option value="{{ item.id }}">{{ item.nome }} - {{ item.tamanho }} ({{ item.genero }})</option>
+                            {% endfor %}
+                        </select>
+                        <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-5 text-slate-400">
+                            <i class="fas fa-chevron-down text-sm"></i>
+                        </div>
+                    </div>
+                </div>
+            </form>
         </div>
-        <div class="text-center">
-            <a href="/" class="text-sm text-slate-400 hover:text-slate-600">Cancelar</a>
-        </div>
-    </form>
+    </div>
+    
+    <div class="mt-8 text-center animate-fade-in" style="animation-delay: 0.1s; animation-fill-mode: both;">
+        <a href="/estoque/gerenciar" class="text-xs font-bold text-slate-400 hover:text-slate-600 uppercase tracking-widest transition flex items-center gap-2">
+            <i class="fas fa-arrow-left"></i> Voltar à Logística
+        </a>
+    </div>
 </div>
 {% endblock %}
+

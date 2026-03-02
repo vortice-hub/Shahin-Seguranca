@@ -43,32 +43,34 @@ def create_app():
     # ==============================================================================
     @app.before_request
     def blindagem_multi_tenant():
+        # Ignora arquivos estáticos
         if request.endpoint and request.endpoint.startswith('static'):
             return
 
-        # 🚀 DEUS EX MACHINA: O porteiro ignora o dono da Vortice
-        # Se a rota pertencer ao Control Plane (/vortice), não exigimos vínculo com empresa nem banco de dados.
-        # A segurança dessas rotas é garantida exclusivamente pelo @super_admin_required (Sessão Independente).
+        # Ignora rotas do painel de controle administrativo da Vortice
         if request.path.startswith('/vortice'):
             return
 
         if current_user.is_authenticated:
-            # 🏢 Regras Normais para Inquilinos (Tenants)
-            # Garante que o usuário tem um vínculo de empresa
-            if getattr(current_user, 'empresa_id', None) is None:
+            # 🏢 Regras de Segurança para Inquilinos (Tenants)
+            # Verifica se o utilizador possui vínculo com uma empresa
+            empresa_id = getattr(current_user, 'empresa_id', None)
+            
+            if empresa_id is None:
                 logout_user()
-                abort(403)
+                flash("Acesso interrompido: Utilizador sem vínculo empresarial. Faça login novamente.", "error")
+                return redirect(url_for('auth.login'))
             
             from app.models import Empresa
-            empresa_atual = Empresa.query.get(current_user.empresa_id)
+            empresa_atual = Empresa.query.get(empresa_id)
             
-            # Se a empresa não existir ou estiver desativada, desconecta
+            # Se a empresa não existir ou estiver desativada, desconecta o utilizador de forma segura
             if not empresa_atual or not empresa_atual.ativa:
                 logout_user()
-                flash("Acesso negado: Empresa não encontrada ou desativada.", "error")
+                flash("Acesso negado: Empresa inativa ou não encontrada. Contacte o suporte.", "error")
                 return redirect(url_for('auth.login'))
 
-            # Injeta a empresa no contexto global
+            # Injeta a empresa no contexto global (g) para ser usada em todos os módulos
             g.empresa = empresa_atual
             g.empresa_id = empresa_atual.id
 
@@ -86,7 +88,7 @@ def create_app():
         return render_template('errors/500.html'), 500
 
     with app.app_context():
-        # Blueprints
+        # Registo de Blueprints
         from app.auth.routes import auth_bp
         from app.admin.routes import admin_bp
         from app.admin.super_routes import super_admin_bp
@@ -94,6 +96,7 @@ def create_app():
         from app.estoque.routes import estoque_bp
         from app.documentos.routes import documentos_bp
         from app.main.routes import main_bp
+        from app.recrutamento import recrutamento_bp
 
         app.register_blueprint(auth_bp)
         app.register_blueprint(admin_bp)
@@ -102,6 +105,13 @@ def create_app():
         app.register_blueprint(estoque_bp)
         app.register_blueprint(documentos_bp)
         app.register_blueprint(main_bp)
+        app.register_blueprint(recrutamento_bp)
+        
+        # ==============================================================================
+        # 🚀 AUTO-MIGRAÇÃO DE BANCO DE DADOS
+        # Cria fisicamente as tabelas que faltam no PostgreSQL (Vagas, Candidatos, etc)
+        # ==============================================================================
+        db.create_all()
 
     return app
 

@@ -1,62 +1,66 @@
 {% extends 'base.html' %}
 {% block content %}
-<div class="mb-6"><h2 class="text-2xl font-bold text-slate-800">Meus Documentos</h2></div>
-
-<div class="mb-8 flex flex-col md:flex-row justify-between items-center bg-blue-50 p-6 rounded-xl border border-blue-100 shadow-sm">
-    <div class="mb-4 md:mb-0">
-        <h3 class="text-blue-800 font-bold text-lg flex items-center gap-2">
-            <i class="fas fa-file-medical text-2xl"></i> Atestados Médicos
-        </h3>
-        <p class="text-blue-600 text-sm mt-1">Envie atestados médicos diretamente pelo telemóvel para justificar faltas.</p>
-    </div>
-    <a href="{{ url_for('documentos.enviar_atestado') }}" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg shadow-md transition text-sm flex items-center gap-2 whitespace-nowrap">
-        <i class="fas fa-camera"></i> ENVIAR ATESTADO
-    </a>
+<div class="mb-8 animate-fade-in">
+    <h2 class="text-3xl font-black text-slate-800 tracking-tight">Meus Documentos</h2>
+    <p class="text-sm text-slate-500 font-medium mt-1">O seu arquivo pessoal de holerites e recibos.</p>
 </div>
 
-<div class="space-y-4">
+<div class="space-y-4 animate-fade-in" style="animation-delay: 0.1s; animation-fill-mode: both;">
     {% for doc in docs %}
-    <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 transition hover:shadow-md">
+    
+    {% set icon_cor = doc.cor %}
+    {% if doc.cor == 'blue' %} {% set icon_cor = 'brand' %} {% endif %}
+
+    <div class="glass-panel p-5 flex flex-col md:flex-row md:items-center justify-between gap-5 transition hover:shadow-md hover:-translate-y-0.5 group relative overflow-hidden">
         
-        <div class="flex items-center gap-4">
-            <div class="w-12 h-12 rounded-lg flex items-center justify-center text-xl bg-{{ doc.cor }}-100 text-{{ doc.cor }}-600">
+        {% if not doc.visto %}
+        <div class="absolute left-0 top-0 bottom-0 w-1.5 bg-brand animate-pulse"></div>
+        {% endif %}
+
+        <div class="flex items-center gap-4 pl-2">
+            <div class="w-14 h-14 rounded-2xl flex items-center justify-center text-2xl bg-{{ icon_cor }}/10 text-{{ icon_cor }} shadow-inner">
                 <i class="fas {{ doc.icone }}"></i>
             </div>
             
             <div>
-                <div class="flex items-center gap-2">
-                    <h3 class="font-bold text-slate-800">{{ doc.titulo }}</h3>
+                <div class="flex items-center gap-2 mb-1">
+                    <h3 class="font-black text-slate-800 text-lg">{{ doc.titulo }}</h3>
                     {% if doc.visto %}
-                    <span class="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded font-bold uppercase">Visto</span>
+                    <span class="text-[9px] bg-slate-100 text-slate-400 border border-slate-200 px-2.5 py-0.5 rounded-md font-black uppercase tracking-widest hidden sm:inline-block">Visto</span>
                     {% else %}
-                    <span class="text-[10px] bg-blue-600 text-white px-2 py-0.5 rounded font-bold uppercase animate-pulse">Novo</span>
+                    <span class="text-[9px] bg-brand text-white shadow-sm shadow-brand/30 px-2.5 py-0.5 rounded-md font-black uppercase tracking-widest animate-pulse">Novo</span>
                     {% endif %}
                 </div>
-                <p class="text-xs text-slate-500">{{ doc.data.strftime('%d/%m/%Y') }} - {{ doc.tipo }}</p>
+                <p class="text-[11px] text-slate-500 font-bold uppercase tracking-widest flex items-center gap-1.5">
+                    <i class="far fa-calendar-alt opacity-50"></i> {{ doc.data.strftime('%d/%m/%Y') }} 
+                    <span class="opacity-30">|</span> 
+                    {{ doc.tipo }}
+                </p>
             </div>
         </div>
 
-        <form action="{{ url_for('documentos.' + doc.rota, id=doc.id) }}" method="POST">
+        <form action="{{ url_for('documentos.' + doc.rota, id=doc.id) }}" method="POST" class="w-full md:w-auto">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-            <button type="submit" class="w-full md:w-auto px-6 py-3 rounded-lg font-bold text-sm transition border flex items-center justify-center gap-2
-                {% if doc.visto %} 
-                    bg-white text-slate-600 border-slate-200 hover:bg-slate-50 
-                {% else %} 
-                    bg-blue-600 text-white border-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-200 
-                {% endif %}">
-                {% if doc.visto %} 
-                    <i class="fas fa-download"></i> Baixar Cópia 
-                {% else %} 
-                    <i class="fas fa-file-contract"></i> Confirmar e Baixar 
-                {% endif %}
+            
+            {% if doc.visto %}
+            <button type="submit" class="w-full md:w-auto px-6 py-3.5 rounded-xl font-bold text-sm transition border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 flex items-center justify-center gap-2 shadow-sm">
+                <i class="fas fa-download text-slate-400"></i> Baixar Cópia 
             </button>
+            {% else %}
+            <button type="submit" class="w-full md:w-auto btn-primary !py-3.5 text-sm !px-6 flex items-center justify-center gap-2">
+                <i class="fas fa-file-signature"></i> Assinar e Baixar 
+            </button>
+            {% endif %}
         </form>
 
     </div>
     {% else %}
-    <div class="text-center py-16 text-slate-400 bg-white rounded-xl border border-slate-200 border-dashed">
-        <i class="fas fa-folder-open text-4xl mb-4 opacity-50"></i>
-        <p>Nenhum documento disponível no momento.</p>
+    <div class="glass-panel text-center py-20 px-4">
+        <div class="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4 border border-slate-100 shadow-sm text-slate-300">
+            <i class="fas fa-folder-open text-3xl"></i>
+        </div>
+        <h3 class="text-lg font-black text-slate-700 tracking-tight">O seu arquivo está vazio</h3>
+        <p class="text-sm font-medium text-slate-500 mt-1">Ainda não recebeu nenhum documento do RH.</p>
     </div>
     {% endfor %}
 </div>

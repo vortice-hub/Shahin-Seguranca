@@ -1,102 +1,183 @@
 {% extends 'base.html' %}
 {% block content %}
-<div class="max-w-2xl mx-auto">
-    <div class="mb-6"><h2 class="text-xl font-bold text-slate-800">Solicitar Ajuste</h2><p class="text-sm text-slate-500">Gestão de ponto.</p></div>
+<div class="max-w-3xl mx-auto animate-fade-in">
+    
+    <div class="mb-8 flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
+        <div>
+            <h2 class="text-3xl font-black text-slate-800 tracking-tight">Ajuste de Ponto</h2>
+            <p class="text-sm text-slate-500 font-medium mt-1">Corrija esquecimentos e justifique as alterações.</p>
+        </div>
+    </div>
 
-    <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6 mb-6">
-        <form action="/ponto/solicitar-ajuste" method="POST" class="flex gap-4 items-end">
+    <div class="glass-panel p-6 mb-8">
+        <form action="/ponto/solicitar-ajuste" method="POST" class="flex flex-col sm:flex-row gap-4 items-end">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
             
-            <div class="flex-1">
-                <label class="label-pro">Data do Ponto</label>
-                <input type="date" name="data_busca" class="input-pro" required>
+            <div class="flex-1 w-full">
+                <label class="label-pro">Selecione a Data</label>
+                <div class="relative">
+                    <i class="far fa-calendar-alt absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                    <input type="date" name="data_busca" class="input-pro pl-12 text-slate-600 font-medium" required>
+                </div>
             </div>
-            <button type="submit" name="acao" value="buscar" class="bg-blue-600 text-white font-bold py-3 px-6 rounded-lg shadow hover:bg-blue-700 transition"><i class="fas fa-search"></i></button>
+            <button type="submit" name="acao" value="buscar" class="w-full sm:w-auto btn-primary py-3 px-8 text-sm">
+                Buscar Registos
+            </button>
         </form>
     </div>
 
     {% if data_sel %}
-    <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6 mb-8 animate-fade-in">
-        <div class="flex justify-between items-center mb-4 border-b pb-2">
-            <h3 class="font-bold text-slate-800">Registros em {{ data_sel.strftime('%d/%m/%Y') }}</h3>
-            <button onclick="abrirInclusao()" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1 rounded font-bold transition"><i class="fas fa-plus mr-1"></i> ADICIONAR NOVO</button>
+    <div class="glass-panel p-8 mb-10 animate-fade-in relative overflow-hidden" style="animation-delay: 0.1s; animation-fill-mode: both;">
+        <div class="absolute top-0 left-0 w-full h-1.5 bg-brand"></div>
+        
+        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+            <div>
+                <h3 class="font-black text-lg text-slate-800 tracking-tight">Registos Encontrados</h3>
+                <p class="text-xs text-slate-500 font-bold uppercase tracking-widest mt-1">{{ data_sel.strftime('%d/%m/%Y') }}</p>
+            </div>
+            <button onclick="abrirInclusao()" class="btn-glass text-xs !py-2 !px-4">
+                <i class="fas fa-plus"></i> Novo Registo
+            </button>
         </div>
-        <div class="space-y-2 mb-6">
+        
+        <div class="space-y-3 mb-8">
             {% for p in pontos %}
-            <div class="flex justify-between items-center p-3 bg-slate-50 rounded-lg border border-slate-100">
-                <div><span class="text-xs font-bold text-slate-500 block">{{ p.tipo }}</span><span class="font-mono font-bold text-slate-800">{{ p.hora_registro.strftime('%H:%M') }}</span></div>
+            <div class="flex justify-between items-center p-4 bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition group">
+                <div class="flex items-center gap-4">
+                    <div class="w-10 h-10 rounded-full bg-slate-50 text-slate-400 flex items-center justify-center group-hover:text-brand transition"><i class="fas fa-clock"></i></div>
+                    <div>
+                        <span class="font-mono font-black text-lg text-slate-800">{{ p.hora_registro.strftime('%H:%M') }}</span>
+                        <span class="text-[10px] font-bold uppercase text-slate-400 block tracking-wider">{{ p.tipo }}</span>
+                    </div>
+                </div>
                 <div class="flex gap-2">
-                    <button onclick="abrirEdicao('{{ p.id }}', '{{ p.hora_registro.strftime('%H:%M') }}', '{{ p.tipo }}')" class="text-[10px] bg-blue-50 text-blue-600 font-bold px-2 py-1 rounded hover:bg-blue-100">EDITAR</button>
-                    <button onclick="abrirExclusao('{{ p.id }}', '{{ p.hora_registro.strftime('%H:%M') }}')" class="text-[10px] bg-red-50 text-red-600 font-bold px-2 py-1 rounded hover:bg-red-100">EXCLUIR</button>
+                    <button onclick="abrirEdicao('{{ p.id }}', '{{ p.hora_registro.strftime('%H:%M') }}', '{{ p.tipo }}')" class="w-8 h-8 rounded-full bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white transition flex items-center justify-center shadow-sm" title="Editar"><i class="fas fa-pencil-alt text-xs"></i></button>
+                    <button onclick="abrirExclusao('{{ p.id }}', '{{ p.hora_registro.strftime('%H:%M') }}')" class="w-8 h-8 rounded-full bg-red-50 text-red-600 hover:bg-red-600 hover:text-white transition flex items-center justify-center shadow-sm" title="Excluir"><i class="fas fa-trash-alt text-xs"></i></button>
                 </div>
             </div>
-            {% else %}<p class="text-xs text-slate-400 italic">Sem registros neste dia.</p>{% endfor %}
+            {% else %}
+            <div class="text-center py-8">
+                <div class="w-12 h-12 rounded-full bg-slate-50 text-slate-300 flex items-center justify-center mx-auto mb-3"><i class="fas fa-calendar-times text-xl"></i></div>
+                <p class="text-sm font-medium text-slate-400">Nenhum registo salvo neste dia.</p>
+            </div>
+            {% endfor %}
         </div>
 
-        <div id="formContainer" class="hidden bg-slate-50 p-4 rounded-xl border border-blue-200 shadow-inner">
-            <h3 class="font-bold text-blue-700 mb-4 text-sm uppercase" id="formTitle">Detalhes</h3>
-            <form action="/ponto/solicitar-ajuste" method="POST" class="space-y-4">
+        <div id="formContainer" class="hidden bg-slate-50 p-6 rounded-2xl border border-slate-200">
+            <div class="flex items-center gap-2 mb-6 border-b border-slate-200 pb-3">
+                <i class="fas fa-sliders-h text-brand"></i>
+                <h3 class="font-black text-sm text-slate-800 uppercase tracking-widest" id="formTitle">Detalhes da Ação</h3>
+            </div>
+            
+            <form action="/ponto/solicitar-ajuste" method="POST" class="space-y-5">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                
                 <input type="hidden" name="acao" value="enviar">
                 <input type="hidden" name="data_ref" value="{{ data_sel }}">
                 <input type="hidden" name="ponto_id" id="form_ponto_id"> 
                 <input type="hidden" name="tipo_solicitacao" id="form_tipo_solic"> 
                 
-                <div class="grid grid-cols-2 gap-4" id="divHorarioTipo">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-5" id="divHorarioTipo">
                     <div>
-                        <label class="label-pro">Horário</label>
-                        <input type="time" name="novo_horario" id="form_horario" class="input-pro font-mono">
+                        <label class="label-pro">Horário Desejado</label>
+                        <div class="relative">
+                            <i class="far fa-clock absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                            <input type="time" name="novo_horario" id="form_horario" class="input-pro pl-12 font-mono text-lg text-slate-700">
+                        </div>
                     </div>
                     <div>
-                        <label class="label-pro">Tipo</label>
-                        <select name="tipo_batida" id="form_tipo" class="input-pro">
-                            <option value="Entrada">Entrada</option>
-                            <option value="Ida Almoço">Ida Almoço</option>
-                            <option value="Volta Almoço">Volta Almoço</option>
-                            <option value="Saída">Saída</option>
+                        <label class="label-pro">Tipo de Batida</label>
+                        <select name="tipo_batida" id="form_tipo" class="input-pro cursor-pointer text-slate-600 font-medium">
+                            <option value="Entrada">Entrada (Início de Turno)</option>
+                            <option value="Ida Almoço">Ida para o Almoço</option>
+                            <option value="Volta Almoço">Volta do Almoço</option>
+                            <option value="Saída">Saída (Fim de Turno)</option>
                         </select>
                     </div>
                 </div>
+                
                 <div>
-                    <label class="label-pro">Justificativa</label>
-                    <textarea name="justificativa" class="input-pro" rows="2" required></textarea>
+                    <label class="label-pro">Justificativa para o RH</label>
+                    <textarea name="justificativa" class="input-pro font-medium text-sm text-slate-600" rows="2" placeholder="Ex: Esqueci de bater o ponto pois estava a atender um cliente urgente..." required></textarea>
                 </div>
-                <div class="flex gap-2">
-                    <button type="button" onclick="fecharForm()" class="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-600 font-bold py-3 rounded-lg text-xs transition">CANCELAR</button>
-                    <button type="submit" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg shadow text-xs transition">ENVIAR</button>
+                
+                <div class="flex gap-3 pt-2">
+                    <button type="button" onclick="fecharForm()" class="flex-1 py-3 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 font-bold rounded-xl text-sm transition shadow-sm">Cancelar</button>
+                    <button type="submit" class="flex-1 btn-primary py-3 text-sm">Enviar ao Gestor</button>
                 </div>
             </form>
         </div>
     </div>
     {% endif %}
 
-    <div class="mt-8">
-        <h3 class="font-bold text-slate-700 text-sm mb-4 border-b pb-2">Meus Pedidos Recentes</h3>
-        <div class="space-y-3">
+    <div class="mt-12 animate-fade-in" style="animation-delay: 0.2s; animation-fill-mode: both;">
+        <h3 class="font-black text-slate-800 text-lg mb-6 flex items-center gap-2"><i class="fas fa-history text-slate-400"></i> Histórico de Pedidos</h3>
+        
+        <div class="space-y-4">
             {% for req in meus_ajustes %}
-            <div class="bg-white border border-slate-200 rounded-lg p-4 shadow-sm relative pl-4 border-l-4 {% if req.status == 'Aprovado' %} border-l-emerald-500 {% elif req.status == 'Reprovado' %} border-l-red-500 {% else %} border-l-yellow-500 {% endif %}">
-                <div class="flex justify-between items-start mb-2">
-                    <span class="text-[10px] font-bold uppercase text-slate-400">{{ req.data_referencia.strftime('%d/%m') }} - {{ req.tipo_solicitacao }}</span>
-                    <span class="text-[10px] font-bold uppercase px-2 py-0.5 rounded {% if req.status == 'Pendente' %} bg-yellow-100 text-yellow-700 {% elif req.status == 'Aprovado' %} bg-emerald-100 text-emerald-700 {% else %} bg-red-100 text-red-700 {% endif %}">{{ req.status }}</span>
-                </div>
-                
-                <div class="grid grid-cols-2 gap-2 text-xs mb-2 bg-slate-50 p-2 rounded">
-                    <div><span class="block text-slate-400">Horário Antigo</span><strong class="font-mono text-slate-600">{{ extras.get(req.id, '-') }}</strong></div>
-                    <div><span class="block text-slate-400">Horário Novo</span><strong class="font-mono text-blue-600">{% if req.novo_horario %}{{ req.novo_horario }} ({{ req.tipo_batida }}){% else %} - {% endif %}</strong></div>
-                </div>
+            
+            {% set cor_status = 'bg-yellow-50 text-yellow-600 border-yellow-200' %}
+            {% set icon_status = 'fa-hourglass-half' %}
+            {% if req.status == 'Aprovado' %} 
+                {% set cor_status = 'bg-emerald-50 text-emerald-600 border-emerald-200' %}
+                {% set icon_status = 'fa-check' %}
+            {% elif req.status == 'Reprovado' %} 
+                {% set cor_status = 'bg-red-50 text-red-600 border-red-200' %}
+                {% set icon_status = 'fa-times' %}
+            {% endif %}
 
-                <div class="text-xs text-slate-500 italic mb-2">Justificativa: "{{ req.justificativa }}"</div>
-                {% if req.status == 'Reprovado' %}<div class="bg-red-50 p-2 rounded border border-red-100 text-xs text-red-700"><strong>Devolutiva:</strong> {{ req.motivo_reprovacao }}</div>{% endif %}
+            <div class="glass-panel p-5 relative overflow-hidden group">
+                <div class="absolute left-0 top-0 bottom-0 w-1.5 {{ cor_status.split(' ')[0] | replace('50', '500') }}"></div>
+                
+                <div class="pl-3">
+                    <div class="flex justify-between items-start mb-4">
+                        <div>
+                            <span class="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">
+                                <i class="far fa-calendar-alt mr-1"></i> {{ req.data_referencia.strftime('%d/%m/%Y') }}
+                            </span>
+                            <span class="font-bold text-sm text-slate-800">{{ req.tipo_solicitacao }} de Registo</span>
+                        </div>
+                        <span class="text-[9px] font-black uppercase px-2.5 py-1 rounded-md border shadow-sm flex items-center gap-1 {{ cor_status }}">
+                            <i class="fas {{ icon_status }}"></i> {{ req.status }}
+                        </span>
+                    </div>
+                    
+                    <div class="grid grid-cols-2 gap-3 mb-4">
+                        <div class="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                            <span class="block text-[10px] uppercase font-bold text-slate-400 mb-0.5">Antes</span>
+                            <strong class="font-mono text-slate-600 text-sm">{{ extras.get(req.id, '--:--') }}</strong>
+                        </div>
+                        <div class="bg-brand/5 p-3 rounded-xl border border-brand/10">
+                            <span class="block text-[10px] uppercase font-bold text-brand/60 mb-0.5">Solicitado</span>
+                            <strong class="font-mono text-brand text-sm">{% if req.novo_horario %}{{ req.novo_horario }} <span class="text-[9px] font-sans ml-1 text-brand/70 uppercase">{{ req.tipo_batida }}</span>{% else %} Exclusão {% endif %}</strong>
+                        </div>
+                    </div>
+
+                    <div class="text-xs text-slate-500 font-medium bg-white p-3 rounded-xl border border-slate-100 italic shadow-sm">
+                        "{{ req.justificativa }}"
+                    </div>
+
+                    {% if req.status == 'Reprovado' %}
+                    <div class="mt-3 bg-red-50/50 p-3 rounded-xl border border-red-100 text-xs text-red-700 font-medium flex items-start gap-2">
+                        <i class="fas fa-comment-dots mt-0.5 opacity-50"></i>
+                        <span><strong>Devolutiva do Gestor:</strong> {{ req.motivo_reprovacao }}</span>
+                    </div>
+                    {% endif %}
+                </div>
             </div>
-            {% else %}<p class="text-center text-xs text-slate-400 py-4">Nenhum pedido recente.</p>{% endfor %}
+            {% else %}
+            <div class="glass-panel p-10 text-center">
+                <i class="fas fa-inbox text-4xl text-slate-200 mb-3"></i>
+                <p class="text-sm font-medium text-slate-400">Não existem pedidos recentes.</p>
+            </div>
+            {% endfor %}
         </div>
     </div>
 </div>
+
 <script>
-    function abrirInclusao() { resetForm(); document.getElementById('formTitle').innerText = "INCLUIR"; document.getElementById('form_tipo_solic').value = "Inclusao"; document.getElementById('formContainer').classList.remove('hidden'); }
-    function abrirEdicao(id, hora, tipo) { resetForm(); document.getElementById('formTitle').innerText = "EDITAR"; document.getElementById('form_ponto_id').value = id; document.getElementById('form_horario').value = hora; document.getElementById('form_tipo').value = tipo; document.getElementById('form_tipo_solic').value = "Edicao"; document.getElementById('formContainer').classList.remove('hidden'); }
-    function abrirExclusao(id, hora) { resetForm(); document.getElementById('formTitle').innerText = "EXCLUIR"; document.getElementById('form_ponto_id').value = id; document.getElementById('form_tipo_solic').value = "Exclusao"; document.getElementById('divHorarioTipo').classList.add('hidden'); document.getElementById('formContainer').classList.remove('hidden'); }
+    function abrirInclusao() { resetForm(); document.getElementById('formTitle').innerText = "Adicionar Novo Registo"; document.getElementById('form_tipo_solic').value = "Inclusao"; document.getElementById('formContainer').classList.remove('hidden'); }
+    function abrirEdicao(id, hora, tipo) { resetForm(); document.getElementById('formTitle').innerText = "Editar Horário"; document.getElementById('form_ponto_id').value = id; document.getElementById('form_horario').value = hora; document.getElementById('form_tipo').value = tipo; document.getElementById('form_tipo_solic').value = "Edicao"; document.getElementById('formContainer').classList.remove('hidden'); }
+    function abrirExclusao(id, hora) { resetForm(); document.getElementById('formTitle').innerText = "Justificar Exclusão"; document.getElementById('form_ponto_id').value = id; document.getElementById('form_tipo_solic').value = "Exclusao"; document.getElementById('divHorarioTipo').classList.add('hidden'); document.getElementById('formContainer').classList.remove('hidden'); }
     function resetForm() { document.getElementById('form_ponto_id').value = ""; document.getElementById('form_horario').value = ""; document.getElementById('divHorarioTipo').classList.remove('hidden'); }
     function fecharForm() { document.getElementById('formContainer').classList.add('hidden'); }
 </script>

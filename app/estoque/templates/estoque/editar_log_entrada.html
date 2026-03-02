@@ -1,18 +1,54 @@
 {% extends 'base.html' %}
 {% block content %}
-<div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
-    <h2 class="text-lg font-bold text-slate-800 mb-4">Editar Histórico (Entrada)</h2>
-    <form action="/historico/entrada/editar/{{ log.id }}" method="POST" class="space-y-4">
-        <div><label class="label-pro">Item (Texto)</label><input type="text" name="item_nome" value="{{ log.item_nome }}" class="input-pro"></div>
-        <div><label class="label-pro">Quantidade Original</label><input type="number" name="quantidade" value="{{ log.quantidade }}" class="input-pro"></div>
-        <div><label class="label-pro">Data/Hora</label><input type="datetime-local" name="data" value="{{ log.data_hora.strftime('%Y-%m-%dT%H:%M') }}" class="input-pro"></div>
-        
-        <div class="flex gap-3 pt-4">
-            <button type="submit" name="acao" value="salvar" class="flex-1 bg-blue-600 text-white font-bold py-3 rounded-lg">Salvar Correção</button>
-            <button type="submit" name="acao" value="excluir" class="flex-none bg-red-100 text-red-600 font-bold py-3 px-6 rounded-lg" onclick="return confirm('Excluir este registro? O estoque atual NÃO será alterado.')"><i class="fas fa-trash"></i></button>
+<div class="max-w-xl mx-auto animate-fade-in">
+    <div class="flex items-center justify-between mb-8">
+        <div>
+            <h2 class="text-3xl font-black text-slate-800 tracking-tight">Editar Entrada</h2>
+            <p class="text-sm text-slate-500 font-medium mt-1">Correção de log do histórico.</p>
         </div>
-        <p class="text-[10px] text-slate-400 mt-2 text-center">Nota: Alterar este log não muda o estoque atual. Use o menu Gerenciar para ajustar quantidades atuais.</p>
-    </form>
+        <a href="/historico/entrada" class="btn-glass text-xs"><i class="fas fa-arrow-left mr-1"></i> Voltar</a>
+    </div>
+
+    <div class="glass-panel overflow-hidden shadow-md">
+        <form action="/historico/entrada/editar/{{ log.id }}" method="POST" class="p-8 space-y-6 bg-white/50">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+
+            <div class="bg-blue-50/50 p-5 rounded-2xl border border-blue-100 flex items-start gap-3 shadow-sm mb-4">
+                <i class="fas fa-info-circle text-blue-500 mt-0.5"></i>
+                <p class="text-[11px] text-blue-800 font-medium leading-relaxed">
+                    <strong class="font-black uppercase tracking-wider">Nota de Auditoria:</strong> Alterar este registo <span class="underline">não muda o stock atual</span>. Use o menu "Gerenciar" se precisar ajustar a quantidade real na prateleira.
+                </p>
+            </div>
+
+            <div>
+                <label class="label-pro">Item (Texto do Registo)</label>
+                <div class="relative">
+                    <i class="fas fa-tag absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                    <input type="text" name="item_nome" value="{{ log.item_nome }}" class="input-pro pl-12 font-bold text-slate-700">
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                <div>
+                    <label class="label-pro text-emerald-600">Qtd. Original Recebida</label>
+                    <input type="number" name="quantidade" value="{{ log.quantidade }}" class="input-pro text-emerald-700 font-black text-xl text-center bg-emerald-50/30 border-emerald-100 focus:border-emerald-400">
+                </div>
+                <div>
+                    <label class="label-pro">Data e Hora</label>
+                    <input type="datetime-local" name="data" value="{{ log.data_hora.strftime('%Y-%m-%dT%H:%M') }}" class="input-pro text-slate-600 font-medium">
+                </div>
+            </div>
+
+            <div class="flex gap-4 pt-6 border-t border-slate-200 mt-4">
+                <button type="submit" name="acao" value="salvar" class="flex-1 btn-primary !bg-blue-600 hover:!bg-blue-700 shadow-blue-500/30 !py-3.5">
+                    <i class="fas fa-save mr-2"></i> Salvar Correção
+                </button>
+                <button type="submit" name="acao" value="excluir" class="flex-none w-14 flex justify-center items-center bg-white border border-red-200 text-red-500 hover:bg-red-50 hover:text-red-600 rounded-xl font-bold transition shadow-sm" onclick="return confirm('Tem a certeza que deseja excluir este registo? O stock atual NÃO será alterado.')" title="Excluir Log">
+                    <i class="fas fa-trash-alt"></i>
+                </button>
+            </div>
+        </form>
+    </div>
 </div>
-<style>.label-pro { display: block; font-size: 0.7rem; font-weight: 700; color: #64748b; text-transform: uppercase; margin-bottom: 0.5rem; } .input-pro { width: 100%; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 0.5rem; padding: 0.75rem 1rem; }</style>
 {% endblock %}
+

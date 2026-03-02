@@ -1,106 +1,307 @@
 {% extends 'base.html' %}
 {% block content %}
-<script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
 <style>
-    .terminal-mode { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #0f172a; z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; color: white; }
-    #reader { width: 100%; max-width: 600px; border-radius: 20px; overflow: hidden; border: 4px solid #3b82f6; background: black; }
+    /* Estilos específicos para o modo Quiosque imersivo em ecrã inteiro */
+    .terminal-mode { position: fixed; inset: 0; background: #020617; z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; color: white; overflow: hidden; font-family: 'Inter', sans-serif; width: 100vw; height: 100vh; }
     
-    /* MODAL OVERLAY */
-    #successModal {
-        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-        background: rgba(0,0,0,0.9);
-        display: flex; align-items: center; justify-content: center;
-        z-index: 10000;
-        opacity: 0; pointer-events: none; transition: opacity 0.3s;
+    /* Padrão Glassmorphism Escuro para o Terminal */
+    .glass-terminal {
+        background: rgba(15, 23, 42, 0.6);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        border-radius: 2rem;
     }
-    #successModal.active { opacity: 1; pointer-events: all; }
+
+    #camera-container { 
+        width: 100%; 
+        max-width: 500px; 
+        position: relative; 
+        overflow: hidden; 
+        background: black; 
+        transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        box-shadow: 0 25px 50px -12px rgba(0,0,0,0.8);
+    }
+
+    #camera-container.searching { border-color: rgba(234, 179, 8, 0.5); box-shadow: 0 0 40px rgba(234, 179, 8, 0.15); }
+    #camera-container.analyzing { border-color: var(--primary-color, #3b82f6); animation: pulse-brand 1.5s infinite; }
+    #camera-container.success { border-color: #10b981; box-shadow: 0 0 50px rgba(16, 185, 129, 0.2); }
+    #camera-container.error { border-color: #ef4444; box-shadow: 0 0 50px rgba(239, 68, 68, 0.2); }
+
+    @keyframes pulse-brand {
+        0% { box-shadow: 0 0 0 0px color-mix(in srgb, var(--primary-color) 40%, transparent); }
+        100% { box-shadow: 0 0 0 20px rgba(0, 0, 0, 0); }
+    }
+
+    #video-feed { width: 100%; height: auto; transform: scaleX(-1); filter: contrast(1.05); }
     
-    .modal-content {
-        background: #064e3b; /* Emerald 900 */
-        padding: 40px; border-radius: 20px; text-align: center;
-        border: 2px solid #10b981;
-        box-shadow: 0 0 50px rgba(16, 185, 129, 0.5);
-        max-width: 90%;
+    #scanner-line { position: absolute; top: 0; left: 0; width: 100%; height: 2px; background: color-mix(in srgb, var(--primary-color) 80%, transparent); box-shadow: 0 0 20px var(--primary-color); animation: scan 2.5s cubic-bezier(0.4, 0, 0.2, 1) infinite; z-index: 30; display: none; }
+    .searching #scanner-line, .analyzing #scanner-line { display: block; }
+    .analyzing #scanner-line { background: var(--primary-color); height: 4px; animation-duration: 1s; }
+
+    @keyframes scan { 0% { top: 0; } 100% { top: 100%; } }
+
+    #status-label {
+        position: absolute; top: 24px; left: 50%; transform: translateX(-50%);
+        padding: 8px 24px; background: rgba(0, 0, 0, 0.5); backdrop-filter: blur(8px);
+        border-radius: 100px; font-size: 10px; font-weight: 900; letter-spacing: 2px;
+        text-transform: uppercase; z-index: 35; border: 1px solid rgba(255,255,255,0.05);
     }
-    .modal-content h2 { font-size: 2rem; font-weight: bold; color: white; margin-bottom: 10px; }
-    .modal-content p { font-size: 1.5rem; color: #a7f3d0; margin-bottom: 30px; }
-    .btn-next {
-        background: white; color: #064e3b; font-size: 1.2rem; font-weight: bold;
-        padding: 15px 40px; border-radius: 50px; border: none; cursor: pointer;
-        display: inline-flex; align-items: center; gap: 10px;
-    }
+
+    .overlay-modal { position: absolute; inset: 0; background: rgba(2, 6, 23, 0.95); backdrop-filter: blur(10px); z-index: 40; display: flex; flex-direction: column; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: all 0.3s; padding: 40px; text-align: center; }
+    .overlay-modal.active { opacity: 1; pointer-events: all; }
+
+    .btn-action { width: 100%; padding: 20px; font-weight: 800; font-size: 1.1rem; border-radius: 1.2rem; transition: all 0.2s; letter-spacing: 0.05em; }
+    .btn-sim { background: #10b981; color: white; box-shadow: 0 10px 25px rgba(16, 185, 129, 0.2); }
+    .btn-sim:active { transform: scale(0.96); }
+    .btn-nao { background: transparent; color: #ef4444; border: 2px solid rgba(239, 68, 68, 0.3); margin-top: 15px; }
 </style>
 
-<div class="terminal-mode">
-    <div class="mb-4 text-center"><h1 class="text-3xl font-bold tracking-widest text-blue-400">SHAHIN GESTÃO</h1><p class="text-sm text-slate-400">TERMINAL DE PONTO</p></div>
-    <div id="reader"></div>
-    <div class="mt-4"><a href="/logout" class="text-xs text-slate-600 hover:text-slate-400">Sair do Modo Terminal</a></div>
-</div>
+<div id="kiosk-start-screen" class="fixed inset-0 bg-slate-900 z-[10000] flex flex-col items-center justify-center text-white w-screen h-screen">
+    
+    <div class="absolute inset-0 overflow-hidden pointer-events-none">
+        <div class="absolute -top-[20%] -left-[10%] w-[70vw] h-[70vw] rounded-full bg-brand opacity-10 blur-[100px]"></div>
+        <div class="absolute -bottom-[20%] -right-[10%] w-[60vw] h-[60vw] rounded-full bg-purple-600 opacity-10 blur-[100px]"></div>
+    </div>
 
-<!-- Modal de Sucesso -->
-<div id="successModal">
-    <div class="modal-content">
-        <i class="fas fa-check-circle text-6xl text-emerald-400 mb-4"></i>
-        <h2 id="modalTitle">REGISTRADO!</h2>
-        <p id="modalMsg">Fulano de Tal<br>14:30</p>
-        <button class="btn-next" onclick="resetScanner()">
-            <i class="fas fa-redo"></i> PRÓXIMO
+    <div class="relative z-10 text-center flex flex-col items-center">
+        <div class="w-24 h-24 bg-white/5 backdrop-blur-xl rounded-3xl border border-white/10 flex items-center justify-center mb-8 shadow-2xl">
+            <i class="fas fa-tablet-alt text-4xl text-brand animate-pulse"></i>
+        </div>
+        <h2 class="text-4xl md:text-5xl font-black mb-3 tracking-tighter">{{ g.empresa.nome if g.empresa else 'Vortice' }}</h2>
+        <p class="text-slate-400 mb-12 font-medium tracking-wide uppercase text-sm">Terminal Biométrico V3</p>
+        
+        <button onclick="entrarModoQuiosque()" class="bg-brand hover:bg-brand-hover text-white font-bold py-5 px-12 rounded-2xl shadow-[0_10px_40px_color-mix(in_srgb,var(--primary-color)_40%,transparent)] transition-all transform hover:scale-105 active:scale-95 text-lg flex items-center gap-3">
+            <i class="fas fa-play text-sm"></i> INICIAR OPERAÇÃO
         </button>
     </div>
 </div>
 
-<script>
-    const html5QrCode = new Html5Qrcode("reader");
-    let isScanning = true;
+<div class="terminal-mode hidden" id="terminal-ui">
     
-    // Configuração para QR Code denso
-    const config = { fps: 10, qrbox: { width: 300, height: 300 } };
+    <div class="mb-10 text-center flex flex-col items-center" id="header-terminal">
+        <div class="bg-white/10 px-6 py-2 rounded-full backdrop-blur-md border border-white/5 mb-4">
+            <span class="text-xs font-black tracking-widest uppercase text-brand">Terminal Ativo</span>
+        </div>
+        <h1 class="text-2xl font-bold tracking-tight text-white/90">{{ g.empresa.nome if g.empresa else 'Vortice' }}</h1>
+    </div>
     
-    html5QrCode.start({ facingMode: "environment" }, config, onScanSuccess, onScanFailure);
-
-    function onScanSuccess(decodedText, decodedResult) {
-        if (!isScanning) return;
-        isScanning = false;
+    <div id="camera-container" class="glass-terminal searching">
+        <div id="status-label" class="text-yellow-400">Aguardando Rosto...</div>
         
-        // Som de Beep
-        try { new Audio("https://actions.google.com/sounds/v1/alarms/beep_short.ogg").play(); } catch(e){}
+        <video id="video-feed" autoplay playsinline muted class="rounded-[2rem]"></video>
+        
+        <div class="absolute bottom-8 w-full flex justify-center z-30 pointer-events-none">
+            <p class="text-white text-[9px] font-black bg-black/50 backdrop-blur-md px-5 py-2.5 rounded-full tracking-widest uppercase border border-white/10 shadow-xl">Olhe para a câmara</p>
+        </div>
 
-        fetch('/ponto/api/registrar-leitura', { 
-            method: 'POST', 
-            headers: {'Content-Type': 'application/json'}, 
-            body: JSON.stringify({ token: decodedText }) 
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                showModal(data.funcionario, data.hora, data.tipo);
-            } else {
-                alert("ERRO: " + data.error);
-                setTimeout(() => { isScanning = true; }, 2000);
-            }
-        })
-        .catch(err => {
-            alert("Erro de conexão.");
-            setTimeout(() => { isScanning = true; }, 2000);
+        <div id="scanner-line"></div>
+        <canvas id="canvas-frame" class="hidden"></canvas>
+
+        <div id="modal-confirmacao" class="overlay-modal rounded-[2rem]">
+            <div class="w-16 h-16 rounded-full bg-brand/20 text-brand flex items-center justify-center text-2xl mb-4"><i class="fas fa-fingerprint"></i></div>
+            <div class="text-brand text-[10px] font-black mb-2 tracking-widest uppercase" id="lbl-tipo-ponto">Check-in</div>
+            <h2 class="text-3xl font-black text-white mb-1" id="lbl-nome-func">---</h2>
+            <p class="text-xl text-slate-400 font-mono mb-10" id="lbl-hora-func">00:00</p>
+            <div class="w-full max-w-xs">
+                <button class="btn-action btn-sim" onclick="confirmarPonto()">CONFIRMAR</button>
+                <button class="btn-action btn-nao" onclick="rejeitarPonto()">NÃO SOU EU</button>
+            </div>
+        </div>
+
+        <div id="modal-sucesso" class="overlay-modal rounded-[2rem]" style="background: rgba(6, 78, 59, 0.95);">
+            <div class="w-24 h-24 bg-emerald-500 rounded-full flex items-center justify-center mb-6 shadow-[0_0_50px_rgba(16,185,129,0.5)]">
+                <i class="fas fa-check text-4xl text-white"></i>
+            </div>
+            <h2 class="text-3xl font-black text-white tracking-tight">REGISTRADO!</h2>
+            <p class="text-emerald-200 mt-2 font-medium">Tenha um excelente turno.</p>
+        </div>
+        
+        <div id="modal-erro" class="overlay-modal rounded-[2rem]" style="background: rgba(69, 10, 10, 0.95);">
+            <div class="w-24 h-24 bg-red-500/20 rounded-full flex items-center justify-center mb-6 border border-red-500/50">
+                <i class="fas fa-user-slash text-4xl text-red-500"></i>
+            </div>
+            <h2 class="text-2xl font-black text-white tracking-tight">ACESSO NEGADO</h2>
+            <p class="text-red-300 mt-4 text-sm font-medium">Rosto não identificado na base.<br>Tente novamente em <span id="lbl-timer-erro" class="font-black text-white">5</span>s.</p>
+        </div>
+    </div>
+
+    <div class="mt-12 opacity-30 hover:opacity-100 transition z-50">
+        <button onclick="sairModoQuiosque()" class="text-[9px] font-bold text-slate-500 uppercase tracking-widest bg-white/5 px-4 py-2 rounded-full border border-white/5 cursor-pointer hover:bg-white/10 hover:text-white transition">Encerrar Sessão do Terminal</button>
+    </div>
+</div>
+
+<script>
+    const video = document.getElementById('video-feed');
+    const canvas = document.getElementById('canvas-frame');
+    const container = document.getElementById('camera-container');
+    const statusLabel = document.getElementById('status-label');
+    const ctx = canvas.getContext('2d');
+    
+    let isProcessing = false;
+    let falhasConsecutivas = 0;
+    const MAX_FALHAS = 3;
+    let userAlvoId = null;
+
+    function entrarModoQuiosque() {
+        document.getElementById('kiosk-start-screen').classList.add('hidden');
+        document.getElementById('terminal-ui').classList.remove('hidden');
+
+        try {
+            const elem = document.documentElement;
+            if (elem.requestFullscreen) { elem.requestFullscreen(); }
+            else if (elem.webkitRequestFullscreen) { elem.webkitRequestFullscreen(); }
+            else if (elem.msRequestFullscreen) { elem.msRequestFullscreen(); }
+        } catch (e) {
+            console.log("Modo ecrã inteiro nativo não suportado.");
+        }
+        
+        iniciarTerminal();
+    }
+
+    function sairModoQuiosque() {
+        try {
+            if (document.exitFullscreen) { document.exitFullscreen(); } 
+            else if (document.webkitExitFullscreen) { document.webkitExitFullscreen(); }
+        } catch (e) {}
+        window.location.href = '/logout';
+    }
+
+    function iniciarTerminal() {
+        navigator.mediaDevices.getUserMedia({ 
+            video: { facingMode: "user", width: { ideal: 640 } }, 
+            audio: false 
+        }).then(stream => {
+            video.srcObject = stream;
+            video.onloadedmetadata = () => {
+                canvas.width = video.videoWidth; 
+                canvas.height = video.videoHeight;
+                setInterval(capturarEAnalisar, 2500); 
+            };
+        }).catch(err => {
+            console.error("Erro câmera:", err);
+            alert("Erro ao aceder à câmara. Verifique as permissões do tablet.");
+            sairModoQuiosque();
         });
     }
 
-    function onScanFailure(error) {}
+    function capturarEAnalisar() {
+        if (isProcessing) return;
 
-    function showModal(nome, hora, tipo) {
-        document.getElementById('modalTitle').innerText = tipo.toUpperCase() + " REGISTRADA";
-        document.getElementById('modalMsg').innerHTML = `<strong>${nome}</strong><br>${hora}`;
-        document.getElementById('successModal').classList.add('active');
-        
-        // Auto-fechar em 4s se ninguem clicar
-        setTimeout(() => {
-            if(document.getElementById('successModal').classList.contains('active')) resetScanner();
-        }, 4000);
+        container.className = "glass-terminal analyzing";
+        statusLabel.innerText = "Analisando Rosto...";
+        statusLabel.className = "text-white"; // Adaptado pra cor brand pela div pai
+
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+        isProcessing = true;
+
+        canvas.toBlob(async (blob) => {
+            const formData = new FormData();
+            formData.append('image', blob, 'terminal_capture.jpg');
+
+            try {
+                const res = await fetch('/ponto/api/reconhecer-facial', {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': '{{ csrf_token() }}' },
+                    body: formData
+                });
+                const data = await res.json();
+
+                if (data.success) {
+                    container.className = "glass-terminal success";
+                    statusLabel.innerText = "Identificado!";
+                    statusLabel.className = "text-emerald-400";
+                    
+                    tocarBeep();
+                    userAlvoId = data.user_id;
+                    document.getElementById('lbl-nome-func').innerText = data.nome;
+                    document.getElementById('lbl-tipo-ponto').innerText = `A Registrar ${data.tipo}`;
+                    document.getElementById('lbl-hora-func').innerText = data.hora;
+                    document.getElementById('modal-confirmacao').classList.add('active');
+                } else {
+                    container.className = "glass-terminal searching";
+                    statusLabel.innerText = "Aguardando Rosto...";
+                    statusLabel.className = "text-yellow-400";
+                    
+                    if (data.error === "Rosto não reconhecido ou baixa similaridade.") {
+                        registrarFalha();
+                    } else {
+                        isProcessing = false;
+                    }
+                }
+            } catch (e) {
+                isProcessing = false;
+                container.className = "glass-terminal searching";
+                statusLabel.innerText = "Aguardando Rosto...";
+            }
+        }, 'image/jpeg', 0.8);
     }
 
-    function resetScanner() {
-        document.getElementById('successModal').classList.remove('active');
-        isScanning = true;
+    async function confirmarPonto() {
+        document.getElementById('modal-confirmacao').classList.remove('active');
+        try {
+            const res = await fetch('/ponto/api/confirmar-ponto', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token() }}' },
+                body: JSON.stringify({ user_id: userAlvoId })
+            });
+            const data = await res.json();
+            if (data.success) {
+                falhasConsecutivas = 0;
+                document.getElementById('modal-sucesso').classList.add('active');
+                setTimeout(() => {
+                    document.getElementById('modal-sucesso').classList.remove('active');
+                    resetSistema();
+                }, 3000);
+            }
+        } catch(e) { resetSistema(); }
+    }
+
+    function rejeitarPonto() {
+        document.getElementById('modal-confirmacao').classList.remove('active');
+        resetSistema();
+    }
+
+    function resetSistema() {
+        isProcessing = false;
+        userAlvoId = null;
+        container.className = "glass-terminal searching";
+        statusLabel.innerText = "Aguardando Rosto...";
+        statusLabel.className = "text-yellow-400";
+    }
+
+    function registrarFalha() {
+        falhasConsecutivas++;
+        if (falhasConsecutivas >= MAX_FALHAS) {
+            bloquearTerminal();
+        } else {
+            setTimeout(() => { isProcessing = false; }, 1000);
+        }
+    }
+
+    function bloquearTerminal() {
+        container.className = "glass-terminal error";
+        document.getElementById('modal-erro').classList.add('active');
+        let segundos = 5;
+        const lblTimer = document.getElementById('lbl-timer-erro');
+        const timer = setInterval(() => {
+            segundos--;
+            lblTimer.innerText = segundos;
+            if (segundos <= 0) {
+                clearInterval(timer);
+                document.getElementById('modal-erro').classList.remove('active');
+                falhasConsecutivas = 0;
+                resetSistema();
+            }
+        }, 1000);
+    }
+
+    function tocarBeep() {
+        try { new Audio("https://actions.google.com/sounds/v1/alarms/beep_short.ogg").play(); } catch(e){}
     }
 </script>
 {% endblock %}
+

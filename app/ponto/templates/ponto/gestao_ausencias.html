@@ -1,120 +1,226 @@
 {% extends 'base.html' %}
 {% block content %}
-<div class="mb-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+<div class="mb-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 animate-fade-in">
     <div>
-        <h2 class="text-2xl font-bold text-slate-800 flex items-center gap-2">
-            <i class="fas fa-umbrella-beach text-emerald-600"></i> Gestão de Férias e Ausências
+        <h2 class="text-3xl font-black text-slate-800 tracking-tight flex items-center gap-3">
+            <i class="fas fa-umbrella-beach text-emerald-500"></i> Gestão de Ausências
         </h2>
-        <p class="text-sm text-slate-500">Aprove, recuse ou revogue solicitações de folgas programadas.</p>
+        <p class="text-sm text-slate-500 font-medium mt-1">Aprove, recuse ou revogue solicitações de folgas e férias.</p>
     </div>
 </div>
 
 {% if alertas %}
-<div class="mb-8 bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-    <h3 class="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2 uppercase tracking-wide">
-        <i class="fas fa-exclamation-circle text-amber-500 text-lg"></i> Atenção: Férias Próximas ao Limite Concessivo
+<div class="mb-8 glass-panel p-6 border-l-4 border-l-amber-500 animate-fade-in" style="animation-delay: 0.1s; animation-fill-mode: both;">
+    <h3 class="text-xs font-black text-slate-800 mb-4 flex items-center gap-2 uppercase tracking-widest">
+        <i class="fas fa-exclamation-triangle text-amber-500 text-lg animate-pulse"></i> 
+        Alertas de Vencimento Concessivo
     </h3>
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
         {% for alerta in alertas %}
-        <div class="p-4 rounded-xl border flex flex-col gap-2 {{ 'bg-red-50 border-red-200' if alerta.status == 'Vencidas' else 'bg-amber-50 border-amber-200' }}">
+        <div class="bg-white p-5 rounded-2xl border shadow-sm flex flex-col gap-3 transition hover:shadow-md {{ 'border-red-200' if alerta.status == 'Vencidas' else 'border-amber-200' }}">
             <div class="flex justify-between items-start">
-                <span class="font-bold text-slate-800 text-sm">{{ alerta.user.real_name }}</span>
-                <span class="text-[10px] font-black uppercase px-2 py-1 rounded {{ 'bg-red-200 text-red-700' if alerta.status == 'Vencidas' else 'bg-amber-200 text-amber-700' }}">{{ alerta.status }}</span>
+                <span class="font-black text-slate-800 text-sm tracking-tight">{{ alerta.user.real_name }}</span>
+                <span class="text-[9px] font-black uppercase px-2.5 py-1 rounded-md shadow-sm border {{ 'bg-red-50 text-red-600 border-red-100' if alerta.status == 'Vencidas' else 'bg-amber-50 text-amber-600 border-amber-100' }}">{{ alerta.status }}</span>
             </div>
-            <p class="text-xs font-medium {{ 'text-red-600' if alerta.status == 'Vencidas' else 'text-amber-700' }}">{{ alerta.msg }}</p>
+            <p class="text-xs font-bold leading-relaxed {{ 'text-red-500' if alerta.status == 'Vencidas' else 'text-amber-600' }}">
+                <i class="fas fa-clock opacity-50 mr-1"></i> {{ alerta.msg }}
+            </p>
         </div>
         {% endfor %}
     </div>
 </div>
 {% endif %}
 
-<div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-10">
+<div class="glass-panel overflow-hidden mb-10 animate-fade-in" style="animation-delay: 0.2s; animation-fill-mode: both;">
     <div class="overflow-x-auto">
         <table class="w-full text-left text-sm text-slate-600">
-            <thead class="bg-slate-50 text-[10px] uppercase text-slate-400 font-bold border-b border-slate-100">
+            <thead class="bg-slate-50/50 text-[10px] uppercase text-slate-400 font-black tracking-widest border-b border-slate-100">
                 <tr>
-                    <th class="px-6 py-4">Data Pedido</th>
-                    <th class="px-6 py-4">Funcionário</th>
-                    <th class="px-6 py-4">Tipo & Regras</th>
-                    <th class="px-6 py-4">Período de Descanso</th>
-                    <th class="px-6 py-4">Dias</th>
-                    <th class="px-6 py-4 text-center">Status</th>
-                    <th class="px-6 py-4 text-right">Ações</th>
+                    <th class="px-6 py-5">Envio</th>
+                    <th class="px-6 py-5">Funcionário</th>
+                    <th class="px-6 py-5">Tipo & Condições</th>
+                    <th class="px-6 py-5">Período Solicitado</th>
+                    <th class="px-6 py-5 text-center">Dias</th>
+                    <th class="px-6 py-5 text-center">Status</th>
+                    <th class="px-6 py-5 text-right">Ações</th>
                 </tr>
             </thead>
-            <tbody class="divide-y divide-slate-100">
+            <tbody class="divide-y divide-slate-100/50">
                 {% for solic in solicitacoes %}
-                <tr class="hover:bg-slate-50 transition">
-                    <td class="px-6 py-4 text-xs">{{ solic.data_solicitacao.strftime('%d/%m/%Y %H:%M') }}</td>
-                    <td class="px-6 py-4 font-bold text-slate-800">{{ solic.user.real_name }}</td>
-                    <td class="px-6 py-4">
-                        <span class="bg-slate-100 text-slate-600 px-2 py-1 rounded text-[10px] font-bold uppercase border border-slate-200 block w-max mb-1">
+                <tr class="hover:bg-white/60 transition group">
+                    <td class="px-6 py-5 text-[11px] font-bold text-slate-500">{{ solic.data_solicitacao.strftime('%d/%m/%Y %H:%M') }}</td>
+                    
+                    <td class="px-6 py-5 font-black text-slate-800 flex items-center gap-3">
+                        <div class="w-8 h-8 rounded-full bg-slate-100 text-slate-400 font-black text-[10px] flex items-center justify-center shadow-inner">{{ solic.user.real_name[:2].upper() }}</div>
+                        {{ solic.user.real_name }}
+                    </td>
+                    
+                    <td class="px-6 py-5">
+                        <span class="bg-white text-slate-600 px-2.5 py-1 rounded-md text-[9px] font-black uppercase tracking-wider border border-slate-200 shadow-sm block w-max mb-1.5">
                             {{ solic.tipo_ausencia }}
                         </span>
                         {% if solic.abono_pecuniario %}
-                            <span class="text-[9px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
-                                <i class="fas fa-comment-dollar"></i> Vende {{ solic.dias_abono }} dias
+                            <span class="text-[9px] font-black text-brand bg-brand/10 px-2 py-1 rounded-md border border-brand/20 shadow-sm flex items-center gap-1 w-max">
+                                <i class="fas fa-dollar-sign"></i> Abono ({{ solic.dias_abono }}d)
                             </span>
                         {% endif %}
                     </td>
-                    <td class="px-6 py-4 text-xs font-bold text-emerald-600">
-                        {{ solic.data_inicio.strftime('%d/%m') }} a {{ solic.data_fim.strftime('%d/%m') }}
+                    
+                    <td class="px-6 py-5 text-xs font-bold text-emerald-600">
+                        <i class="far fa-calendar-alt text-slate-300 mr-1"></i> {{ solic.data_inicio.strftime('%d/%m') }} a {{ solic.data_fim.strftime('%d/%m') }}
                     </td>
-                    <td class="px-6 py-4 font-bold text-slate-700">
+                    
+                    <td class="px-6 py-5 text-center font-black text-slate-700 text-sm">
                         {{ solic.quantidade_dias }}
                     </td>
-                    <td class="px-6 py-4 text-center">
+                    
+                    <td class="px-6 py-5 text-center">
                         {% if solic.status == 'Pendente' %}
-                            <span class="bg-amber-100 text-amber-600 px-2 py-1 rounded text-[10px] font-bold uppercase"><i class="fas fa-clock"></i> Pendente</span>
+                            <span class="bg-amber-50 text-amber-600 border border-amber-100 px-2.5 py-1.5 rounded-md text-[9px] font-black uppercase tracking-wider shadow-sm"><i class="fas fa-clock"></i> Pendente</span>
                         {% elif solic.status == 'Aprovado' %}
-                            <span class="bg-emerald-100 text-emerald-600 px-2 py-1 rounded text-[10px] font-bold uppercase"><i class="fas fa-check"></i> Aprovado</span>
+                            <span class="bg-emerald-50 text-emerald-600 border border-emerald-100 px-2.5 py-1.5 rounded-md text-[9px] font-black uppercase tracking-wider shadow-sm"><i class="fas fa-check"></i> Aprovado</span>
                         {% elif solic.status == 'Cancelado' %}
-                            <span class="bg-slate-200 text-slate-600 px-2 py-1 rounded text-[10px] font-bold uppercase"><i class="fas fa-ban"></i> Cancelado</span>
+                            <span class="bg-slate-100 text-slate-500 border border-slate-200 px-2.5 py-1.5 rounded-md text-[9px] font-black uppercase tracking-wider shadow-sm"><i class="fas fa-ban"></i> Cancelado</span>
                         {% else %}
-                            <span class="bg-red-100 text-red-600 px-2 py-1 rounded text-[10px] font-bold uppercase"><i class="fas fa-times"></i> Recusado</span>
+                            <span class="bg-red-50 text-red-600 border border-red-100 px-2.5 py-1.5 rounded-md text-[9px] font-black uppercase tracking-wider shadow-sm"><i class="fas fa-times"></i> Recusado</span>
                         {% endif %}
                     </td>
-                    <td class="px-6 py-4 text-right flex items-center justify-end gap-2">
-                        
-                        {% if solic.observacao %}
-                        <button onclick="alert('Observação do Funcionário:\n\n{{ solic.observacao }}')" class="text-slate-400 hover:text-blue-500 p-2 rounded transition" title="Ler Observação">
-                            <i class="fas fa-comment-dots text-lg"></i>
-                        </button>
-                        {% endif %}
+                    
+                    <td class="px-6 py-5 text-right">
+                        <div class="flex items-center justify-end gap-2">
+                            {% if solic.observacao %}
+                            <button onclick="abrirModalNota('{{ solic.user.real_name }}', '{{ solic.observacao }}')" class="w-8 h-8 rounded-full bg-white text-slate-400 hover:text-brand hover:border-brand/30 border border-slate-200 flex items-center justify-center transition shadow-sm" title="Ler Observação do Funcionário">
+                                <i class="fas fa-comment-dots text-xs"></i>
+                            </button>
+                            {% endif %}
 
-                        {% if solic.status == 'Pendente' %}
-                            <form action="{{ url_for('ponto.gestao_ausencias') }}" method="POST" class="inline" onsubmit="return confirm('Ao aprovar, o sistema preencherá o espelho de ponto deste funcionário automaticamente. Confirmar?');">
-                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                                <input type="hidden" name="solicitacao_id" value="{{ solic.id }}"/>
-                                <input type="hidden" name="acao" value="aprovar"/>
-                                <button type="submit" class="text-white bg-emerald-500 hover:bg-emerald-600 px-3 py-1.5 rounded transition text-xs font-bold" title="Aprovar">Aprovar</button>
-                            </form>
-                            
-                            <form action="{{ url_for('ponto.gestao_ausencias') }}" method="POST" class="inline" onsubmit="return confirm('Deseja recusar este pedido?');">
-                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                                <input type="hidden" name="solicitacao_id" value="{{ solic.id }}"/>
-                                <input type="hidden" name="acao" value="recusar"/>
-                                <button type="submit" class="text-white bg-red-500 hover:bg-red-600 px-3 py-1.5 rounded transition text-xs font-bold" title="Recusar">Recusar</button>
-                            </form>
-                        
-                        {% elif solic.status == 'Aprovado' %}
-                            <form action="{{ url_for('ponto.gestao_ausencias') }}" method="POST" class="inline" onsubmit="return confirm('PERIGO: Isso vai CANCELAR as férias aprovadas e restaurar os dias devidos no espelho de ponto do funcionário. Continuar?');">
-                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                                <input type="hidden" name="solicitacao_id" value="{{ solic.id }}"/>
-                                <input type="hidden" name="acao" value="remover"/>
-                                <button type="submit" class="text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 px-3 py-1.5 rounded transition text-xs font-bold flex items-center gap-1" title="Revogar Férias">
-                                    <i class="fas fa-trash-alt"></i> Revogar
+                            {% if solic.status == 'Pendente' %}
+                                <button onclick="abrirModalAcao('aprovar', {{ solic.id }}, 'O sistema aprovará o pedido e atualizará o espelho de ponto do colaborador automaticamente.')" class="w-8 h-8 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200 hover:bg-emerald-500 hover:text-white flex items-center justify-center transition shadow-sm" title="Aprovar Pedido">
+                                    <i class="fas fa-check text-xs"></i>
                                 </button>
-                            </form>
-                        {% endif %}
+                                <button onclick="abrirModalAcao('recusar', {{ solic.id }}, 'Tem certeza que deseja recusar este pedido de ausência?')" class="w-8 h-8 rounded-full bg-red-50 text-red-500 border border-red-200 hover:bg-red-500 hover:text-white flex items-center justify-center transition shadow-sm" title="Recusar">
+                                    <i class="fas fa-times text-xs"></i>
+                                </button>
+                            {% elif solic.status == 'Aprovado' %}
+                                <button onclick="abrirModalAcao('remover', {{ solic.id }}, 'PERIGO: Isso vai CANCELAR a ausência e restaurar os dias originais no espelho de ponto.')" class="text-xs font-bold text-red-500 hover:text-white bg-white hover:bg-red-500 border border-red-200 px-3 py-1.5 rounded-lg transition shadow-sm flex items-center gap-1.5" title="Revogar Aprovação">
+                                    <i class="fas fa-undo-alt"></i> Revogar
+                                </button>
+                            {% endif %}
+                        </div>
                     </td>
                 </tr>
                 {% else %}
-                <tr><td colspan="7" class="px-6 py-20 text-center text-slate-400 font-medium">Nenhum pedido de ausência encontrado.</td></tr>
+                <tr>
+                    <td colspan="7" class="px-6 py-20 text-center">
+                        <div class="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto mb-4 shadow-sm border border-slate-100">
+                            <i class="fas fa-clipboard-check text-3xl text-slate-300"></i>
+                        </div>
+                        <span class="text-slate-500 font-bold text-sm">Caixa de entrada limpa.</span>
+                        <p class="text-xs font-medium text-slate-400 mt-1">Nenhum pedido de ausência pendente.</p>
+                    </td>
+                </tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
 </div>
+
+<div id="modalAcao" class="fixed inset-0 z-[999] bg-slate-900/60 backdrop-blur-sm hidden opacity-0 transition-opacity duration-300 flex items-center justify-center p-4">
+    <div class="glass-panel max-w-md w-full p-8 transform scale-95 transition-transform duration-300" id="modalAcaoContent">
+        <div class="flex items-center gap-5 mb-6">
+            <div id="modalAcaoIcone" class="w-14 h-14 rounded-2xl flex items-center justify-center text-2xl shadow-sm"></div>
+            <div>
+                <h3 id="modalAcaoTitulo" class="text-xl font-black text-slate-800 tracking-tight">Confirmar Ação</h3>
+                <p id="modalAcaoDesc" class="text-xs text-slate-500 font-medium mt-1 leading-relaxed">Deseja prosseguir?</p>
+            </div>
+        </div>
+        
+        <form action="{{ url_for('ponto.gestao_ausencias') }}" method="POST" class="mt-8 flex justify-end gap-3 pt-4 border-t border-slate-100">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <input type="hidden" name="solicitacao_id" id="inputModalSolicitacaoId" value=""/>
+            <input type="hidden" name="acao" id="inputModalAcao" value=""/>
+            
+            <button type="button" onclick="fecharModal('modalAcao', 'modalAcaoContent')" class="w-full py-3.5 rounded-xl font-bold text-slate-500 bg-white border border-slate-200 hover:bg-slate-50 transition shadow-sm text-sm">Cancelar</button>
+            <button type="submit" id="btnModalConfirma" class="w-full py-3.5 rounded-xl font-bold text-white transition shadow-lg text-sm">Confirmar</button>
+        </form>
+    </div>
+</div>
+
+<div id="modalNota" class="fixed inset-0 z-[999] bg-slate-900/60 backdrop-blur-sm hidden opacity-0 transition-opacity duration-300 flex items-center justify-center p-4">
+    <div class="glass-panel max-w-sm w-full p-8 text-center transform scale-95 transition-transform duration-300" id="modalNotaContent">
+        <div class="w-16 h-16 bg-brand/10 text-brand rounded-full flex items-center justify-center text-2xl mx-auto mb-4 shadow-sm"><i class="fas fa-comment-dots"></i></div>
+        <h3 class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Mensagem de</h3>
+        <h4 id="notaFuncNome" class="text-lg font-black text-slate-800 mb-6 tracking-tight">---</h4>
+        
+        <div class="bg-white p-5 rounded-2xl border border-slate-100 text-slate-600 font-medium italic text-sm mb-8 shadow-sm">
+            "<span id="notaFuncTexto"></span>"
+        </div>
+        
+        <button onclick="fecharModal('modalNota', 'modalNotaContent')" class="w-full btn-primary !py-3.5 text-sm">Ciente. Fechar</button>
+    </div>
+</div>
+
+<script>
+    function abrirModalAcao(acao, id, descricao) {
+        document.getElementById('inputModalSolicitacaoId').value = id;
+        document.getElementById('inputModalAcao').value = acao;
+        document.getElementById('modalAcaoDesc').innerText = descricao;
+        
+        const icone = document.getElementById('modalAcaoIcone');
+        const titulo = document.getElementById('modalAcaoTitulo');
+        const btn = document.getElementById('btnModalConfirma');
+        
+        if (acao === 'aprovar') {
+            icone.className = "w-14 h-14 rounded-2xl flex items-center justify-center text-2xl bg-emerald-50 text-emerald-500 border border-emerald-100";
+            icone.innerHTML = '<i class="fas fa-check"></i>';
+            titulo.innerText = "Aprovar Ausência";
+            btn.className = "w-full py-3.5 rounded-xl font-bold text-white transition shadow-lg text-sm bg-emerald-500 hover:bg-emerald-600 shadow-emerald-500/30";
+            btn.innerText = "Aprovar Pedido";
+        } else if (acao === 'recusar') {
+            icone.className = "w-14 h-14 rounded-2xl flex items-center justify-center text-2xl bg-amber-50 text-amber-500 border border-amber-100";
+            icone.innerHTML = '<i class="fas fa-times"></i>';
+            titulo.innerText = "Recusar Pedido";
+            btn.className = "w-full py-3.5 rounded-xl font-bold text-white transition shadow-lg text-sm bg-amber-500 hover:bg-amber-600 shadow-amber-500/30";
+            btn.innerText = "Sim, Recusar";
+        } else if (acao === 'remover') {
+            icone.className = "w-14 h-14 rounded-2xl flex items-center justify-center text-2xl bg-red-50 text-red-500 border border-red-100";
+            icone.innerHTML = '<i class="fas fa-trash-alt"></i>';
+            titulo.innerText = "Revogar Pedido";
+            btn.className = "w-full py-3.5 rounded-xl font-bold text-white transition shadow-lg text-sm bg-red-500 hover:bg-red-600 shadow-red-500/30";
+            btn.innerText = "Confirmar Revogação";
+        }
+        
+        const modal = document.getElementById('modalAcao');
+        const content = document.getElementById('modalAcaoContent');
+        modal.classList.remove('hidden');
+        setTimeout(() => {
+            modal.classList.remove('opacity-0');
+            content.classList.remove('scale-95');
+        }, 10);
+    }
+
+    function abrirModalNota(nome, nota) {
+        document.getElementById('notaFuncNome').innerText = nome;
+        document.getElementById('notaFuncTexto').innerText = nota;
+        
+        const modal = document.getElementById('modalNota');
+        const content = document.getElementById('modalNotaContent');
+        modal.classList.remove('hidden');
+        setTimeout(() => {
+            modal.classList.remove('opacity-0');
+            content.classList.remove('scale-95');
+        }, 10);
+    }
+
+    function fecharModal(modalId, contentId) {
+        const modal = document.getElementById(modalId);
+        const content = document.getElementById(contentId);
+        modal.classList.add('opacity-0');
+        content.classList.add('scale-95');
+        setTimeout(() => {
+            modal.classList.add('hidden');
+        }, 300);
+    }
+</script>
 {% endblock %}
 

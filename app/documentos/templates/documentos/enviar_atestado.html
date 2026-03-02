@@ -1,54 +1,80 @@
 {% extends 'base.html' %}
 {% block content %}
-<div class="max-w-md mx-auto bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mt-8">
-    <div class="bg-blue-600 p-6 text-center">
-        <div class="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-3 text-white">
-            <i class="fas fa-file-medical text-3xl"></i>
+<div class="max-w-md mx-auto glass-panel overflow-hidden mt-8 relative animate-fade-in" id="container-principal">
+    
+    <div id="loading-overlay" class="hidden absolute inset-0 z-50 bg-white/90 backdrop-blur-md flex flex-col items-center justify-center p-8 text-center transition-opacity duration-300">
+        <div class="w-24 h-24 bg-brand/10 rounded-full flex items-center justify-center mb-6 border border-brand/20 shadow-[0_0_40px_color-mix(in_srgb,var(--primary-color)_30%,transparent)]">
+            <i class="fas fa-robot text-4xl text-brand animate-pulse"></i>
         </div>
-        <h2 class="text-xl font-bold text-white">Enviar Atestado Médico</h2>
-        <p class="text-blue-100 text-sm mt-1">Tire uma foto legível do documento</p>
+        <h3 class="text-2xl font-black text-slate-800 tracking-tight mb-2">A Analisar Atestado...</h3>
+        <p class="text-sm text-slate-500 font-medium">A nossa Inteligência Artificial está a ler o documento e a extrair os dias de repouso automaticamente.</p>
+        <div class="mt-8 w-full max-w-[200px] h-2 bg-slate-100 rounded-full overflow-hidden">
+            <div class="h-full bg-brand rounded-full relative" style="width: 100%">
+                <div class="absolute inset-0 bg-white/30 animate-[shimmer_1s_infinite]"></div>
+            </div>
+        </div>
+        <p class="text-[9px] text-brand/70 font-black uppercase tracking-widest mt-4">Por favor, aguarde</p>
+    </div>
+
+    <div class="bg-brand/5 p-8 text-center border-b border-brand/10">
+        <div class="w-16 h-16 bg-white rounded-2xl flex items-center justify-center mx-auto mb-4 text-brand shadow-sm">
+            <i class="fas fa-file-medical text-2xl"></i>
+        </div>
+        <h2 class="text-2xl font-black text-slate-800 tracking-tight">Enviar Atestado</h2>
+        <p class="text-slate-500 text-sm font-medium mt-1">Registe a sua ausência médica.</p>
     </div>
     
-    <div class="p-6">
-        <form id="form-atestado" action="{{ url_for('documentos.enviar_atestado') }}" method="POST" enctype="multipart/form-data">
+    <div class="p-8 bg-white/50">
+        <form id="form-atestado" action="{{ url_for('documentos.enviar_atestado') }}" method="POST" enctype="multipart/form-data" class="space-y-6">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
             
-            <div class="mb-6">
-                <label class="label-pro mb-3">Selecione a Imagem ou PDF</label>
-                <div class="border-2 border-dashed border-slate-300 rounded-lg p-6 text-center hover:bg-slate-50 transition cursor-pointer">
-                    <i class="fas fa-camera text-slate-400 text-3xl mb-2"></i>
-                    <input type="file" name="arquivo_atestado" accept=".jpg,.jpeg,.png,.pdf" required class="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer">
+            <div>
+                <label class="label-pro text-center mb-4">Selecione a Imagem ou PDF</label>
+                
+                <div class="relative w-full">
+                    <input type="file" name="arquivo_atestado" accept=".jpg,.jpeg,.png,.pdf" id="file-upload" required class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" onchange="document.getElementById('file-name').innerText = this.files[0].name; document.getElementById('icon-upload').className = 'fas fa-check-circle text-emerald-500';">
+                    
+                    <div class="border-2 border-dashed border-slate-300 rounded-2xl p-8 text-center bg-white hover:bg-brand/5 hover:border-brand/40 transition group shadow-sm">
+                        <div class="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform">
+                            <i id="icon-upload" class="fas fa-camera text-2xl text-slate-400 group-hover:text-brand transition"></i>
+                        </div>
+                        <p class="text-sm font-bold text-slate-600 group-hover:text-brand transition" id="file-name">Tocar para abrir a câmara ou anexar</p>
+                    </div>
                 </div>
-                <p class="text-[10px] text-slate-500 mt-3"><i class="fas fa-info-circle text-blue-400 mr-1"></i> Certifique-se de que o seu nome, a data e a quantidade de dias estão bem visíveis na foto.</p>
+                
+                <div class="mt-4 bg-slate-50 p-4 rounded-xl border border-slate-100 flex items-start gap-3">
+                    <i class="fas fa-info-circle text-brand mt-0.5"></i>
+                    <p class="text-[10px] text-slate-500 font-medium leading-relaxed">Certifique-se de que o seu <strong class="text-slate-700">nome</strong>, a <strong class="text-slate-700">data</strong> e a <strong class="text-slate-700">quantidade de dias</strong> estão bem visíveis na fotografia.</p>
+                </div>
             </div>
             
-            <button type="submit" id="btn-submit-atestado" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl transition shadow-md flex items-center justify-center gap-2">
-                <i id="icon-submit" class="fas fa-paper-plane"></i> 
-                <span id="text-submit">ENVIAR ATESTADO</span>
-            </button>
-            <a href="{{ url_for('documentos.meus_documentos') }}" class="block text-center w-full text-slate-400 hover:text-slate-600 text-xs font-bold mt-4 transition">CANCELAR</a>
+            <div class="pt-4 border-t border-slate-100 space-y-3">
+                <button type="submit" id="btn-submit-atestado" class="w-full btn-primary py-4 text-base shadow-lg shadow-brand/20">
+                    <i id="icon-submit" class="fas fa-paper-plane mr-2"></i> 
+                    <span id="text-submit">ENVIAR ATESTADO</span>
+                </button>
+                <a href="{{ url_for('documentos.meus_atestados') }}" class="w-full py-4 text-center block text-sm font-bold text-slate-400 hover:text-slate-600 bg-transparent hover:bg-slate-50 rounded-xl transition">
+                    CANCELAR E VOLTAR
+                </a>
+            </div>
         </form>
     </div>
 </div>
 
+<style>
+    @keyframes shimmer { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
+</style>
+
 <script>
     document.addEventListener('DOMContentLoaded', function() {
         const form = document.getElementById('form-atestado');
+        const overlay = document.getElementById('loading-overlay');
         const btnSubmit = document.getElementById('btn-submit-atestado');
-        const iconSubmit = document.getElementById('icon-submit');
-        const textSubmit = document.getElementById('text-submit');
 
         form.addEventListener('submit', function() {
-            // Desabilita o botão para evitar múltiplos envios
+            overlay.classList.remove('hidden');
+            setTimeout(() => overlay.classList.remove('opacity-0'), 10);
             btnSubmit.disabled = true;
-            btnSubmit.classList.remove('hover:bg-blue-700');
-            btnSubmit.classList.add('opacity-75', 'cursor-not-allowed');
-
-            // Troca o ícone para um spinner rodando
-            iconSubmit.className = 'fas fa-spinner fa-spin';
-
-            // Altera o texto exatamente como solicitado
-            textSubmit.innerText = 'Enviando atestado, aguarde...';
         });
     });
 </script>

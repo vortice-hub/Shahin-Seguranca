@@ -1,33 +1,41 @@
 {% extends 'base.html' %}
 {% block content %}
-<div class="min-h-[80vh] flex items-center justify-center p-4">
-    <div class="max-w-md w-full bg-white rounded-3xl border border-slate-200 shadow-2xl p-10 text-center">
-        <div class="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center text-3xl mx-auto mb-6">
-            <i class="fas fa-check-circle"></i>
+<div class="min-h-[85vh] flex flex-col items-center justify-center p-4">
+    
+    <div class="w-full max-w-[420px] mb-6 text-center animate-fade-in">
+        <div class="w-20 h-20 bg-emerald-50 rounded-3xl shadow-sm border border-emerald-100 flex items-center justify-center mx-auto mb-6 text-emerald-500">
+            <i class="fas fa-check-circle text-4xl"></i>
         </div>
+        <h1 class="text-3xl font-black text-slate-800 tracking-tight">Conta Criada!</h1>
+        <p class="text-slate-500 font-medium mt-2 text-sm px-4">Olá, <strong class="text-slate-800">{{ nome }}</strong>. O seu acesso foi configurado com sucesso.</p>
+    </div>
+
+    <div class="glass-panel w-full max-w-[420px] p-8 sm:p-10 animate-fade-in" style="animation-delay: 0.1s; animation-fill-mode: both;">
         
-        <h1 class="text-2xl font-bold text-slate-800 mb-2">Conta Criada!</h1>
-        <p class="text-slate-500 mb-8">Olá, <span class="font-bold text-slate-800">{{ nome }}</span>. O teu acesso foi configurado com sucesso.</p>
-        
-        <div class="bg-slate-50 rounded-2xl p-6 mb-8 border border-slate-100">
-            <p class="text-xs font-bold text-slate-400 uppercase mb-2">Os teus dados de acesso:</p>
-            <div class="space-y-2 text-left">
-                <div class="flex justify-between items-center text-sm">
-                    <span class="text-slate-500">Login (CPF):</span>
-                    <span class="font-mono font-bold text-slate-800">{{ username }}</span>
+        <div class="bg-white rounded-2xl p-6 mb-8 border border-slate-100 shadow-sm">
+            <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 border-b border-slate-50 pb-2">As suas credenciais</p>
+            <div class="space-y-4 text-left">
+                <div class="flex items-center gap-4">
+                    <div class="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-400"><i class="fas fa-user"></i></div>
+                    <div>
+                        <p class="text-[10px] font-bold text-slate-400 uppercase">Login (CPF)</p>
+                        <p class="font-mono font-bold text-slate-800 text-sm">{{ username }}</p>
+                    </div>
                 </div>
-                <div class="flex justify-between items-center text-sm">
-                    <span class="text-slate-500">Senha:</span>
-                    <span class="font-bold text-slate-800">A que criaste agora</span>
+                <div class="flex items-center gap-4">
+                    <div class="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-400"><i class="fas fa-lock"></i></div>
+                    <div>
+                        <p class="text-[10px] font-bold text-slate-400 uppercase">Senha</p>
+                        <p class="font-bold text-emerald-600 text-sm">A que criou agora <i class="fas fa-check ml-1"></i></p>
+                    </div>
                 </div>
             </div>
         </div>
 
-        <a href="/login" class="block w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl shadow-lg transition">
-            FAZER LOGIN AGORA
+        <a href="/login" class="w-full btn-primary py-4 text-base flex items-center justify-center gap-2">
+            Fazer Login Agora <i class="fas fa-sign-in-alt"></i>
         </a>
     </div>
 </div>
 {% endblock %}
-
 

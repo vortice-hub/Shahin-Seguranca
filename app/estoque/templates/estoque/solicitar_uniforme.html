@@ -1,92 +1,109 @@
 {% extends 'base.html' %}
 {% block content %}
-<div class="mb-6">
-    <h2 class="text-2xl font-bold text-slate-800 flex items-center gap-2">
-        <i class="fas fa-hard-hat text-blue-600"></i> Solicitação de Uniforme e EPI
+<div class="mb-8 animate-fade-in">
+    <h2 class="text-3xl font-black text-slate-800 tracking-tight flex items-center gap-3">
+        <i class="fas fa-hard-hat text-brand"></i> Pedido de Material
     </h2>
-    <p class="text-sm text-slate-500 mt-1">Faça o pedido de peças de fardamento ou equipamentos ao departamento de Logística/RH.</p>
+    <p class="text-sm text-slate-500 font-medium mt-1">Solicite uniformes ou EPIs ao departamento responsável.</p>
 </div>
 
-<div class="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start animate-fade-in" style="animation-delay: 0.1s; animation-fill-mode: both;">
     
-    <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-        <div class="bg-blue-600 p-5 text-white flex justify-between items-center">
-            <h3 class="font-bold text-lg"><i class="fas fa-plus-circle mr-2"></i> Novo Pedido</h3>
+    <div class="glass-panel overflow-hidden">
+        <div class="bg-brand/5 border-b border-brand/10 p-6 flex items-center gap-3">
+            <div class="w-10 h-10 bg-white text-brand rounded-xl flex items-center justify-center shadow-sm">
+                <i class="fas fa-plus"></i>
+            </div>
+            <h3 class="font-black text-lg text-brand tracking-tight">Nova Solicitação</h3>
         </div>
-        <div class="p-6">
-            <form method="POST" action="{{ url_for('estoque.solicitar_uniforme') }}">
+        <div class="p-8 bg-white/50">
+            <form method="POST" action="{{ url_for('estoque.solicitar_uniforme') }}" class="space-y-6">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 
-                <div class="mb-4">
+                <div>
                     <label class="label-pro">Qual peça necessita?</label>
-                    <select id="nome_item" onchange="buscarTamanhos()" required class="input-pro cursor-pointer">
-                        <option value="">-- Selecione uma peça --</option>
+                    <select id="nome_item" onchange="buscarTamanhos()" required class="input-pro cursor-pointer font-bold text-slate-700">
+                        <option value="">-- Selecione o item --</option>
                         {% for nome in nomes_disponiveis %}
                             <option value="{{ nome }}">{{ nome }}</option>
                         {% endfor %}
                     </select>
                 </div>
                 
-                <div class="grid grid-cols-2 gap-4 mb-4">
+                <div class="grid grid-cols-2 gap-5">
                     <div>
                         <label class="label-pro">Tamanho</label>
-                        <select id="tamanho_select" onchange="atualizarGeneros()" required class="input-pro cursor-pointer disabled:opacity-50" disabled>
+                        <select id="tamanho_select" onchange="atualizarGeneros()" required class="input-pro cursor-pointer disabled:opacity-50 disabled:bg-slate-100 font-bold text-slate-700" disabled>
                             <option value="">Aguardando peça...</option>
                         </select>
                     </div>
 
                     <div>
                         <label class="label-pro">Gênero</label>
-                        <select name="item_id" id="item_id" required class="input-pro cursor-pointer disabled:opacity-50" disabled>
+                        <select name="item_id" id="item_id" required class="input-pro cursor-pointer disabled:opacity-50 disabled:bg-slate-100 font-bold text-slate-700" disabled>
                             <option value="">Aguardando tamanho...</option>
                         </select>
                     </div>
                 </div>
 
-                <div class="mb-6">
-                    <label class="label-pro">Quantidade</label>
-                    <input type="number" name="quantidade" value="1" min="1" required class="input-pro">
+                <div class="bg-slate-50 p-4 rounded-2xl border border-slate-200">
+                    <label class="label-pro flex justify-between items-center">
+                        <span>Quantidade</span>
+                        <i class="fas fa-boxes text-slate-400"></i>
+                    </label>
+                    <input type="number" name="quantidade" value="1" min="1" required class="input-pro bg-white text-center text-xl font-black !py-3">
                 </div>
 
-                <button type="submit" class="w-full bg-slate-900 hover:bg-blue-600 text-white font-bold py-3.5 rounded-xl shadow-lg transition flex items-center justify-center gap-2 group">
-                    <i class="fas fa-paper-plane group-hover:-translate-y-1 group-hover:translate-x-1 transition-transform"></i> ENVIAR SOLICITAÇÃO
-                </button>
+                <div class="pt-4">
+                    <button type="submit" class="w-full btn-primary py-4 text-base shadow-lg group">
+                        <i class="fas fa-paper-plane mr-2 group-hover:-translate-y-1 group-hover:translate-x-1 transition-transform"></i> Enviar Pedido
+                    </button>
+                </div>
             </form>
         </div>
     </div>
 
-    <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
-        <h3 class="font-bold text-slate-800 text-lg mb-4 border-b pb-3 flex items-center gap-2">
-            <i class="fas fa-history text-slate-400"></i> Meus Pedidos
+    <div class="glass-panel p-8">
+        <h3 class="font-black text-slate-800 text-sm uppercase tracking-widest mb-6 border-b border-slate-100 pb-3 flex items-center gap-2">
+            <i class="fas fa-history text-slate-400"></i> Meus Pedidos Recentes
         </h3>
-        <div class="space-y-3 max-h-[500px] overflow-y-auto pr-2">
+        
+        <div class="space-y-4 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
             {% for solic in solicitacoes %}
-            <div class="p-4 border border-slate-100 rounded-lg {{ 'bg-slate-50' if solic.status == 'Pendente' else 'bg-white' }} flex flex-col gap-2 hover:border-blue-200 transition shadow-sm">
+            
+            {% set cor_borda = 'border-slate-200' %}
+            {% set tag_status = '<span class="text-[9px] bg-yellow-50 text-yellow-600 border border-yellow-200 px-2.5 py-1 rounded-md font-black uppercase tracking-wider shadow-sm"><i class="fas fa-clock mr-1"></i> Pendente</span>' %}
+            
+            {% if solic.status == 'Aprovado' %}
+                {% set cor_borda = 'border-emerald-200 bg-emerald-50/30' %}
+                {% set tag_status = '<span class="text-[9px] bg-emerald-50 text-emerald-600 border border-emerald-200 px-2.5 py-1 rounded-md font-black uppercase tracking-wider shadow-sm"><i class="fas fa-check mr-1"></i> Aprovado</span>' %}
+            {% elif solic.status == 'Recusado' %}
+                {% set cor_borda = 'border-red-200 bg-red-50/30' %}
+                {% set tag_status = '<span class="text-[9px] bg-red-50 text-red-600 border border-red-200 px-2.5 py-1 rounded-md font-black uppercase tracking-wider shadow-sm"><i class="fas fa-times mr-1"></i> Recusado</span>' %}
+            {% endif %}
+
+            <div class="p-5 border rounded-2xl {{ cor_borda }} flex flex-col gap-3 hover:shadow-md transition">
                 <div class="flex justify-between items-start">
                     <div>
-                        <span class="font-bold text-sm text-slate-800 block">{{ solic.item_nome }}</span>
-                        <span class="text-xs font-medium text-slate-500 mt-0.5 inline-block bg-slate-200 px-2 py-0.5 rounded">{{ solic.tamanho }} | {{ solic.genero }}</span>
-                        <span class="text-xs font-black text-blue-600 ml-2">{{ solic.quantidade }} un.</span>
+                        <span class="font-black text-sm text-slate-800 block mb-1">{{ solic.item_nome }}</span>
+                        <div class="flex items-center gap-2">
+                            <span class="text-[10px] font-bold text-slate-600 bg-white border border-slate-200 px-2 py-0.5 rounded shadow-sm">{{ solic.tamanho }} | {{ solic.genero }}</span>
+                            <span class="text-[10px] font-black text-brand bg-brand/10 border border-brand/20 px-2 py-0.5 rounded shadow-sm">{{ solic.quantidade }} un.</span>
+                        </div>
                     </div>
-                    
-                    {% if solic.status == 'Pendente' %}
-                        <span class="text-[10px] bg-amber-100 text-amber-700 px-2.5 py-1 rounded font-black uppercase tracking-wide border border-amber-200"><i class="fas fa-clock mr-1"></i> Pendente</span>
-                    {% elif solic.status == 'Aprovado' %}
-                        <span class="text-[10px] bg-emerald-100 text-emerald-700 px-2.5 py-1 rounded font-black uppercase tracking-wide border border-emerald-200"><i class="fas fa-check mr-1"></i> Aprovado</span>
-                    {% else %}
-                        <span class="text-[10px] bg-red-100 text-red-700 px-2.5 py-1 rounded font-black uppercase tracking-wide border border-red-200"><i class="fas fa-times mr-1"></i> Recusado</span>
-                    {% endif %}
+                    {{ tag_status | safe }}
                 </div>
-                <div class="text-[10px] text-slate-400 font-bold uppercase mt-2">
-                    Enviado em: {{ solic.data_solicitacao.strftime('%d/%m/%Y às %H:%M') }}
+                <div class="text-[9px] text-slate-400 font-bold uppercase tracking-widest flex items-center gap-1.5 pt-2 border-t border-slate-100/50">
+                    <i class="far fa-calendar-alt opacity-50"></i> {{ solic.data_solicitacao.strftime('%d/%m/%Y às %H:%M') }}
                 </div>
             </div>
             {% else %}
-            <div class="text-center py-12 text-sm text-slate-400 flex flex-col items-center gap-3">
-                <div class="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center text-2xl mb-2">
-                    <i class="fas fa-box-open opacity-50"></i>
+            <div class="text-center py-16 text-slate-400 flex flex-col items-center gap-3">
+                <div class="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center text-3xl mb-2 shadow-inner border border-slate-100">
+                    <i class="fas fa-box-open opacity-30"></i>
                 </div>
-                Você não fez nenhum pedido recente.
+                <p class="font-bold text-sm text-slate-500">Caixa Vazia</p>
+                <p class="text-xs">Não existem pedidos recentes na sua conta.</p>
             </div>
             {% endfor %}
         </div>
@@ -110,7 +127,7 @@
             return;
         }
 
-        selectTamanho.innerHTML = '<option value="">Carregando...</option>';
+        selectTamanho.innerHTML = '<option value="">A carregar...</option>';
         selectTamanho.disabled = true;
         selectGenero.innerHTML = '<option value="">Aguardando tamanho...</option>';
         selectGenero.disabled = true;
@@ -123,7 +140,7 @@
             selectTamanho.innerHTML = '<option value="">-- Escolha --</option>';
             
             if (inventarioDisponivel.length === 0) {
-                selectTamanho.innerHTML = '<option value="">Sem stock</option>';
+                selectTamanho.innerHTML = '<option value="">Esgotado</option>';
             } else {
                 const tamanhosUnicos = [...new Set(inventarioDisponivel.map(item => item.tamanho))];
                 tamanhosUnicos.forEach(tamanho => {
@@ -135,7 +152,7 @@
                 selectTamanho.disabled = false;
             }
         } catch (erro) {
-            selectTamanho.innerHTML = '<option value="">Erro ao buscar</option>';
+            selectTamanho.innerHTML = '<option value="">Erro</option>';
         }
     }
 
@@ -151,7 +168,7 @@
         const opcoesFiltradas = inventarioDisponivel.filter(item => item.tamanho === tamanhoEscolhido);
 
         if (opcoesFiltradas.length === 0) {
-            selectGenero.innerHTML = '<option value="">Sem stock</option>';
+            selectGenero.innerHTML = '<option value="">Esgotado</option>';
         } else {
             opcoesFiltradas.forEach(item => {
                 const opt = document.createElement('option');

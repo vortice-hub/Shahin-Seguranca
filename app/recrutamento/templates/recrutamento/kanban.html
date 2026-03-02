@@ -1,0 +1,199 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
+
+{% set cores_dict = {
+    'blue': 'bg-blue-100 text-blue-700', 'green': 'bg-green-100 text-green-700',
+    'purple': 'bg-purple-100 text-purple-700', 'amber': 'bg-amber-100 text-amber-700',
+    'rose': 'bg-rose-100 text-rose-700', 'slate': 'bg-slate-100 text-slate-700'
+} %}
+
+<div class="mb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 animate-fade-in">
+    <div>
+        <a href="/vagas" class="text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-brand flex items-center gap-1 mb-2 transition"><i class="fas fa-arrow-left"></i> Voltar às Vagas</a>
+        <h2 class="text-2xl font-black text-slate-800 tracking-tight">{{ vaga.titulo }}</h2>
+        <p class="text-xs text-slate-500 font-medium flex items-center gap-2 mt-1">
+            <span class="bg-brand/10 text-brand px-2 py-0.5 rounded border border-brand/20">{{ vaga.status }}</span>
+            <i class="fas fa-map-marker-alt opacity-50"></i> {{ vaga.local or 'Local não definido' }}
+        </p>
+    </div>
+    
+    <button onclick="document.getElementById('modalVincular').classList.remove('hidden', 'opacity-0')" class="btn-primary !px-5 shadow-lg shadow-brand/20 flex items-center gap-2 text-sm">
+        <i class="fas fa-user-plus"></i> Puxar do Banco
+    </button>
+</div>
+
+<div class="flex gap-6 overflow-x-auto pb-8 pt-2 custom-scrollbar animate-fade-in" style="animation-delay: 0.1s; animation-fill-mode: both; min-height: 60vh;">
+    
+    {% for fase in fases %}
+    <div class="w-80 flex-shrink-0 flex flex-col glass-panel !p-0 overflow-hidden border-t-4 border-t-brand/50">
+        <div class="p-4 bg-white/60 border-b border-slate-100 flex justify-between items-center backdrop-blur-sm">
+            <h3 class="font-black text-slate-700 text-sm tracking-tight uppercase">{{ fase.nome }}</h3>
+            <span class="w-6 h-6 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center text-[10px] font-bold shadow-inner">{{ fase.candidaturas|length }}</span>
+        </div>
+        
+        <div class="flex-1 p-3 space-y-3 overflow-y-auto kanban-column min-h-[150px]" data-fase-id="{{ fase.id }}">
+            
+            {% for cand in fase.candidaturas %}
+            <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition cursor-grab active:cursor-grabbing group relative" data-cand-id="{{ cand.id }}">
+                
+                <div class="absolute right-2 top-2 opacity-0 group-hover:opacity-100 transition">
+                    <form action="{{ url_for('recrutamento.remover_do_funil', candidatura_id=cand.id) }}" method="POST" onsubmit="return confirm('Tirar este candidato do funil da vaga? Ele continuará no Banco de Talentos.');">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                        <button type="submit" class="w-6 h-6 rounded bg-red-50 text-red-500 flex items-center justify-center text-[10px] hover:bg-red-500 hover:text-white transition"><i class="fas fa-trash"></i></button>
+                    </form>
+                </div>
+
+                <div class="flex items-center gap-3 mb-2">
+                    <div class="w-10 h-10 rounded-full bg-gradient-to-br from-slate-100 to-slate-200 border border-slate-200 text-slate-600 flex items-center justify-center font-black text-xs shadow-inner">
+                        {{ cand.candidato.nome[:2].upper() }}
+                    </div>
+                    <div class="flex-1 overflow-hidden pr-4">
+                        <h4 class="font-bold text-slate-800 text-sm truncate">{{ cand.candidato.nome }}</h4>
+                        <p class="text-[10px] text-slate-400 font-mono tracking-wider">{{ cand.data_candidatura.strftime('%d/%m') }}</p>
+                    </div>
+                </div>
+
+                <div class="flex flex-wrap gap-1 mt-2">
+                    {% for tag in cand.candidato.tags_coloridas %}
+                    <span class="text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded {{ cores_dict[tag.cor] }}">{{ tag.nome }}</span>
+                    {% endfor %}
+                </div>
+                
+                <div class="flex items-center justify-between mt-3 pt-3 border-t border-slate-100">
+                    <div class="text-[9px] font-black uppercase text-slate-400 tracking-widest flex items-center gap-1 group-hover:text-brand transition">
+                        <i class="fas fa-grip-lines opacity-30"></i> Arrastar
+                    </div>
+                    
+                    {% if cand.candidato.url_curriculo %}
+                    <a href="{{ url_for('recrutamento.ver_cv', id=cand.candidato.id) }}" target="_blank" class="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-500 hover:bg-indigo-500 hover:text-white flex items-center justify-center transition border border-indigo-100 shadow-sm" title="Ver Currículo">
+                        <i class="fas fa-file-alt text-xs"></i>
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+            
+        </div>
+    </div>
+    {% endfor %}
+    
+</div>
+
+<div id="modalVincular" class="hidden fixed inset-0 bg-slate-900/60 z-[100] flex items-center justify-center p-4 backdrop-blur-md opacity-0 transition-opacity duration-300">
+    <div class="glass-panel max-w-md w-full overflow-hidden shadow-2xl">
+        <div class="bg-brand/5 p-5 flex justify-between items-center border-b border-brand/10">
+            <h3 class="font-black text-brand tracking-tight text-lg">Puxar do Banco</h3>
+            <button onclick="fecharModalVincular()" class="w-8 h-8 bg-white rounded-full text-slate-400 hover:text-slate-600 flex items-center justify-center shadow-sm transition"><i class="fas fa-times"></i></button>
+        </div>
+        
+        <div class="p-6 bg-white/50">
+            <div class="mb-4">
+                <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Filtrar por Etiqueta:</p>
+                <div class="flex flex-wrap gap-2">
+                    <button onclick="filtrarSelect('')" class="text-[10px] font-bold px-2 py-1 rounded bg-slate-200 text-slate-700 shadow-sm hover:bg-slate-300">TODOS</button>
+                    {% for tag in tags_empresa %}
+                    <button onclick="filtrarSelect('{{ tag.nome }}')" class="text-[10px] font-bold px-2 py-1 rounded shadow-sm {{ cores_dict[tag.cor] }} hover:opacity-80 transition">{{ tag.nome }}</button>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <form action="/vagas/{{ vaga.id }}/vincular-candidato" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                
+                <div class="mb-6">
+                    <label class="label-pro">Selecionar Candidato</label>
+                    <div class="relative">
+                        <select name="candidato_id" id="selectCandidato" required class="input-pro font-bold text-slate-700 bg-white cursor-pointer appearance-none shadow-sm">
+                            <option value="" disabled selected>Clique para buscar talento...</option>
+                            {% for c in candidatos %}
+                                {% set nomes_tags = [] %}
+                                {% for t in c.tags_coloridas %}{% set _ = nomes_tags.append(t.nome) %}{% endfor %}
+                                
+                                <option value="{{ c.id }}" data-tags="{{ nomes_tags|join(',') }}">
+                                    {{ c.nome }} {% if nomes_tags %} - [{{ nomes_tags|join(', ') }}]{% endif %}
+                                </option>
+                            {% endfor %}
+                        </select>
+                        <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-slate-400"><i class="fas fa-chevron-down text-xs"></i></div>
+                    </div>
+                </div>
+                
+                <button type="submit" class="w-full btn-primary py-3.5 text-sm shadow-md flex justify-center items-center gap-2">
+                    <i class="fas fa-check"></i> Iniciar Processo Seletivo
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<style>
+    .sortable-ghost { opacity: 0.4; background-color: var(--primary-color) !important; mix-blend-mode: multiply; }
+    .sortable-drag { cursor: grabbing !important; transform: rotate(3deg); box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1) !important; }
+</style>
+
+<script>
+    function fecharModalVincular() {
+        const modal = document.getElementById('modalVincular');
+        modal.classList.add('opacity-0');
+        setTimeout(() => modal.classList.add('hidden'), 300);
+    }
+
+    // Função que filtra o Select com base na tag clicada
+    function filtrarSelect(tagName) {
+        const select = document.getElementById('selectCandidato');
+        const options = select.getElementsByTagName('option');
+        
+        for (let i = 0; i < options.length; i++) {
+            const opt = options[i];
+            if (opt.value === "") continue; 
+            
+            const tagsDoCandidato = opt.getAttribute('data-tags') || "";
+            
+            if (tagName === "" || tagsDoCandidato.includes(tagName)) {
+                opt.style.display = "";
+            } else {
+                opt.style.display = "none";
+            }
+        }
+        select.value = ""; 
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+        const colunas = document.querySelectorAll('.kanban-column');
+        colunas.forEach(coluna => {
+            new Sortable(coluna, {
+                group: 'vagas', 
+                animation: 150, 
+                easing: "cubic-bezier(1, 0, 0, 1)",
+                onEnd: function (evt) {
+                    const item = evt.item;
+                    const colunaDestino = evt.to;
+                    const candidaturaId = item.getAttribute('data-cand-id');
+                    const novaFaseId = colunaDestino.getAttribute('data-fase-id');
+                    
+                    if(evt.from === evt.to) return;
+
+                    fetch('/api/kanban/mover', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token() }}' },
+                        body: JSON.stringify({ candidatura_id: candidaturaId, nova_fase_id: novaFaseId })
+                    }).then(response => response.json())
+                      .then(data => {
+                          if(data.success) {
+                              Toastify({ text: "Fase atualizada!", duration: 2000, style: { background: "#10b981", borderRadius: "8px", fontSize: "12px"} }).showToast();
+                          }
+                      });
+                    
+                    document.querySelectorAll('.kanban-column').forEach(col => {
+                        const countSpan = col.previousElementSibling.querySelector('span');
+                        countSpan.innerText = col.children.length;
+                    });
+                }
+            });
+        });
+    });
+</script>
+{% endblock %}
+

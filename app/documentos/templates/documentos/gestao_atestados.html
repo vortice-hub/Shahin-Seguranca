@@ -1,80 +1,99 @@
 {% extends 'base.html' %}
 {% block content %}
-<div class="mb-8">
-    <h2 class="text-2xl font-bold text-slate-800 flex items-center gap-2">
-        <i class="fas fa-file-medical text-teal-600"></i> Gestão de Atestados
+<div class="mb-8 animate-fade-in">
+    <h2 class="text-3xl font-black text-slate-800 tracking-tight flex items-center gap-3">
+        <i class="fas fa-file-medical text-brand"></i> Gestão de Atestados
     </h2>
-    <p class="text-sm text-slate-500">Verifique, edite (se necessário) e valide os atestados médicos.</p>
+    <p class="text-sm text-slate-500 font-medium mt-1">Verifique, edite (se necessário) e valide os atestados médicos da equipa.</p>
 </div>
 
-<div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-10">
+<div class="glass-panel overflow-hidden mb-10 animate-fade-in" style="animation-delay: 0.1s; animation-fill-mode: both;">
     <div class="overflow-x-auto">
         <table class="w-full text-left text-sm text-slate-600">
-            <thead class="bg-slate-50 text-[10px] uppercase text-slate-400 font-bold border-b border-slate-100">
+            <thead class="bg-slate-50/50 text-[10px] uppercase text-slate-400 font-black tracking-widest border-b border-slate-100">
                 <tr>
-                    <th class="px-6 py-4">Funcionário</th>
-                    <th class="px-6 py-4">Enviado em</th>
-                    <th class="px-6 py-4">Início (Afastamento)</th>
-                    <th class="px-6 py-4">Dias</th>
-                    <th class="px-6 py-4 text-center">Status</th>
-                    <th class="px-6 py-4 text-right">Ações</th>
+                    <th class="px-6 py-5">Funcionário</th>
+                    <th class="px-6 py-5">Enviado em</th>
+                    <th class="px-6 py-5">Início (Afastamento)</th>
+                    <th class="px-6 py-5">Dias</th>
+                    <th class="px-6 py-5 text-center">Status</th>
+                    <th class="px-6 py-5 text-right">Ações</th>
                 </tr>
             </thead>
-            <tbody class="divide-y divide-slate-100">
+            <tbody class="divide-y divide-slate-100/50">
                 {% for atestado in atestados %}
-                <tr class="hover:bg-slate-50 transition">
-                    <td class="px-6 py-4 font-bold text-slate-800">{{ atestado.user.real_name }}</td>
-                    <td class="px-6 py-4 text-xs">{{ atestado.data_envio.strftime('%d/%m/%Y %H:%M') }}</td>
+                <tr class="hover:bg-white/60 transition group">
+                    <td class="px-6 py-5 font-bold text-slate-800 flex items-center gap-3">
+                        <div class="w-8 h-8 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center text-[10px] uppercase font-black tracking-wider shadow-inner">
+                            {{ atestado.user.real_name[:2] }}
+                        </div>
+                        {{ atestado.user.real_name }}
+                    </td>
+                    <td class="px-6 py-5 text-xs font-medium text-slate-500">
+                        <i class="far fa-calendar-alt opacity-50 mr-1"></i> {{ atestado.data_envio.strftime('%d/%m/%Y %H:%M') }}
+                    </td>
                     
                     {% if atestado.status == 'Revisao' or atestado.status == 'Processando' %}
-                    <form action="{{ url_for('documentos.avaliar_atestado', id=atestado.id) }}" method="POST">
+                    <form action="{{ url_for('documentos.avaliar_atestado', id=atestado.id) }}" method="POST" class="contents">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                         
-                        <td class="px-6 py-4">
-                            <input type="date" name="data_inicio" value="{{ atestado.data_inicio_afastamento.strftime('%Y-%m-%d') if atestado.data_inicio_afastamento else '' }}" required class="border border-slate-300 rounded px-2 py-1 text-xs w-full">
+                        <td class="px-6 py-5">
+                            <input type="date" name="data_inicio" value="{{ atestado.data_inicio_afastamento.strftime('%Y-%m-%d') if atestado.data_inicio_afastamento else '' }}" required class="input-pro !py-2 !px-3 text-xs bg-white focus:ring-2 focus:ring-brand border-slate-200 w-full font-bold">
                         </td>
-                        <td class="px-6 py-4">
-                            <input type="number" name="quantidade_dias" value="{{ atestado.quantidade_dias if atestado.quantidade_dias else '' }}" min="1" max="180" required class="border border-slate-300 rounded px-2 py-1 text-xs w-20">
+                        <td class="px-6 py-5">
+                            <div class="relative w-20">
+                                <input type="number" name="quantidade_dias" value="{{ atestado.quantidade_dias if atestado.quantidade_dias else '' }}" min="1" max="180" required class="input-pro !py-2 !px-3 text-xs bg-white focus:ring-2 focus:ring-brand border-slate-200 w-full text-center font-bold">
+                            </div>
                         </td>
-                        <td class="px-6 py-4 text-center">
-                            <span class="bg-amber-100 text-amber-600 px-2 py-1 rounded text-[10px] font-bold uppercase"><i class="fas fa-search"></i> Em Revisão</span>
+                        <td class="px-6 py-5 text-center">
+                            <span class="bg-amber-50 text-amber-600 border border-amber-200 px-2.5 py-1.5 rounded-md text-[9px] font-black uppercase tracking-wider inline-flex items-center gap-1 shadow-sm"><i class="fas fa-search"></i> Revisão</span>
                         </td>
-                        <td class="px-6 py-4 text-right flex items-center justify-end gap-2">
-                            <a href="{{ url_for('documentos.baixar_atestado', id=atestado.id) }}" target="_blank" class="text-slate-500 hover:text-blue-600 p-2 bg-slate-100 rounded transition" title="Ver Documento">
-                                <i class="fas fa-eye"></i>
-                            </a>
-                            <button type="submit" name="acao" value="aprovar" class="text-white bg-emerald-500 hover:bg-emerald-600 p-2 rounded transition" title="Aprovar e Abonar Horas">
-                                <i class="fas fa-check"></i>
-                            </button>
-                            <button type="submit" name="acao" value="recusar" class="text-white bg-red-500 hover:bg-red-600 p-2 rounded transition" title="Recusar" onclick="return confirm('Tem a certeza que deseja recusar este atestado?');">
-                                <i class="fas fa-times"></i>
-                            </button>
+                        <td class="px-6 py-5 text-right">
+                            <div class="flex items-center justify-end gap-2">
+                                <a href="{{ url_for('documentos.baixar_atestado', id=atestado.id) }}" target="_blank" class="w-8 h-8 rounded-full bg-white border border-slate-200 text-slate-500 hover:text-brand hover:border-brand/30 hover:bg-brand/5 flex items-center justify-center transition shadow-sm" title="Ver Documento Original">
+                                    <i class="fas fa-eye text-xs"></i>
+                                </a>
+                                <button type="submit" name="acao" value="aprovar" class="w-8 h-8 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200 hover:bg-emerald-500 hover:text-white flex items-center justify-center transition shadow-sm" title="Aprovar e Abonar Horas">
+                                    <i class="fas fa-check text-xs"></i>
+                                </button>
+                                <button type="submit" name="acao" value="recusar" class="w-8 h-8 rounded-full bg-red-50 text-red-500 border border-red-200 hover:bg-red-500 hover:text-white flex items-center justify-center transition shadow-sm" title="Recusar" onclick="return confirm('Tem a certeza que deseja recusar este atestado?');">
+                                    <i class="fas fa-times text-xs"></i>
+                                </button>
+                            </div>
                         </td>
                     </form>
                     
                     {% else %}
-                    <td class="px-6 py-4 font-medium text-slate-700">
+                    <td class="px-6 py-5 font-bold text-slate-700">
                         {{ atestado.data_inicio_afastamento.strftime('%d/%m/%Y') if atestado.data_inicio_afastamento else '--' }}
                     </td>
-                    <td class="px-6 py-4 font-bold text-blue-600">
-                        {{ atestado.quantidade_dias }} dia(s)
+                    <td class="px-6 py-5 font-black text-brand text-sm">
+                        {{ atestado.quantidade_dias }} <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-0.5">Dias</span>
                     </td>
-                    <td class="px-6 py-4 text-center">
+                    <td class="px-6 py-5 text-center">
                         {% if atestado.status == 'Aprovado' %}
-                            <span class="bg-emerald-100 text-emerald-600 px-2 py-1 rounded text-[10px] font-bold uppercase"><i class="fas fa-check"></i> Aprovado</span>
+                            <span class="bg-emerald-50 text-emerald-600 border border-emerald-200 px-3 py-1.5 rounded-md text-[9px] font-black uppercase tracking-wider inline-flex items-center gap-1"><i class="fas fa-check"></i> Aprovado</span>
                         {% else %}
-                            <span class="bg-red-100 text-red-600 px-2 py-1 rounded text-[10px] font-bold uppercase"><i class="fas fa-times"></i> Recusado</span>
+                            <span class="bg-red-50 text-red-600 border border-red-200 px-3 py-1.5 rounded-md text-[9px] font-black uppercase tracking-wider inline-flex items-center gap-1"><i class="fas fa-times"></i> Recusado</span>
                         {% endif %}
                     </td>
-                    <td class="px-6 py-4 text-right">
-                        <a href="{{ url_for('documentos.baixar_atestado', id=atestado.id) }}" target="_blank" class="text-slate-500 hover:text-blue-600 p-2 bg-slate-100 rounded transition text-xs font-bold uppercase">
-                            <i class="fas fa-eye mr-1"></i> Ver Anexo
+                    <td class="px-6 py-5 text-right">
+                        <a href="{{ url_for('documentos.baixar_atestado', id=atestado.id) }}" target="_blank" class="w-8 h-8 rounded-full bg-white border border-slate-200 text-slate-400 hover:text-brand hover:border-brand/30 hover:bg-brand/5 flex items-center justify-center transition shadow-sm ml-auto" title="Ver Anexo">
+                            <i class="fas fa-eye text-xs"></i>
                         </a>
                     </td>
                     {% endif %}
                 </tr>
                 {% else %}
-                <tr><td colspan="6" class="px-6 py-20 text-center text-slate-400 font-medium">Nenhum atestado recebido.</td></tr>
+                <tr>
+                    <td colspan="6" class="px-6 py-20 text-center">
+                        <div class="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto mb-4 shadow-sm border border-slate-100">
+                            <i class="fas fa-box-open text-2xl text-slate-300"></i>
+                        </div>
+                        <span class="text-slate-500 font-bold text-sm">Caixa de entrada limpa.</span>
+                        <p class="text-xs font-medium text-slate-400 mt-1">Nenhum atestado recebido no momento.</p>
+                    </td>
+                </tr>
                 {% endfor %}
             </tbody>
         </table>

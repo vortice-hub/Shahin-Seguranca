@@ -1,13 +1,33 @@
 {% extends 'base.html' %}
 {% block content %}
-<div class="max-w-lg mx-auto flex flex-col items-center justify-center min-h-[50vh] text-center">
-    <div class="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-600 mb-6 shadow-sm"><i class="fas fa-check text-3xl"></i></div>
-    <h2 class="text-2xl font-bold text-slate-800 mb-2">CPF Liberado!</h2>
-    <p class="text-slate-500 mb-8">O funcionário <strong>{{ nome_real }}</strong> (CPF: {{ cpf }}) já pode se cadastrar.</p>
-    <div class="bg-blue-50 text-blue-800 text-sm p-6 rounded-xl mb-8 max-w-sm">
-        <p class="font-bold mb-2">Próximo Passo:</p>
-        <p>Peça para o funcionário acessar o sistema, clicar em <strong>"Sou Funcionário"</strong> e criar a própria senha usando este CPF.</p>
+<div class="max-w-lg mx-auto flex flex-col items-center justify-center min-h-[70vh] text-center animate-fade-in">
+    
+    <div class="glass-panel p-10 w-full relative overflow-hidden shadow-xl">
+        <div class="absolute -top-10 -right-10 w-40 h-40 bg-emerald-400 rounded-full mix-blend-multiply filter blur-[50px] opacity-20 animate-pulse"></div>
+        <div class="absolute -bottom-10 -left-10 w-40 h-40 bg-brand rounded-full mix-blend-multiply filter blur-[50px] opacity-20 animate-pulse" style="animation-delay: 1s;"></div>
+        
+        <div class="relative z-10">
+            <div class="w-24 h-24 bg-emerald-50 rounded-[2rem] flex items-center justify-center text-emerald-500 mb-8 shadow-sm border border-emerald-100 mx-auto transform rotate-3 hover:rotate-0 transition-transform">
+                <i class="fas fa-check text-4xl"></i>
+            </div>
+            
+            <h2 class="text-3xl font-black text-slate-800 mb-2 tracking-tight">Registo Concluído!</h2>
+            <p class="text-slate-500 mb-8 font-medium">O pré-cadastro de <strong class="text-slate-800">{{ nome_real }}</strong> (CPF: <span class="font-mono">{{ cpf }}</span>) foi guardado com sucesso.</p>
+            
+            <div class="bg-white/80 p-6 rounded-2xl mb-8 border border-slate-100 shadow-sm text-left">
+                <p class="text-[10px] font-black text-brand uppercase tracking-widest mb-3 flex items-center gap-2">
+                    <i class="fas fa-forward opacity-50"></i> Próximo Passo
+                </p>
+                <p class="text-sm text-slate-600 font-medium leading-relaxed">
+                    Instrua o funcionário a aceder ao portal, clicar em <strong class="text-slate-800">"Criar minha senha"</strong> no ecrã de login e validar este CPF para criar a sua própria palavra-passe de acesso.
+                </p>
+            </div>
+            
+            <a href="/admin/usuarios" class="btn-primary w-full py-4 text-base flex justify-center items-center gap-2">
+                <i class="fas fa-users text-sm opacity-80"></i> Voltar à Equipe
+            </a>
+        </div>
     </div>
-    <a href="/admin/usuarios" class="bg-slate-800 hover:bg-slate-900 text-white font-bold py-3 px-8 rounded-full transition shadow-lg">VOLTAR</a>
 </div>
 {% endblock %}
+

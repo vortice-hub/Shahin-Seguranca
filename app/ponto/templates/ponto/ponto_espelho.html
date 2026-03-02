@@ -1,65 +1,88 @@
 {% extends 'base.html' %}
 {% block content %}
-<div class="mb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+<div class="mb-8 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 animate-fade-in">
     <div>
-        <h2 class="text-2xl font-bold text-slate-800">Espelho de Ponto</h2>
-        <p class="text-sm text-slate-500">Colaborador: <span class="font-bold text-slate-700">{{ user.real_name }}</span></p>
+        <h2 class="text-3xl font-black text-slate-800 tracking-tight">Espelho de Ponto</h2>
+        <p class="text-sm text-slate-500 font-medium mt-1">Conferência diária da jornada de trabalho.</p>
     </div>
     
-    <!-- RESUMO DA REGRA -->
-    <div class="bg-blue-50 px-4 py-2 rounded-lg border border-blue-100 text-right">
-        <span class="text-[10px] font-bold text-blue-400 uppercase tracking-widest block">Meta Diária</span>
-        <div class="font-mono font-bold text-blue-800 text-lg">
-            {{ format_hm(user.carga_horaria or 528).replace('-','') }} 
-            <span class="text-xs text-blue-600 font-sans font-normal">+ {{ user.tempo_intervalo }}min Almoço</span>
+    <div class="glass-panel p-4 flex items-center gap-6">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-full bg-brand/10 text-brand flex items-center justify-center shadow-sm">
+                <i class="fas fa-user"></i>
+            </div>
+            <div>
+                <span class="text-[9px] font-black uppercase tracking-widest text-slate-400 block mb-0.5">Colaborador</span>
+                <span class="font-bold text-sm text-slate-800">{{ user.real_name }}</span>
+            </div>
         </div>
-        <div class="text-[10px] text-slate-400 mt-1">Período: {{ mes_ref }}</div>
+        
+        <div class="w-px h-8 bg-slate-200"></div>
+        
+        <div class="text-right">
+            <span class="text-[9px] font-black uppercase tracking-widest text-slate-400 block mb-0.5">Meta Diária ({{ mes_ref }})</span>
+            <div class="font-mono font-black text-brand text-base leading-none">
+                {{ format_hm(user.carga_horaria or 528).replace('-','') }}
+                <span class="text-[10px] font-sans font-bold text-slate-400 ml-1">+{{ user.tempo_intervalo }}m almoço</span>
+            </div>
+        </div>
     </div>
 </div>
 
-<div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+<div class="glass-panel overflow-hidden mb-6 animate-fade-in" style="animation-delay: 0.1s; animation-fill-mode: both;">
     <div class="overflow-x-auto">
-        <table class="w-full text-left text-sm">
-            <thead class="bg-slate-50 text-slate-400 font-bold text-xs uppercase border-b border-slate-100">
+        <table class="w-full text-left">
+            <thead class="bg-slate-50/50 text-[10px] uppercase text-slate-400 font-black tracking-wider border-b border-slate-100">
                 <tr>
-                    <th class="px-4 py-4">Data</th>
-                    <th class="px-4 py-4">Registros (Entradas / Saídas)</th>
-                    <th class="px-4 py-4 text-center">Trabalhado</th>
-                    <th class="px-4 py-4 text-center">Saldo</th>
-                    <th class="px-4 py-4 text-right">Status</th>
+                    <th class="px-6 py-5">Data</th>
+                    <th class="px-6 py-5">Registos Salvos</th>
+                    <th class="px-6 py-5 text-center">Trabalhado</th>
+                    <th class="px-6 py-5 text-center">Saldo Diário</th>
+                    <th class="px-6 py-5 text-right">Status</th>
                 </tr>
             </thead>
-            <tbody class="divide-y divide-slate-100">
+            <tbody class="divide-y divide-slate-100/50">
                 {% for r in resumos %}
-                <tr class="hover:bg-slate-50 transition cursor-help group" onclick="toggleDetails('det-{{ r.id }}')">
-                    <td class="px-4 py-4 font-medium text-slate-700">
-                        {{ r.data_referencia.strftime('%d/%m') }} 
-                        <span class="text-slate-400 text-xs uppercase ml-1">
-                            ({{ dias_semana[r.data_referencia.weekday()] }})
-                        </span>
+                <tr class="hover:bg-slate-50/50 transition group">
+                    
+                    <td class="px-6 py-5">
+                        <span class="font-bold text-slate-700 text-sm block">{{ r.data_referencia.strftime('%d/%m') }}</span>
+                        <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{{ dias_semana[r.data_referencia.weekday()] }}</span>
                     </td>
-                    <td class="px-4 py-4">
+                    
+                    <td class="px-6 py-5">
                         <div class="flex flex-wrap gap-2">
                             {% for b in detalhes[r.id] %}
-                            <span class="bg-white text-slate-700 px-2 py-1 rounded-md text-xs font-mono font-bold border border-slate-200 shadow-sm group-hover:border-blue-300 transition">
+                            <span class="bg-white text-slate-600 px-2.5 py-1 rounded-md text-xs font-mono font-bold border border-slate-200 shadow-sm transition">
                                 {{ b }}
                             </span>
+                            {% else %}
+                            <span class="text-xs font-medium text-slate-400 italic">Sem batidas</span>
                             {% endfor %}
                         </div>
                     </td>
-                    <td class="px-4 py-4 text-center font-mono text-slate-600">
+                    
+                    <td class="px-6 py-5 text-center font-mono font-medium text-sm text-slate-500">
                         {{ format_hm(r.minutos_trabalhados).replace('-','') }}
                     </td>
-                    <td class="px-4 py-4 text-center font-mono font-bold {% if r.minutos_saldo >= 0 %} text-emerald-600 {% else %} text-red-500 {% endif %}">
-                        {{ format_hm(r.minutos_saldo) }}
+                    
+                    <td class="px-6 py-5 text-center">
+                        {% set cor_saldo = 'text-slate-500' %}
+                        {% if r.minutos_saldo > 0 %} {% set cor_saldo = 'text-brand' %}
+                        {% elif r.minutos_saldo < 0 %} {% set cor_saldo = 'text-red-500' %} {% endif %}
+                        <span class="font-mono font-black text-sm {{ cor_saldo }}">
+                            {{ format_hm(r.minutos_saldo) }}
+                        </span>
                     </td>
-                    <td class="px-4 py-4 text-right">
-                        <span class="text-[10px] font-bold uppercase px-2 py-1 rounded-full 
-                            {% if r.status_dia == 'OK' %} bg-emerald-50 text-emerald-600 
-                            {% elif r.status_dia == 'Incompleto' %} bg-amber-50 text-amber-600 
-                            {% elif r.status_dia == 'Falta' %} bg-red-50 text-red-600 
-                            {% elif 'Extra' in r.status_dia %} bg-blue-50 text-blue-600 
-                            {% else %} bg-slate-100 text-slate-500 {% endif %}">
+                    
+                    <td class="px-6 py-5 text-right">
+                        {% set bg_status = 'bg-slate-100 text-slate-500' %}
+                        {% if r.status_dia == 'OK' %} {% set bg_status = 'bg-emerald-50 text-emerald-600' %}
+                        {% elif r.status_dia == 'Incompleto' %} {% set bg_status = 'bg-amber-50 text-amber-600' %}
+                        {% elif r.status_dia == 'Falta' %} {% set bg_status = 'bg-red-50 text-red-600' %}
+                        {% elif 'Extra' in r.status_dia %} {% set bg_status = 'bg-brand/10 text-brand' %} {% endif %}
+                        
+                        <span class="text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-md {{ bg_status }} inline-block text-center min-w-[80px]">
                             {{ r.status_dia }}
                         </span>
                     </td>
@@ -69,9 +92,11 @@
         </table>
     </div>
 </div>
-<div class="mt-4 text-center text-xs text-slate-400">
-    <i class="fas fa-info-circle mr-1"></i> O saldo é calculado subtraindo sua meta diária do total trabalhado.
+
+<div class="text-center animate-fade-in" style="animation-delay: 0.2s; animation-fill-mode: both;">
+    <p class="text-[11px] font-medium text-slate-400 flex items-center justify-center gap-1.5 bg-white/50 py-2 px-4 rounded-full inline-flex border border-slate-200">
+        <i class="fas fa-info-circle text-brand"></i> O saldo é calculado subtraindo a meta diária do total de horas trabalhadas.
+    </p>
 </div>
 {% endblock %}
-
 

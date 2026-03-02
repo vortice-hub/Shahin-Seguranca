@@ -1,9 +1,82 @@
 /* ========================================= */
-/* Estilos Globais do Shahin Gestão          */
+/* Estilos Globais da Vortice (V3.0)         */
 /* ========================================= */
 
 body { 
     font-family: 'Inter', sans-serif; 
+    /* Fundo super claro, quase gelo, para dar destaque aos cards brancos */
+    background-color: #f8fafc; 
+    color: #334155;
+}
+
+/* ========================================= */
+/* Glassmorphism & Cards (Novo Padrão)       */
+/* ========================================= */
+
+.glass-nav {
+    background: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid rgba(226, 232, 240, 0.8);
+}
+
+.glass-panel {
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(226, 232, 240, 0.6);
+    border-radius: 1.5rem; /* cantos bem redondos */
+    box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.03), 0 1px 3px rgba(0, 0, 0, 0.02);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.glass-panel:hover {
+    box-shadow: 0 15px 50px -10px rgba(var(--primary-color-rgb, 59, 130, 246), 0.1), 0 1px 3px rgba(0, 0, 0, 0.02);
+}
+
+/* ========================================= */
+/* Botões Universais                         */
+/* ========================================= */
+
+.btn-primary {
+    background-color: var(--primary-color, #2563eb);
+    color: white;
+    font-weight: 700;
+    padding: 0.75rem 1.5rem;
+    border-radius: 1rem;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    /* Sombra colorida com a cor primária */
+    box-shadow: 0 4px 14px 0 color-mix(in srgb, var(--primary-color) 40%, transparent);
+}
+
+.btn-primary:hover {
+    background-color: var(--primary-hover, #1d4ed8);
+    transform: translateY(-1px);
+    box-shadow: 0 6px 20px 0 color-mix(in srgb, var(--primary-color) 60%, transparent);
+}
+
+.btn-primary:active {
+    transform: translateY(1px);
+}
+
+.btn-glass {
+    background-color: color-mix(in srgb, var(--primary-color) 10%, transparent);
+    color: var(--primary-color, #2563eb);
+    font-weight: 700;
+    padding: 0.6rem 1.2rem;
+    border-radius: 0.75rem;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.btn-glass:hover {
+    background-color: color-mix(in srgb, var(--primary-color) 15%, transparent);
 }
 
 /* ========================================= */
@@ -12,9 +85,9 @@ body {
 
 .label-pro { 
     display: block; 
-    font-size: 0.75rem; /* text-xs */
-    font-weight: 700; /* font-bold */
-    color: #64748b; /* text-slate-500 */
+    font-size: 0.75rem; 
+    font-weight: 700; 
+    color: #64748b; 
     text-transform: uppercase; 
     margin-bottom: 0.5rem; 
     letter-spacing: 0.05em;
@@ -22,20 +95,20 @@ body {
 
 .input-pro { 
     width: 100%; 
-    background-color: #f8fafc; /* bg-slate-50 */
-    border: 1px solid #e2e8f0; /* border-slate-200 */
-    border-radius: 0.5rem; 
-    padding: 0.75rem 1rem; /* py-3 px-4 */
-    color: #334155; /* text-slate-700 */
-    font-weight: 700; 
+    background-color: #f8fafc; 
+    border: 1px solid #f1f5f9; 
+    border-radius: 1rem; 
+    padding: 0.85rem 1.2rem; 
+    color: #334155; 
+    font-weight: 600; 
     outline: none; 
-    transition: all 0.2s;
+    transition: all 0.3s ease;
 }
 
 .input-pro:focus {
     background-color: #ffffff;
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.1);
+    border-color: color-mix(in srgb, var(--primary-color) 40%, transparent);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary-color) 10%, transparent);
 }
 
 /* ========================================= */
@@ -43,32 +116,41 @@ body {
 /* ========================================= */
 
 .animate-fade-in { 
-    animation: fadeIn 0.5s ease-out; 
+    animation: fadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1); 
 }
 
 @keyframes fadeIn { 
-    from { opacity: 0; transform: translateY(10px); } 
+    from { opacity: 0; transform: translateY(15px); } 
     to { opacity: 1; transform: translateY(0); } 
 }
 
-/* Menu Lateral e Submenus */
-.sidebar { transition: transform 0.3s ease-in-out; }
-.submenu { transition: max-height 0.3s ease-in-out; overflow: hidden; max-height: 0; }
-.submenu.open { max-height: 500px; } 
-
-/* Sino de Notificações */
-@keyframes ring { 
-    0% { transform: rotate(0); } 
-    10% { transform: rotate(15deg); } 
-    20% { transform: rotate(-10deg); } 
-    30% { transform: rotate(5deg); } 
-    40% { transform: rotate(-5deg); } 
-    50% { transform: rotate(0); } 
-    100% { transform: rotate(0); } 
+/* Animações de Notificação */
+@keyframes bell-ring {
+    0%, 100% { transform: rotate(0deg); }
+    10%, 30%, 50%, 70%, 90% { transform: rotate(15deg); }
+    20%, 40%, 60%, 80% { transform: rotate(-15deg); }
 }
-.bell-ring { 
-    animation: ring 2s infinite; 
-    display: inline-block; 
-    transform-origin: top center; 
+.bell-ring { animation: bell-ring 1s ease-in-out; }
+
+@keyframes pop {
+    0% { transform: scale(0); }
+    80% { transform: scale(1.2); }
+    100% { transform: scale(1); }
+}
+.badge-pop { animation: pop 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+
+/* Submenus Flutuantes da Topbar */
+.dropdown-menu {
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(10px) scale(0.95);
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    transform-origin: top right;
+}
+
+.dropdown-menu.show {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0) scale(1);
 }
 

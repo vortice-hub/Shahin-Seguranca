@@ -1,53 +1,69 @@
 {% extends 'base.html' %}
 {% block content %}
-<div class="flex items-center justify-between mb-6">
-    <h2 class="text-lg font-bold text-slate-800">Editar Item</h2>
-    <a href="{{ url_for('estoque.gerenciar_estoque') }}" class="text-xs font-medium text-slate-500 hover:text-slate-800">Cancelar</a>
-</div>
-
-<div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-    <form action="/editar/{{ item.id }}" method="POST" class="p-6 space-y-5">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-        
-        <div class="bg-yellow-50 text-yellow-800 p-3 rounded text-xs border border-yellow-200">
-            <i class="fas fa-exclamation-triangle mr-1"></i> Você está editando manualmente o cadastro.
-        </div>
-
+<div class="max-w-2xl mx-auto animate-fade-in">
+    <div class="flex items-center justify-between mb-8">
         <div>
-            <label class="label-pro">Nome do Item</label>
-            <input type="text" name="nome" value="{{ item.nome }}" class="input-pro" required>
+            <h2 class="text-3xl font-black text-slate-800 tracking-tight">Editar Registo</h2>
+            <p class="text-sm text-slate-500 font-medium mt-1">Correção manual do inventário logístico.</p>
         </div>
+        <a href="{{ url_for('estoque.gerenciar_estoque') }}" class="btn-glass text-xs">
+            <i class="fas fa-times mr-1"></i> Cancelar
+        </a>
+    </div>
 
-        <div class="grid grid-cols-2 gap-4">
-            <div>
-                <label class="label-pro">Tamanho</label>
-                <select name="tamanho" class="input-pro cursor-pointer">
-                    <option value="P" {% if item.tamanho == 'P' %}selected{% endif %}>P</option>
-                    <option value="M" {% if item.tamanho == 'M' %}selected{% endif %}>M</option>
-                    <option value="G" {% if item.tamanho == 'G' %}selected{% endif %}>G</option>
-                    <option value="GG" {% if item.tamanho == 'GG' %}selected{% endif %}>GG</option>
-                    <option value="XG" {% if item.tamanho == 'XG' %}selected{% endif %}>XG</option>
-                </select>
+    <div class="glass-panel overflow-hidden shadow-md">
+        <form action="/editar/{{ item.id }}" method="POST" class="p-8 space-y-6">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            
+            <div class="bg-amber-50/80 p-4 rounded-2xl border border-amber-100 flex gap-3 items-start shadow-sm mb-6">
+                <i class="fas fa-exclamation-triangle text-amber-500 text-lg mt-0.5"></i>
+                <div>
+                    <p class="text-[10px] font-black uppercase text-amber-700 tracking-widest">Aviso de Auditoria</p>
+                    <p class="text-xs font-medium text-amber-600 mt-0.5">A edição manual de quantidade deve ser usada apenas para correções. Entregas normais devem usar o menu "Saída".</p>
+                </div>
             </div>
+
             <div>
-                <label class="label-pro">Gênero</label>
-                <select name="genero" class="input-pro cursor-pointer">
-                    <option value="Masculino" {% if item.genero == 'Masculino' %}selected{% endif %}>Masculino</option>
-                    <option value="Feminino" {% if item.genero == 'Feminino' %}selected{% endif %}>Feminino</option>
-                    <option value="Unissex" {% if item.genero == 'Unissex' %}selected{% endif %}>Unissex</option>
-                </select>
+                <label class="label-pro">Nome do Item</label>
+                <div class="relative">
+                    <i class="fas fa-tag absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                    <input type="text" name="nome" value="{{ item.nome }}" class="input-pro pl-12 font-bold text-slate-800" required>
+                </div>
             </div>
-        </div>
 
-        <div>
-            <label class="label-pro">Quantidade Atual (Ajuste Manual)</label>
-            <input type="number" name="quantidade" min="0" value="{{ item.quantidade }}" class="input-pro text-blue-600 font-bold text-lg" required>
-        </div>
+            <div class="grid grid-cols-2 gap-5">
+                <div>
+                    <label class="label-pro">Tamanho</label>
+                    <select name="tamanho" class="input-pro cursor-pointer font-bold text-slate-700">
+                        <option value="P" {% if item.tamanho == 'P' %}selected{% endif %}>P</option>
+                        <option value="M" {% if item.tamanho == 'M' %}selected{% endif %}>M</option>
+                        <option value="G" {% if item.tamanho == 'G' %}selected{% endif %}>G</option>
+                        <option value="GG" {% if item.tamanho == 'GG' %}selected{% endif %}>GG</option>
+                        <option value="XG" {% if item.tamanho == 'XG' %}selected{% endif %}>XG</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="label-pro">Gênero</label>
+                    <select name="genero" class="input-pro cursor-pointer font-bold text-slate-700">
+                        <option value="Masculino" {% if item.genero == 'Masculino' %}selected{% endif %}>Masculino</option>
+                        <option value="Feminino" {% if item.genero == 'Feminino' %}selected{% endif %}>Feminino</option>
+                        <option value="Unissex" {% if item.genero == 'Unissex' %}selected{% endif %}>Unissex</option>
+                    </select>
+                </div>
+            </div>
 
-        <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-lg shadow-md hover:shadow-lg transition-all">
-            SALVAR ALTERAÇÕES
-        </button>
-    </form>
+            <div class="bg-brand/5 p-6 rounded-2xl border border-brand/10 text-center mt-4">
+                <label class="label-pro !mb-2 !text-brand text-center">Quantidade Atual na Prateleira</label>
+                <input type="number" name="quantidade" min="0" value="{{ item.quantidade }}" class="w-full max-w-[150px] mx-auto bg-white border border-brand/20 rounded-xl px-4 py-3 text-center font-black text-3xl text-slate-800 shadow-inner focus:outline-none focus:ring-2 focus:ring-brand" required>
+            </div>
+
+            <div class="pt-4 border-t border-slate-100">
+                <button type="submit" class="w-full btn-primary py-4 text-base shadow-lg">
+                    <i class="fas fa-save mr-2"></i> Gravar Alterações
+                </button>
+            </div>
+        </form>
+    </div>
 </div>
 {% endblock %}
 

@@ -11,7 +11,7 @@ from app.models import (User, PreCadastro, PontoResumo, PontoAjuste, PontoRegist
                         Holerite, Recibo, Role, Permission)
 from app.utils import (format_minutes_to_hm, master_required, permission_required)
 
-# --- IMPORTAÇÃO DOS NOVOS SERVICES E REPOSITORIES ---
+# --- IMPORTAÇÃO DOS SERVICES E REPOSITORIES ---
 from app.services.user_service import UserService
 from app.repositories.user_repository import UserRepository, PreCadastroRepository
 from app.services.ponto_service import PontoService
@@ -92,7 +92,7 @@ def editar_usuario(id):
     user_carga_hm = format_minutes_to_hm(user.carga_horaria or 528)
     gestores = user_repo.get_gestores(exclude_id=user.id)
     
-    # Busca os cargos para preencher o Menu Suspenso (Dropdown)
+    # Busca os cargos filtrados pela empresa atual
     cargos = Role.query.filter_by(empresa_id=g.empresa_id).all()
     
     if request.method == 'POST':
@@ -102,7 +102,7 @@ def editar_usuario(id):
         try:
             if acao == 'excluir':
                 user_service.excluir_usuario(user)
-                flash('Utilizador e todos os seus dados foram excluídos com sucesso.', 'success')
+                flash('Utilizador e todos os seus dados foram excluídos.', 'success')
                 return redirect(url_for('admin.gerenciar_usuarios'))
 
             elif acao == 'salvar':
@@ -112,7 +112,7 @@ def editar_usuario(id):
                 
             elif acao == 'resetar_senha':
                 nova_senha = user_service.resetar_senha(user)
-                flash(f'Senha resetada com sucesso! A nova senha é: {nova_senha}', 'success')
+                flash(f'Senha resetada! A nova senha provisória é: {nova_senha}', 'success')
                 
         except ValueError as ve:
             flash(str(ve), 'error')
@@ -121,6 +121,31 @@ def editar_usuario(id):
 
     return render_template('admin/editar_usuario.html', user=user, carga_hm=user_carga_hm, gestores=gestores, cargos=cargos)
 
+@admin_bp.route('/usuarios/reset-biometria/<int:id>', methods=['POST'])
+@login_required
+@permission_required('USUARIOS')
+def reset_biometria(id):
+    """
+    Limpa o cadastro facial do usuário, obrigando-o a tirar uma nova foto 
+    na próxima vez que acessar o aplicativo.
+    """
+    user_repo = UserRepository()
+    user = user_repo.get_by_id(id)
+    
+    if not user:
+        flash('Utilizador não encontrado.', 'error')
+        return redirect(url_for('admin.gerenciar_usuarios'))
+        
+    try:
+        user.face_encoding = None
+        user.foto_biometria_url = None
+        user_repo.commit()
+        flash(f'Biometria de {user.real_name} resetada! Ele já pode tirar uma nova foto no aplicativo.', 'success')
+    except Exception as e:
+        user_repo.rollback()
+        flash(f'Erro ao resetar biometria: {str(e)}', 'error')
+        
+    return redirect(url_for('admin.gerenciar_usuarios'))
 
 # ==============================================================================
 # OUTROS MÓDULOS 
@@ -131,7 +156,8 @@ def editar_usuario(id):
 @permission_required('PONTO') 
 def admin_solicitacoes():
     if request.method == 'POST':
-        solic = PontoAjuste.query.get(request.form.get('solic_id'))
+        # Garante que a busca da solicitação respeite o empresa_id
+        solic = PontoAjuste.query.filter_by(id=request.form.get('solic_id'), empresa_id=g.empresa_id).first()
         if solic:
             if request.form.get('decisao') == 'aprovar':
                 solic.status = 'Aprovado'
@@ -144,7 +170,7 @@ def admin_solicitacoes():
                             reg.tipo = solic.tipo_batida
                     elif solic.tipo_solicitacao == 'Inclusao':
                         h, m = map(int, solic.novo_horario.split(':'))
-                        novo_ponto = PontoRegistro(user_id=solic.user_id, data_registro=solic.data_referencia, hora_registro=time(h, m), tipo=solic.tipo_batida, latitude='Ajuste Manual', longitude='Aprovado pelo Master')
+                        novo_ponto = PontoRegistro(user_id=solic.user_id, data_registro=solic.data_referencia, hora_registro=time(h, m), tipo=solic.tipo_batida, latitude='Ajuste Manual', longitude='Aprovado pelo Gestor', empresa_id=g.empresa_id)
                         db.session.add(novo_ponto)
                     elif solic.tipo_solicitacao == 'Exclusao' and solic.ponto_original_id:
                         reg = PontoRegistro.query.get(solic.ponto_original_id)
@@ -154,19 +180,21 @@ def admin_solicitacoes():
                     ponto_service = PontoService()
                     ponto_service.calcular_dia(solic.user_id, solic.data_referencia)
                     
-                    flash('Aprovado e refletido no espelho.', 'success')
+                    flash('Ajuste aprovado e saldo recalculado.', 'success')
                 except Exception as e:
                     db.session.rollback()
                     flash(f'Erro ao aplicar ajuste: {e}', 'error')
-                    return redirect(url_for('admin.admin_solicitacoes'))
+                
+                return redirect(url_for('admin.admin_solicitacoes'))
             else:
                 solic.status = 'Reprovado'
                 solic.motivo_reprovacao = request.form.get('motivo_repro')
-                flash('Reprovado.', 'warning')
+                flash('Ajuste reprovado.', 'warning')
             db.session.commit()
             
     extras = {}
-    solicitacoes_pendentes = PontoAjuste.query.filter_by(status='Pendente').order_by(PontoAjuste.created_at.desc()).all()
+    # Filtro Multi-Tenant obrigatório nas solicitações pendentes
+    solicitacoes_pendentes = PontoAjuste.query.filter_by(status='Pendente', empresa_id=g.empresa_id).order_by(PontoAjuste.created_at.desc()).all()
     for s in solicitacoes_pendentes:
         if s.ponto_original_id:
             p_original = PontoRegistro.query.get(s.ponto_original_id)
@@ -181,17 +209,22 @@ def admin_limpeza():
         acao = request.form.get('acao')
         try:
             if acao == 'limpar_testes_ponto': 
-                PontoRegistro.query.delete()
-                PontoResumo.query.delete()
+                # Limpeza restrita à empresa atual
+                PontoRegistro.query.filter_by(empresa_id=g.empresa_id).delete()
+                PontoResumo.query.filter_by(empresa_id=g.empresa_id).delete()
             elif acao == 'limpar_holerites': 
-                Holerite.query.delete()
-                Recibo.query.delete()
+                Holerite.query.filter_by(empresa_id=g.empresa_id).delete()
+                Recibo.query.filter_by(empresa_id=g.empresa_id).delete()
             elif acao == 'limpar_usuarios_nao_master': 
-                User.query.filter(User.username != '50097952800', User.username != 'Thaynara').delete()
-                PreCadastro.query.delete()
+                # Protege administradores e remove apenas usuários do inquilino
+                User.query.filter(User.empresa_id == g.empresa_id, User.role != 'Master').delete()
+                PreCadastro.query.filter_by(empresa_id=g.empresa_id).delete()
             db.session.commit()
+            flash("Limpeza realizada com sucesso!", "success")
             return redirect(url_for('admin.admin_limpeza'))
-        except: db.session.rollback()
+        except Exception as e: 
+            db.session.rollback()
+            flash(f"Erro na limpeza: {e}", "error")
     return render_template('admin/admin_limpeza.html')
 
 @admin_bp.route('/usuarios/importar-excel', methods=['POST'])
@@ -208,7 +241,7 @@ def importar_excel_usuarios():
         return redirect(url_for('admin.gerenciar_usuarios'))
         
     if not file.filename.endswith(('.xlsx', '.xls')):
-        flash('Formato inválido. Por favor, envie uma planilha real do Excel (.xlsx ou .xls)', 'error')
+        flash('Formato inválido. Use .xlsx ou .xls', 'error')
         return redirect(url_for('admin.gerenciar_usuarios'))
 
     try:
@@ -226,16 +259,12 @@ def importar_excel_usuarios():
             if cpf_raw.endswith('.0'): cpf_raw = cpf_raw[:-2]
             cpf = cpf_raw
             
-            cargo = str(row.get('cargo', '')).strip()
-            departamento = str(row.get('departamento', '')).strip()
-            cpf_gestor_raw = str(row.get('cpf_gestor', '')).replace('.', '').replace('-', '').strip()
-            if cpf_gestor_raw.endswith('.0'): cpf_gestor_raw = cpf_gestor_raw[:-2]
-            
             if not nome or not cpf:
                 falhas += 1
                 continue
                 
-            if User.query.filter_by(cpf=cpf).first() or PreCadastro.query.filter_by(cpf=cpf).first():
+            # Verifica existência dentro da mesma empresa para evitar conflitos Multi-Tenant
+            if User.query.filter_by(cpf=cpf).first() or PreCadastro.query.filter_by(cpf=cpf, empresa_id=g.empresa_id).first():
                 falhas += 1
                 continue
 
@@ -248,10 +277,9 @@ def importar_excel_usuarios():
                     dt_admissao = dt_adm_raw.date()
                 else:
                     dt_adm_str = str(dt_adm_raw).strip()
-                    if ' ' in dt_adm_str: dt_adm_str = dt_adm_str.split(' ')[0]
                     try:
-                        if '/' in dt_adm_str: dt_admissao = datetime.strptime(dt_adm_str, '%d/%m/%Y').date()
-                        else: dt_admissao = datetime.strptime(dt_adm_str, '%Y-%m-%d').date()
+                        if '/' in dt_adm_str: dt_admissao = datetime.strptime(dt_adm_str.split(' ')[0], '%d/%m/%Y').date()
+                        else: dt_admissao = datetime.strptime(dt_adm_str.split(' ')[0], '%Y-%m-%d').date()
                     except ValueError: pass
 
             try: salario = float(row.get('salario', 0))
@@ -268,42 +296,40 @@ def importar_excel_usuarios():
                         dt_escala = dt_esc_raw.date()
                     else:
                         dt_esc_str = str(dt_esc_raw).strip()
-                        if ' ' in dt_esc_str: dt_esc_str = dt_esc_str.split(' ')[0]
                         try:
-                            if '/' in dt_esc_str: dt_escala = datetime.strptime(dt_esc_str, '%d/%m/%Y').date()
-                            else: dt_escala = datetime.strptime(dt_esc_str, '%Y-%m-%d').date()
+                            if '/' in dt_esc_str: dt_escala = datetime.strptime(dt_esc_str.split(' ')[0], '%d/%m/%Y').date()
+                            else: dt_escala = datetime.strptime(dt_esc_str.split(' ')[0], '%Y-%m-%d').date()
                         except ValueError: pass
 
             carga_raw = row.get('carga_horaria', '08:48')
-            if isinstance(carga_raw, time): carga_hm = carga_raw.strftime('%H:%M')
-            else: carga_hm = str(carga_raw).strip() or '08:48'
+            carga_hm = carga_raw.strftime('%H:%M') if isinstance(carga_raw, time) else (str(carga_raw).strip() or '08:48')
             carga_min = time_to_minutes(carga_hm)
             
             try: intervalo = int(float(row.get('intervalo', 60)))
             except: intervalo = 60
             
             entrada_raw = row.get('entrada_ideal', '08:00')
-            if isinstance(entrada_raw, time): entrada = entrada_raw.strftime('%H:%M')
-            else: entrada = str(entrada_raw).strip() or '08:00'
+            entrada = entrada_raw.strftime('%H:%M') if isinstance(entrada_raw, time) else (str(entrada_raw).strip() or '08:00')
             
             razao_social_excel = str(row.get('razao_social', '')).strip()
             cnpj_excel = str(row.get('cnpj', '')).strip()
 
             novo_pre = PreCadastro(
-                cpf=cpf, nome_previsto=nome, cargo=cargo, departamento=departamento if departamento else None,
-                cpf_gestor=cpf_gestor_raw if cpf_gestor_raw else None, salario=salario, data_admissao=dt_admissao,
+                cpf=cpf, nome_previsto=nome, cargo=str(row.get('cargo', '')).strip(), 
+                departamento=str(row.get('departamento', '')).strip() or None,
+                cpf_gestor=str(row.get('cpf_gestor', '')).strip() or None, 
+                salario=salario, data_admissao=dt_admissao,
                 escala=escala, data_inicio_escala=dt_escala, carga_horaria=carga_min, tempo_intervalo=intervalo,
-                inicio_jornada_ideal=entrada, razao_social=razao_social_excel if razao_social_excel else "LA SHAHIN SERVIÇOS DE SEGURANÇA LTDA",
-                cnpj=cnpj_excel if cnpj_excel else "50.537.235/0001-95"
+                inicio_jornada_ideal=entrada, 
+                razao_social=razao_social_excel if razao_social_excel else g.empresa.nome,
+                cnpj=cnpj_excel if cnpj_excel else "00.000.000/0000-00",
+                empresa_id=g.empresa_id
             )
             db.session.add(novo_pre)
             sucesso += 1
 
         db.session.commit()
-        if sucesso > 0:
-            flash(f'Importação concluída com sucesso: {sucesso} registos lidos do Excel. {falhas} ignorados.', 'success')
-        else:
-            flash('Nenhum registro válido encontrado.', 'error')
+        flash(f'Importação concluída: {sucesso} lidos, {falhas} ignorados.', 'success')
             
     except Exception as e:
         db.session.rollback()
@@ -312,7 +338,7 @@ def importar_excel_usuarios():
     return redirect(url_for('admin.gerenciar_usuarios'))
 
 # ==============================================================================
-# 🔐 FASE 4: ROTAS DE GESTÃO DE CARGOS E PERMISSÕES (RBAC)
+# 🔐 GESTÃO DE CARGOS E PERMISSÕES (RBAC)
 # ==============================================================================
 
 @admin_bp.route('/cargos', methods=['GET'])
@@ -365,7 +391,7 @@ def excluir_cargo(id):
         flash("Cargo excluído com segurança.", "success")
     except Exception as e:
         db.session.rollback()
-        flash(f"Não foi possível excluir o cargo. Verifique se existem funcionários vinculados a ele.", "error")
+        flash(f"Erro: Verifique se existem funcionários vinculados a este cargo.", "error")
         
     return redirect(url_for('admin.listar_cargos'))
 
