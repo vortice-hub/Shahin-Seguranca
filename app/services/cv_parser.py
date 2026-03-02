@@ -2,61 +2,72 @@ import os
 import json
 import re
 import PyPDF2
+from PIL import Image
 import google.generativeai as genai
 import logging
 
 logger = logging.getLogger(__name__)
 
-def analisar_curriculo_ia(file_stream):
+def analisar_curriculo_ia(file_storage):
     """
-    Recebe um ficheiro PDF, extrai o texto e pede à I.A. para 
-    estruturar os dados do candidato (Nome, Email, Telefone, Tags).
+    Recebe um ficheiro (PDF ou Imagem), processa o conteúdo e pede à I.A. 
+    para estruturar os dados do candidato (Nome, Email, Telefone, Tags).
     """
     try:
-        # 1. Extrair texto do PDF
-        reader = PyPDF2.PdfReader(file_stream)
-        texto_cv = ""
-        # Lê apenas as primeiras 3 páginas para poupar tokens (ninguém tem CV maior que isso)
-        for i in range(min(len(reader.pages), 3)):
-            texto_cv += reader.pages[i].extract_text() + "\n"
-            
-        # Reseta o ponteiro do arquivo para que ele possa ser salvo no GCP depois
-        file_stream.seek(0)
-        
-        if not texto_cv.strip():
-            return None # PDF vazio ou imagem não pesquisável
-            
-        # 2. Configurar a I.A. (Google Gemini)
         api_key = os.environ.get("GEMINI_API_KEY")
         if not api_key:
             logger.error("GEMINI_API_KEY não encontrada nas variáveis de ambiente.")
             return None
             
         genai.configure(api_key=api_key)
-        # Usamos o modelo Flash por ser super rápido
+        # O modelo Flash é incrivelmente rápido e tem visão nativa
         model = genai.GenerativeModel('gemini-2.5-flash')
         
-        # 3. O Prompt (Instrução para a IA)
-        prompt = f"""
+        prompt = """
         Você é um assistente de Recursos Humanos especialista em ATS.
-        Leia o currículo abaixo e extraia as seguintes informações no formato JSON estrito:
+        Analise o currículo em anexo (pode ser texto ou uma imagem do documento) 
+        e extraia as seguintes informações no formato JSON estrito:
         
-        {{
+        {
             "nome": "Nome completo do candidato",
-            "email": "Email do candidato (ou null)",
-            "telefone": "Telefone com DDD (ou null)",
-            "palavras_chave": "Uma lista com as 5 principais habilidades técnicas ou qualificações do candidato separadas por vírgula (ex: Excel, CNH B, Liderança). Seja muito breve."
-        }}
-        
-        Currículo:
-        {texto_cv[:10000]}
+            "email": "Email do candidato (ou null se não encontrar)",
+            "telefone": "Telefone com DDD (ou null se não encontrar)",
+            "palavras_chave": "Uma lista com as 5 principais habilidades técnicas ou qualificações do candidato separadas por vírgula (ex: Excel, CNH B, Liderança, Empilhador). Seja muito breve."
+        }
         """
         
-        # 4. Processar a resposta
-        response = model.generate_content(prompt)
+        # Prepara a lista de conteúdos que vamos enviar para a I.A.
+        conteudo_para_ia = [prompt]
+        filename = file_storage.filename.lower()
+        
+        # 1. Se for PDF (Extrai o texto)
+        if filename.endswith('.pdf'):
+            reader = PyPDF2.PdfReader(file_storage)
+            texto_cv = ""
+            for i in range(min(len(reader.pages), 3)):
+                texto_cv += reader.pages[i].extract_text() + "\n"
+                
+            if not texto_cv.strip():
+                return None
+            conteudo_para_ia.append(f"Currículo:\n{texto_cv[:10000]}")
+            
+        # 2. Se for Imagem (Abre a foto para a I.A. ver)
+        elif filename.endswith(('.jpg', '.jpeg', '.png')):
+            imagem = Image.open(file_storage)
+            conteudo_para_ia.append(imagem)
+            
+        else:
+            logger.warning(f"Formato de ficheiro não suportado pela I.A.: {filename}")
+            return None
+
+        # IMPORTANTE: Reseta o ponteiro do arquivo para que o GCP Storage consiga salvá-lo depois!
+        file_storage.seek(0)
+        
+        # Envia tudo para o Gemini
+        response = model.generate_content(conteudo_para_ia)
         resposta_texto = response.text
         
-        # Limpar o texto para garantir que pegamos apenas o JSON (remove ```json ... ```)
+        # Limpa o texto para garantir que pegamos apenas o JSON gerado
         json_match = re.search(r'\{.*\}', resposta_texto, re.DOTALL)
         if json_match:
             dados_extraidos = json.loads(json_match.group(0))
@@ -66,6 +77,6 @@ def analisar_curriculo_ia(file_stream):
 
     except Exception as e:
         logger.error(f"Erro ao analisar CV com I.A.: {e}")
-        file_stream.seek(0) # Garante que o ficheiro não fica bloqueado
+        file_storage.seek(0) 
         return None
 

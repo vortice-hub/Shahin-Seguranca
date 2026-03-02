@@ -329,6 +329,19 @@ class FaseRecrutamento(TenantModel):
     
     candidaturas = db.relationship('Candidatura', backref='fase', lazy=True)
 
+# Tabela associativa (Muitos-para-Muitos) entre Candidatos e Tags Coloridas
+candidato_tag_assoc = db.Table('candidato_tag_assoc',
+    db.Column('candidato_id', db.Integer, db.ForeignKey('candidatos.id', ondelete='CASCADE'), primary_key=True),
+    db.Column('tag_id', db.Integer, db.ForeignKey('tags_candidato.id', ondelete='CASCADE'), primary_key=True)
+)
+
+class TagCandidato(TenantModel):
+    """Tags coloridas criadas pelo RH (Ex: Vigilante = Verde)"""
+    __tablename__ = 'tags_candidato'
+    id = db.Column(db.Integer, primary_key=True)
+    nome = db.Column(db.String(50), nullable=False)
+    cor = db.Column(db.String(20), default='blue') # blue, green, purple, amber, rose, slate
+
 class Candidato(TenantModel):
     """Banco de Talentos Global da Empresa"""
     __tablename__ = 'candidatos'
@@ -341,6 +354,7 @@ class Candidato(TenantModel):
     palavras_chave = db.Column(db.String(255), nullable=True) # Ex: "Portaria, CNH, Excel"
     
     candidaturas = db.relationship('Candidatura', backref='candidato', lazy=True, cascade='all, delete-orphan')
+    tags_coloridas = db.relationship('TagCandidato', secondary=candidato_tag_assoc, lazy='subquery', backref=db.backref('candidatos', lazy=True))
 
 class Candidatura(TenantModel):
     """O 'Cartão' do candidato que se move no Kanban da Vaga"""

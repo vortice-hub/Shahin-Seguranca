@@ -8,7 +8,7 @@ from werkzeug.utils import secure_filename
 from google.cloud import storage
 
 from app.recrutamento import recrutamento_bp
-from app.models import Vaga, Candidato, Candidatura, FaseRecrutamento
+from app.models import Vaga, Candidato, Candidatura, FaseRecrutamento, TagCandidato
 from app.extensions import db
 
 # IMPORTANTE: Importar o nosso motor de IA
@@ -88,7 +88,8 @@ def excluir_vaga(id):
 @login_required
 def banco_talentos():
     candidatos = Candidato.query.filter_by(empresa_id=current_user.empresa_id).order_by(Candidato.id.desc()).all()
-    return render_template('recrutamento/banco_talentos.html', candidatos=candidatos)
+    tags_empresa = TagCandidato.query.filter_by(empresa_id=current_user.empresa_id).all()
+    return render_template('recrutamento/banco_talentos.html', candidatos=candidatos, tags_empresa=tags_empresa)
 
 @recrutamento_bp.route('/banco-talentos/novo', methods=['POST'])
 @login_required
@@ -168,7 +169,6 @@ def ver_cv(id):
         return redirect(url_for('recrutamento.banco_talentos'))
         
     try:
-        # Extrai o caminho real do arquivo dentro do bucket
         blob_name = candidato.url_curriculo
         if 'storage.googleapis.com' in blob_name:
             blob_name = blob_name.split('/', 4)[-1]
@@ -178,10 +178,8 @@ def ver_cv(id):
         bucket = storage_client.bucket(bucket_name)
         blob = bucket.blob(blob_name)
         
-        # Baixa o PDF para a RAM (seguro e sem vazar links)
         file_bytes = blob.download_as_bytes()
         
-        # Devolve direto para a tela do utilizador
         return send_file(
             io.BytesIO(file_bytes),
             mimetype='application/pdf',
@@ -198,7 +196,6 @@ def excluir_candidato(id):
     """Exclui o candidato e o PDF do Google Cloud Storage."""
     candidato = Candidato.query.filter_by(id=id, empresa_id=current_user.empresa_id).first_or_404()
     
-    # 1. Tenta excluir o arquivo físico lá da nuvem
     if candidato.url_curriculo:
         try:
             blob_name = candidato.url_curriculo
@@ -213,14 +210,59 @@ def excluir_candidato(id):
                 if blob.exists():
                     blob.delete()
         except Exception:
-            pass # Ignora erro de exclusão de arquivo para não travar o sistema
+            pass
             
-    # 2. Exclui do banco de dados (o cascade cuidará das candidaturas atreladas)
     nome = candidato.nome
     db.session.delete(candidato)
     db.session.commit()
     
     flash(f'Candidato {nome} e o seu currículo foram excluídos.', 'success')
+    return redirect(url_for('recrutamento.banco_talentos'))
+
+# ==============================================================================
+# 🏷️ VORTICE RECRUTAMENTO - SISTEMA DE TAGS COLORIDAS
+# ==============================================================================
+
+@recrutamento_bp.route('/tags/nova', methods=['POST'])
+@login_required
+def nova_tag():
+    """Cria uma nova tag colorida para a empresa."""
+    nome = request.form.get('nome')
+    cor = request.form.get('cor', 'blue')
+    
+    nova = TagCandidato(nome=nome, cor=cor, empresa_id=current_user.empresa_id)
+    db.session.add(nova)
+    db.session.commit()
+    flash(f'Tag "{nome}" criada com sucesso!', 'success')
+    return redirect(url_for('recrutamento.banco_talentos'))
+
+@recrutamento_bp.route('/banco-talentos/<int:candidato_id>/add-tag', methods=['POST'])
+@login_required
+def adicionar_tag_candidato(candidato_id):
+    """Atribui uma tag colorida a um candidato."""
+    candidato = Candidato.query.filter_by(id=candidato_id, empresa_id=current_user.empresa_id).first_or_404()
+    tag_id = request.form.get('tag_id')
+    
+    if tag_id:
+        tag = TagCandidato.query.filter_by(id=tag_id, empresa_id=current_user.empresa_id).first()
+        if tag and tag not in candidato.tags_coloridas:
+            candidato.tags_coloridas.append(tag)
+            db.session.commit()
+            flash('Tag atribuída com sucesso!', 'success')
+            
+    return redirect(url_for('recrutamento.banco_talentos'))
+
+@recrutamento_bp.route('/banco-talentos/<int:candidato_id>/remove-tag/<int:tag_id>', methods=['POST'])
+@login_required
+def remover_tag_candidato(candidato_id, tag_id):
+    """Remove uma tag de um candidato."""
+    candidato = Candidato.query.filter_by(id=candidato_id, empresa_id=current_user.empresa_id).first_or_404()
+    tag = TagCandidato.query.filter_by(id=tag_id, empresa_id=current_user.empresa_id).first_or_404()
+    
+    if tag in candidato.tags_coloridas:
+        candidato.tags_coloridas.remove(tag)
+        db.session.commit()
+        
     return redirect(url_for('recrutamento.banco_talentos'))
 
 # ==============================================================================
@@ -239,7 +281,9 @@ def kanban_vaga(vaga_id):
         ~Candidato.id.in_(subquery)
     ).all()
     
-    return render_template('recrutamento/kanban.html', vaga=vaga, fases=fases, candidatos=candidatos_disponiveis)
+    tags_empresa = TagCandidato.query.filter_by(empresa_id=current_user.empresa_id).all()
+    
+    return render_template('recrutamento/kanban.html', vaga=vaga, fases=fases, candidatos=candidatos_disponiveis, tags_empresa=tags_empresa)
 
 @recrutamento_bp.route('/vagas/<int:vaga_id>/vincular-candidato', methods=['POST'])
 @login_required
@@ -274,4 +318,20 @@ def mover_candidato():
         return jsonify({'success': True})
         
     return jsonify({'success': False, 'error': 'Não encontrado'}), 404
+
+@recrutamento_bp.route('/vagas/remover-candidatura/<int:candidatura_id>', methods=['POST'])
+@login_required
+def remover_do_funil(candidatura_id):
+    """Remove o candidato da vaga (mas mantém no banco de talentos)."""
+    candidatura = Candidatura.query.join(Vaga).filter(
+        Candidatura.id == candidatura_id, 
+        Vaga.empresa_id == current_user.empresa_id
+    ).first_or_404()
+    
+    vaga_id = candidatura.vaga_id
+    db.session.delete(candidatura)
+    db.session.commit()
+    
+    flash('Candidato removido do funil desta vaga.', 'success')
+    return redirect(url_for('recrutamento.kanban_vaga', vaga_id=vaga_id))
 
