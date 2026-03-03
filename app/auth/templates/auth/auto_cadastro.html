@@ -18,7 +18,7 @@
     <div class="glass-panel w-full max-w-[420px] p-8 sm:p-10 animate-fade-in" style="animation-delay: 0.1s; animation-fill-mode: both;">
         
         {% if step == 1 %}
-        <form action="/cadastrar" method="POST" class="space-y-6">
+        <form action="/auto-cadastro" method="POST" class="space-y-6">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
             <input type="hidden" name="step" value="1">
             
@@ -37,7 +37,7 @@
         {% endif %}
 
         {% if step == 2 %}
-        <form action="/cadastrar" method="POST" class="space-y-6">
+        <form action="/auto-cadastro" method="POST" class="space-y-6">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
             <input type="hidden" name="step" value="2">
             <input type="hidden" name="cpf" value="{{ cpf }}">
