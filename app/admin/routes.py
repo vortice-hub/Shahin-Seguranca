@@ -27,20 +27,28 @@ logger = logging.getLogger(__name__)
 @login_required
 @permission_required('USUARIOS')
 def novo_usuario():
-    user_repo = UserRepository()
-    gestores = user_repo.get_gestores()
+    # Ponto 16: Removida a lógica e pesquisa de gestores
     
     if request.method == 'POST':
         user_service = UserService()
         try:
-            nome_real, cpf = user_service.criar_pre_cadastro(request.form)
+            # Ponto 6: Conversão limpa do request.form para dict para o Service não se perder
+            dados = dict(request.form)
+            
+            # Redundância de chaves para compatibilidade com o UserService
+            if 'nome' not in dados and 'nome_previsto' in dados:
+                dados['nome'] = dados['nome_previsto']
+            if 'nome_previsto' not in dados and 'nome' in dados:
+                dados['nome_previsto'] = dados['nome']
+                
+            nome_real, cpf = user_service.criar_pre_cadastro(dados)
             return render_template('admin/sucesso_usuario.html', nome_real=nome_real, cpf=cpf)
         except ValueError as ve:
             flash(str(ve), 'error')
         except Exception as e:
             flash(f'Erro interno: {str(e)}', 'error')
             
-    return render_template('admin/novo_usuario.html', gestores=gestores)
+    return render_template('admin/novo_usuario.html')
 
 @admin_bp.route('/usuarios')
 @login_required
@@ -90,7 +98,6 @@ def editar_usuario(id):
         return redirect(url_for('admin.gerenciar_usuarios'))
 
     user_carga_hm = format_minutes_to_hm(user.carga_horaria or 528)
-    gestores = user_repo.get_gestores(exclude_id=user.id)
     
     # Busca os cargos filtrados pela empresa atual
     cargos = Role.query.filter_by(empresa_id=g.empresa_id).all()
@@ -106,7 +113,11 @@ def editar_usuario(id):
                 return redirect(url_for('admin.gerenciar_usuarios'))
 
             elif acao == 'salvar':
-                user_service.atualizar_usuario(user, request.form)
+                dados = dict(request.form)
+                # Remove qualquer lixo residual de gestor
+                dados.pop('gestor_id', None) 
+                
+                user_service.atualizar_usuario(user, dados)
                 flash('Dados atualizados com sucesso.', 'success')
                 return redirect(url_for('admin.gerenciar_usuarios'))
                 
@@ -119,7 +130,8 @@ def editar_usuario(id):
         except Exception as e:
             flash(f'Erro: {str(e)}', 'error')
 
-    return render_template('admin/editar_usuario.html', user=user, carga_hm=user_carga_hm, gestores=gestores, cargos=cargos)
+    # Removida a injeção da variável gestores no Jinja
+    return render_template('admin/editar_usuario.html', user=user, carga_hm=user_carga_hm, cargos=cargos)
 
 @admin_bp.route('/usuarios/reset-biometria/<int:id>', methods=['POST'])
 @login_required
@@ -156,7 +168,6 @@ def reset_biometria(id):
 @permission_required('PONTO') 
 def admin_solicitacoes():
     if request.method == 'POST':
-        # Garante que a busca da solicitação respeite o empresa_id
         solic = PontoAjuste.query.filter_by(id=request.form.get('solic_id'), empresa_id=g.empresa_id).first()
         if solic:
             if request.form.get('decisao') == 'aprovar':
@@ -193,7 +204,6 @@ def admin_solicitacoes():
             db.session.commit()
             
     extras = {}
-    # Filtro Multi-Tenant obrigatório nas solicitações pendentes
     solicitacoes_pendentes = PontoAjuste.query.filter_by(status='Pendente', empresa_id=g.empresa_id).order_by(PontoAjuste.created_at.desc()).all()
     for s in solicitacoes_pendentes:
         if s.ponto_original_id:
@@ -209,14 +219,12 @@ def admin_limpeza():
         acao = request.form.get('acao')
         try:
             if acao == 'limpar_testes_ponto': 
-                # Limpeza restrita à empresa atual
                 PontoRegistro.query.filter_by(empresa_id=g.empresa_id).delete()
                 PontoResumo.query.filter_by(empresa_id=g.empresa_id).delete()
             elif acao == 'limpar_holerites': 
                 Holerite.query.filter_by(empresa_id=g.empresa_id).delete()
                 Recibo.query.filter_by(empresa_id=g.empresa_id).delete()
             elif acao == 'limpar_usuarios_nao_master': 
-                # Protege administradores e remove apenas usuários do inquilino
                 User.query.filter(User.empresa_id == g.empresa_id, User.role != 'Master').delete()
                 PreCadastro.query.filter_by(empresa_id=g.empresa_id).delete()
             db.session.commit()
@@ -263,7 +271,6 @@ def importar_excel_usuarios():
                 falhas += 1
                 continue
                 
-            # Verifica existência dentro da mesma empresa para evitar conflitos Multi-Tenant
             if User.query.filter_by(cpf=cpf).first() or PreCadastro.query.filter_by(cpf=cpf, empresa_id=g.empresa_id).first():
                 falhas += 1
                 continue
@@ -317,7 +324,6 @@ def importar_excel_usuarios():
             novo_pre = PreCadastro(
                 cpf=cpf, nome_previsto=nome, cargo=str(row.get('cargo', '')).strip(), 
                 departamento=str(row.get('departamento', '')).strip() or None,
-                cpf_gestor=str(row.get('cpf_gestor', '')).strip() or None, 
                 salario=salario, data_admissao=dt_admissao,
                 escala=escala, data_inicio_escala=dt_escala, carga_horaria=carga_min, tempo_intervalo=intervalo,
                 inicio_jornada_ideal=entrada, 

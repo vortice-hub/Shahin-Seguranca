@@ -31,8 +31,11 @@
                 </div>
                 <div class="relative">
                     <i class="fas fa-lock absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
-                    <input type="password" name="password" placeholder="••••••••" 
-                           class="input-pro pl-12 text-lg tracking-widest" required>
+                    <input type="password" name="password" id="login_password" placeholder="••••••••" 
+                           class="input-pro pl-12 pr-10 text-lg tracking-widest" required>
+                    <button type="button" onclick="togglePassword('login_password', 'eye_login')" class="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-brand focus:outline-none transition">
+                        <i class="fas fa-eye" id="eye_login"></i>
+                    </button>
                 </div>
             </div>
 
@@ -43,7 +46,7 @@
 
         <div class="mt-8 pt-6 border-t border-slate-100 text-center">
             <p class="text-sm text-slate-500 font-medium">Primeiro acesso à plataforma?</p>
-            <a href="/cadastrar" class="inline-block mt-2 font-bold text-brand hover:text-brand-hover transition bg-brand/5 px-4 py-2 rounded-xl">Criar minha senha</a>
+            <a href="/auto-cadastro" class="inline-block mt-2 font-bold text-brand hover:text-brand-hover transition bg-brand/5 px-4 py-2 rounded-xl">Criar minha senha</a>
         </div>
     </div>
 </div>
@@ -62,6 +65,21 @@
             e.target.value = value;
         }
     });
+
+    // Função universal para alternar a visibilidade da senha
+    function togglePassword(inputId, iconId) {
+        const input = document.getElementById(inputId);
+        const icon = document.getElementById(iconId);
+        if (input.type === 'password') {
+            input.type = 'text';
+            icon.classList.remove('fa-eye');
+            icon.classList.add('fa-eye-slash');
+        } else {
+            input.type = 'password';
+            icon.classList.remove('fa-eye-slash');
+            icon.classList.add('fa-eye');
+        }
+    }
 </script>
 {% endblock %}
 

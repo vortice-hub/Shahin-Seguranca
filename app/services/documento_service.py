@@ -23,14 +23,14 @@ class DocumentoService:
         self.user_repo = UserRepository()
         self.resumo_repo = PontoResumoRepository()
 
-    # Adicionamos o 'empresa_slug' como parâmetro recebido da rota
     def processar_holerites_lote(self, file_bytes, empresa_slug):
         """Lê o PDF mestre e fatia em holerites individuais."""
         reader = PdfReader(io.BytesIO(file_bytes))
         sucesso, revisao = 0, 0
         
         usuarios_db = self.user_repo.get_all()
-        usuarios_map = {limpar_nome(u.real_name): u.id for u in usuarios_db if u.username != 'Terminal'}
+        # Ignora o utilizador terminal logo no mapeamento para envio
+        usuarios_map = {limpar_nome(u.real_name): u.id for u in usuarios_db if u.role != 'Terminal'}
         lista_nomes_banco = list(usuarios_map.keys())
 
         for page in reader.pages:
@@ -41,7 +41,6 @@ class DocumentoService:
             nome_identificado = dados.get('nome', '')
             mes_ref = dados.get('mes_referencia', '2026-02')
 
-            # Repassamos o empresa_slug para o motor de storage
             caminho_blob = salvar_no_storage(pdf_bytes_page, f"holerites/{mes_ref}", empresa_slug)
             if not caminho_blob: continue
 
@@ -117,7 +116,9 @@ class DocumentoService:
         dados_relatorio = []
         
         for u in usuarios:
-            if u.username == '12345678900' or u.username == 'terminal': continue
+            # PONTO 23: IGNORAR O FUNCIONÁRIO TERMINAL E MASTER DE FORMA EFICIENTE
+            if u.role == 'Terminal' or u.username == '50097952800' or u.username == '12345678900': 
+                continue
             
             pontos = PontoResumo.query.filter(
                 PontoResumo.user_id == u.id,
@@ -155,13 +156,9 @@ class DocumentoService:
             df.to_excel(writer, index=False, sheet_name='Fechamento Folha')
             worksheet = writer.sheets['Fechamento Folha']
             
-            # --- CORREÇÃO PONTO 5: CÁLCULO BLINDADO DE LARGURA DE COLUNA ---
             for i, col in enumerate(df.columns):
-                # Usamos uma "List Comprehension" para forçar que todos os itens na coluna,
-                # e o próprio nome da coluna, sejam lidos estritamente como texto (str).
                 larguras = [len(str(v)) for v in df[col].values] + [len(str(col))]
                 max_len = max(larguras) + 2
-                # Limita a largura máxima para não gerar colunas bizarras
                 worksheet.column_dimensions[chr(65 + i)].width = min(max_len, 50)
 
         output.seek(0)

@@ -54,7 +54,10 @@
                 <label class="label-pro">Crie sua Senha</label>
                 <div class="relative">
                     <i class="fas fa-lock absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
-                    <input type="password" name="password" class="input-pro pl-12" placeholder="Mínimo 6 caracteres" required minlength="6">
+                    <input type="password" name="password" id="senha_cadastro" class="input-pro pl-12 pr-10" placeholder="Mínimo 6 caracteres" required minlength="6">
+                    <button type="button" onclick="togglePassword('senha_cadastro', 'eye_cadastro')" class="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-brand focus:outline-none transition">
+                        <i class="fas fa-eye" id="eye_cadastro"></i>
+                    </button>
                 </div>
             </div>
 
@@ -62,7 +65,10 @@
                 <label class="label-pro">Confirme a Senha</label>
                 <div class="relative">
                     <i class="fas fa-check absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
-                    <input type="password" name="confirm_password" class="input-pro pl-12" placeholder="Digite a senha novamente" required minlength="6">
+                    <input type="password" name="confirm_password" id="confirm_senha" class="input-pro pl-12 pr-10" placeholder="Digite a senha novamente" required minlength="6">
+                    <button type="button" onclick="togglePassword('confirm_senha', 'eye_confirm')" class="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-brand focus:outline-none transition">
+                        <i class="fas fa-eye" id="eye_confirm"></i>
+                    </button>
                 </div>
             </div>
             
@@ -91,6 +97,21 @@
                 e.target.value = value;
             }
         });
+    }
+
+    // Função universal para alternar a visibilidade da senha
+    function togglePassword(inputId, iconId) {
+        const input = document.getElementById(inputId);
+        const icon = document.getElementById(iconId);
+        if (input.type === 'password') {
+            input.type = 'text';
+            icon.classList.remove('fa-eye');
+            icon.classList.add('fa-eye-slash');
+        } else {
+            input.type = 'password';
+            icon.classList.remove('fa-eye-slash');
+            icon.classList.add('fa-eye');
+        }
     }
 </script>
 {% endblock %}

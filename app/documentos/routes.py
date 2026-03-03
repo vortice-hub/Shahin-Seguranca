@@ -10,7 +10,6 @@ from app.utils import get_brasil_time, permission_required, has_permission, get_
 from app.documentos.storage import baixar_bytes_storage, salvar_no_storage, excluir_do_storage
 from app.documentos.atestado_parser import analisar_atestado_vision
 
-# --- IMPORTAÇÃO DOS NOVOS SERVICES E REPOSITORIES ---
 from app.services.documento_service import DocumentoService
 from app.repositories.documento_repository import (HoleriteRepository, ReciboRepository, 
                                                    AtestadoRepository, AssinaturaDigitalRepository)
@@ -25,8 +24,8 @@ def dashboard_documentos():
     f_mes = request.args.get('mes', '')
     f_tipo = request.args.get('tipo', '')
 
-    q_holerite = Holerite.query.filter(Holerite.status != 'Revisao')
-    q_recibo = Recibo.query
+    q_holerite = Holerite.query.filter(Holerite.status != 'Revisao', Holerite.empresa_id == g.empresa_id)
+    q_recibo = Recibo.query.filter(Recibo.empresa_id == g.empresa_id)
 
     if f_nome:
         q_holerite = q_holerite.join(User).filter(User.real_name.ilike(f'%{f_nome}%'))
@@ -39,7 +38,7 @@ def dashboard_documentos():
 
     holerites_db = q_holerite.order_by(Holerite.enviado_em.desc()).limit(50).all()
     recibos_db = q_recibo.order_by(Recibo.created_at.desc()).limit(50).all()
-    total_revisao = Holerite.query.filter_by(status='Revisao').count()
+    total_revisao = Holerite.query.filter_by(status='Revisao', empresa_id=g.empresa_id).count()
     
     historico = []
     
@@ -126,7 +125,6 @@ def baixar_holerite(id):
         doc.visualizado = True
         holerite_repo.commit()
         
-        # 🛡️ TRAVA DE PLANO: Apenas Pro e Premium têm Assinatura Digital Criptográfica
         plano_atual = g.empresa.plano.lower() if hasattr(g, 'empresa') and g.empresa.plano else 'basico'
         is_pro_ou_premium = 'pro' in plano_atual or 'premium' in plano_atual or 'enterprise' in plano_atual
         
@@ -135,7 +133,6 @@ def baixar_holerite(id):
             tipo_doc = f"{'Espelho de Ponto' if 'espelhos' in doc.url_arquivo else 'Holerite'} - {doc.mes_referencia}"
             doc_service.registrar_assinatura(current_user.id, doc.id, tipo_doc, arquivo_bytes, get_client_ip(), request.headers.get('User-Agent', '')[:250])
 
-            # Notificar o Master
             master = User.query.filter_by(username='50097952800').first()
             if master:
                 enviar_notificacao(master.id, f"✅ {current_user.real_name} assinou o {tipo_doc}.", "/documentos/admin/auditoria")
@@ -161,7 +158,6 @@ def baixar_recibo(id):
         doc.visualizado = True
         recibo_repo.commit()
         
-        # 🛡️ TRAVA DE PLANO: Apenas Pro e Premium têm Assinatura Digital Criptográfica
         plano_atual = g.empresa.plano.lower() if hasattr(g, 'empresa') and g.empresa.plano else 'basico'
         is_pro_ou_premium = 'pro' in plano_atual or 'premium' in plano_atual or 'enterprise' in plano_atual
         
@@ -205,7 +201,6 @@ def enviar_atestado():
             caminho_blob = salvar_no_storage(file_bytes, f"atestados/{mes_ref}", g.empresa.slug)
             if not caminho_blob: return redirect(request.url)
 
-            # 🛡️ TRAVA PREMIUM: I.A. Leitora de Atestados apenas para clientes Premium
             plano_atual = g.empresa.plano.lower() if hasattr(g, 'empresa') and g.empresa.plano else 'basico'
             is_premium = 'premium' in plano_atual or 'enterprise' in plano_atual
             
@@ -221,7 +216,8 @@ def enviar_atestado():
                 data_inicio_afastamento=dados_ia.get('data_inicio'), 
                 quantidade_dias=dados_ia.get('dias_afastamento'),
                 texto_extraido=dados_ia.get('texto_bruto', 'Leitura Automática por I.A. não habilitada neste plano.'), 
-                status='Revisao' 
+                status='Revisao',
+                empresa_id=g.empresa_id
             )
             atestado_repo.add(novo_atestado)
             atestado_repo.commit()
@@ -283,7 +279,7 @@ def exportar_relatorio_folha():
         return redirect(url_for('documentos.relatorio_folha'))
     except Exception as e:
         traceback.print_exc()
-        flash(f'Erro ao processar dados matemáticos do fechamento. O erro original foi neutralizado. Detalhe: {str(e)}', 'error')
+        flash(f'Erro ao processar dados matemáticos do fechamento. Detalhe: {str(e)}', 'error')
         return redirect(url_for('documentos.relatorio_folha'))
 
 @documentos_bp.route('/admin/auditoria')
@@ -291,10 +287,10 @@ def exportar_relatorio_folha():
 @requires_plan('Pro')
 @permission_required('DOCUMENTOS')
 def auditoria_assinaturas():
-    assinaturas = AssinaturaDigital.query.order_by(AssinaturaDigital.data_assinatura.desc()).all()
+    assinaturas = AssinaturaDigital.query.filter_by(empresa_id=g.empresa_id).order_by(AssinaturaDigital.data_assinatura.desc()).all()
     
-    pendentes_holerites = Holerite.query.filter_by(visualizado=False).join(User).all()
-    pendentes_recibos = Recibo.query.filter_by(visualizado=False).join(User).all()
+    pendentes_holerites = Holerite.query.filter_by(visualizado=False, empresa_id=g.empresa_id).join(User).all()
+    pendentes_recibos = Recibo.query.filter_by(visualizado=False, empresa_id=g.empresa_id).join(User).all()
     
     pendentes = []
     for h in pendentes_holerites:
@@ -312,6 +308,8 @@ def auditoria_assinaturas():
 @permission_required('DOCUMENTOS')
 def revisao_holerites():
     holerite_repo = HoleriteRepository()
+    
+    # Processamento do Vínculo de PDF
     if request.method == 'POST':
         h_id = request.form.get('holerite_id')
         user_id = request.form.get('user_id')
@@ -324,9 +322,33 @@ def revisao_holerites():
             flash('Documento associado ao colaborador com sucesso!', 'success')
         return redirect(url_for('documentos.revisao_holerites'))
         
-    pendentes = holerite_repo.get_pendentes_revisao()
-    usuarios = User.query.filter(User.role != 'Terminal', User.username != '50097952800').order_by(User.real_name).all()
+    # GET: Traz a lista
+    # Ponto 22: Pendentes filtrados apenas por empresa
+    pendentes = Holerite.query.filter_by(status='Revisao', empresa_id=g.empresa_id).all()
+    usuarios = User.query.filter(User.role != 'Terminal', User.username != '50097952800', User.empresa_id == g.empresa_id).order_by(User.real_name).all()
     return render_template('documentos/revisao.html', pendentes=pendentes, usuarios=usuarios)
+
+# Ponto 22: Rota para Limpar Fila de Revisões
+@documentos_bp.route('/admin/revisao/limpar', methods=['POST'])
+@login_required
+@permission_required('DOCUMENTOS')
+def limpar_revisoes():
+    try:
+        pendentes = Holerite.query.filter_by(status='Revisao', empresa_id=g.empresa_id).all()
+        count = 0
+        for h in pendentes:
+            if h.url_arquivo:
+                excluir_do_storage(h.url_arquivo)
+            db.session.delete(h)
+            count += 1
+            
+        db.session.commit()
+        flash(f"Fila limpa com sucesso. {count} ficheiros órfãos removidos da nuvem.", "success")
+    except Exception as e:
+        db.session.rollback()
+        flash(f"Erro ao limpar fila: {e}", "error")
+        
+    return redirect(url_for('documentos.revisao_holerites'))
 
 @documentos_bp.route('/admin/recibo/novo', methods=['GET', 'POST'])
 @login_required
@@ -342,7 +364,7 @@ def novo_recibo():
             file_bytes = arquivo.read()
             caminho = salvar_no_storage(file_bytes, f"recibos/{data_pagamento[:7]}", g.empresa.slug)
             if caminho:
-                novo_r = Recibo(user_id=user_id, valor=float(valor), data_pagamento=data_pagamento, url_arquivo=caminho)
+                novo_r = Recibo(user_id=user_id, valor=float(valor), data_pagamento=data_pagamento, url_arquivo=caminho, empresa_id=g.empresa_id)
                 db.session.add(novo_r)
                 db.session.commit()
                 enviar_notificacao(user_id, f"Novo Recibo de Pagamento disponível (R$ {valor}).", "/documentos/meus-documentos")
@@ -350,8 +372,20 @@ def novo_recibo():
                 return redirect(url_for('documentos.dashboard_documentos'))
         flash("Erro ao enviar o recibo. Verifique se o arquivo é válido.", "error")
             
-    usuarios = User.query.filter(User.role != 'Terminal', User.username != '50097952800').order_by(User.real_name).all()
+    usuarios = User.query.filter(User.role != 'Terminal', User.username != '50097952800', User.empresa_id == g.empresa_id).order_by(User.real_name).all()
     return render_template('documentos/novo_recibo.html', usuarios=usuarios)
+
+# Ponto 18: Rota de API ausente recriada
+@documentos_bp.route('/api/user-info/<int:user_id>')
+@login_required
+def get_user_info(user_id):
+    user = User.query.filter_by(id=user_id, empresa_id=g.empresa_id).first()
+    if user:
+        return jsonify({
+            'razao_social': user.razao_social_empregadora or g.empresa.nome,
+            'cnpj': user.cnpj_empregador or "00.000.000/0000-00"
+        })
+    return jsonify({'error': 'Usuário não encontrado'}), 404
 
 @documentos_bp.route('/atestado/baixar/<int:id>')
 @login_required
@@ -382,7 +416,7 @@ def meus_atestados():
 @login_required
 @permission_required('DOCUMENTOS')
 def gestao_atestados():
-    atestados = Atestado.query.order_by(Atestado.data_envio.desc()).all()
+    atestados = Atestado.query.filter_by(empresa_id=g.empresa_id).order_by(Atestado.data_envio.desc()).all()
     return render_template('documentos/gestao_atestados.html', atestados=atestados)
 
 @documentos_bp.route('/relatorio-folha')
@@ -414,7 +448,7 @@ def excluir_documento(doc_type, id):
             flash('Tipo de documento inválido.', 'error')
             return redirect(url_for('documentos.dashboard_documentos'))
 
-        if doc:
+        if doc and doc.empresa_id == g.empresa_id:
             if doc.url_arquivo:
                 excluir_do_storage(doc.url_arquivo)
             
@@ -422,7 +456,7 @@ def excluir_documento(doc_type, id):
             db.session.commit()
             flash('Documento e ficheiro na nuvem excluídos com sucesso!', 'success')
         else:
-            flash('Documento não encontrado.', 'error')
+            flash('Documento não encontrado ou sem permissão.', 'error')
             
     except Exception as e:
         traceback.print_exc()

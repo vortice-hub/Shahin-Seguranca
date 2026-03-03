@@ -58,23 +58,36 @@ class EstoqueService:
     def processar_planilha_excel(self, file_bytes):
         df = pd.read_excel(io.BytesIO(file_bytes))
         df = df.fillna('')
-        df.columns = [str(c).strip().lower() for c in df.columns] 
+        
+        # Remove espaços nas colunas e padroniza para evitar erros se alguém escrever " Descricao"
+        df.columns = [str(c).strip().lower().replace('ç', 'c').replace('ã', 'a') for c in df.columns] 
         
         records = df.to_dict('records')
         sucesso_novos, sucesso_atualizados, falhas = 0, 0, 0
         
         for row in records:
-            descricao = str(row.get('descricao', '')).strip()
-            tamanho = str(row.get('tamanho', '')).strip()
-            genero = str(row.get('genero', '')).strip()
+            # Ponto 24: Limpeza profunda (Remove espaços duplos e padroniza formato de texto)
+            descricao_raw = str(row.get('descricao', ''))
+            descricao = " ".join(descricao_raw.split()).title() # Ex: "camisa   polo " vira "Camisa Polo"
+            
+            tamanho_raw = str(row.get('tamanho', ''))
+            tamanho = " ".join(tamanho_raw.split()).upper() # Ex: " m " vira "M"
+            
+            genero_raw = str(row.get('genero', ''))
+            genero = " ".join(genero_raw.split()).capitalize() # Ex: " MASCULINO " vira "Masculino"
             
             if not descricao or not tamanho:
                 falhas += 1
                 continue
             
-            quantidade = int(float(row.get('quantidade', 0))) if row.get('quantidade') else 0
-            minimo = int(float(row.get('minimo', 5))) if row.get('minimo') else 5
-            ideal = int(float(row.get('ideal', 20))) if row.get('ideal') else 20
+            try: quantidade = int(float(row.get('quantidade', 0))) if row.get('quantidade') else 0
+            except: quantidade = 0
+            
+            try: minimo = int(float(row.get('minimo', 5))) if row.get('minimo') else 5
+            except: minimo = 5
+            
+            try: ideal = int(float(row.get('ideal', 20))) if row.get('ideal') else 20
+            except: ideal = 20
 
             item_existente = self.item_repo.get_by_detalhes(descricao, tamanho, genero)
             

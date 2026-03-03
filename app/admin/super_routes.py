@@ -54,7 +54,8 @@ def logout():
 def listar_empresas():
     repo = EmpresaRepository()
     empresas = repo.get_all()
-    # Garante que features_json é um dicionário para a view
+    
+    # Para garantir compatibilidade com o código legado do Jinja, forçamos features_json ativas
     for emp in empresas:
         if not emp.features_json:
             emp.features_json = {"ponto": True, "documentos": True, "estoque": True}
@@ -159,10 +160,10 @@ def configurar_branding(id):
         
     return redirect(url_for('super_admin.listar_empresas'))
 
-@super_admin_bp.route('/empresas/modulos/<int:id>', methods=['POST'])
+@super_admin_bp.route('/empresas/plano/<int:id>', methods=['POST'])
 @super_admin_required
-def configurar_modulos(id):
-    """Altera o Plano da empresa e ativa ou desativa módulos específicos."""
+def alterar_plano_empresa(id):
+    """Atualiza APENAS o plano da empresa (Upsell/Downsell)."""
     repo = EmpresaRepository()
     empresa = repo.get_by_id(id)
     
@@ -170,24 +171,19 @@ def configurar_modulos(id):
         flash("Empresa não encontrada.", "error")
         return redirect(url_for('super_admin.listar_empresas'))
 
-    # Capta a mudança de plano (Upsell / Downsell)
-    novo_plano = request.form.get('plano', empresa.plano)
-
-    novos_modulos = {
-        "ponto": request.form.get('mod_ponto') == 'on',
-        "documentos": request.form.get('mod_documentos') == 'on',
-        "estoque": request.form.get('mod_estoque') == 'on'
-    }
-
-    try:
-        empresa.plano = novo_plano
-        empresa.features_json = novos_modulos
-        flag_modified(empresa, "features_json")
-        db.session.commit()
-        flash(f"Plano ({novo_plano}) e Módulos da empresa '{empresa.nome}' atualizados com sucesso!", "success")
-    except Exception as e:
-        db.session.rollback()
-        flash(f"Erro ao atualizar assinatura: {e}", "error")
+    novo_plano = request.form.get('plano')
+    
+    if novo_plano:
+        try:
+            empresa.plano = novo_plano
+            # Mantemos as features_json todas em "True" para evitar que o código antigo quebre
+            empresa.features_json = {"ponto": True, "documentos": True, "estoque": True}
+            flag_modified(empresa, "features_json")
+            db.session.commit()
+            flash(f"Plano da empresa '{empresa.nome}' alterado para {novo_plano} com sucesso!", "success")
+        except Exception as e:
+            db.session.rollback()
+            flash(f"Erro ao alterar plano: {e}", "error")
 
     return redirect(url_for('super_admin.listar_empresas'))
 

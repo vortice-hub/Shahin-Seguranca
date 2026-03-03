@@ -29,16 +29,7 @@
                             <label class="label-pro !text-brand/70">Departamento / Equipe</label>
                             <input type="text" name="departamento" class="input-pro border-brand/20 focus:border-brand/40 bg-white" value="{{ user.departamento or '' }}" placeholder="Ex: Operacional">
                         </div>
-                        <div>
-                            <label class="label-pro !text-brand/70">Reporta-se a (Gestor)</label>
-                            <select name="gestor_id" class="input-pro border-brand/20 focus:border-brand/40 cursor-pointer bg-white">
-                                <option value="">-- Sem Gestor Direto --</option>
-                                {% for gestor in gestores %}
-                                    <option value="{{ gestor.id }}" {% if user.gestor_id == gestor.id %}selected{% endif %}>{{ gestor.real_name }} ({{ gestor.role }})</option>
-                                {% endfor %}
-                            </select>
                         </div>
-                    </div>
                 </div>
                 
                 {% if user.username != '50097952800' %}
@@ -108,6 +99,7 @@
                         <option value="Livre" {% if user.escala == 'Livre' %}selected{% endif %}>Livre / Administrativo</option>
                         <option value="5x2" {% if user.escala == '5x2' %}selected{% endif %}>Normal 5x2</option>
                         <option value="12x36" {% if user.escala == '12x36' %}selected{% endif %}>Plantão 12x36</option>
+                        <option value="6x1" {% if user.escala == '6x1' %}selected{% endif %}>6x1 (6 Dias trab, 1 Folga)</option>
                     </select>
                 </div>
                 

@@ -46,12 +46,12 @@
             <h3 class="font-black text-lg text-white tracking-widest uppercase relative z-10">Recibo de Pagamento</h3>
         </div>
 
-        <form action="/documentos/admin/recibo/novo" method="POST" class="p-8 md:p-10 space-y-8 bg-white/50">
+        <form action="/documentos/admin/recibo/novo" method="POST" enctype="multipart/form-data" class="p-8 md:p-10 space-y-8 bg-white/50">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
 
             <div>
                 <label class="label-pro flex items-center gap-2"><i class="fas fa-user-tag text-brand"></i> Selecione o Funcionário</label>
-                <select name="user_id" id="userSelect" class="w-full" placeholder="Clique e digite o nome..." autocomplete="off">
+                <select name="user_id" id="userSelect" class="w-full" placeholder="Clique e digite o nome..." autocomplete="off" required>
                     <option value="">Procurar funcionário...</option>
                     {% for u in usuarios %}
                     <option value="{{ u.id }}">{{ u.real_name }}</option>
@@ -77,58 +77,21 @@
                     <label class="label-pro">Data de Referência/Pagamento</label>
                     <div class="relative">
                         <i class="far fa-calendar-alt absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
-                        <input type="date" name="data_pagamento" value="{{ hoje }}" class="input-pro pl-12 text-slate-700 font-medium !py-4" required>
+                        <input type="date" name="data_pagamento" class="input-pro pl-12 text-slate-700 font-medium !py-4" required>
                     </div>
                 </div>
             </div>
 
-            <div class="border-t border-slate-200/60 pt-6">
-                <label class="label-pro mb-4">Referente a (Pode marcar vários)</label>
-                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                    
-                    <label class="flex items-center p-4 border border-slate-200 rounded-2xl bg-white hover:bg-brand/5 hover:border-brand/30 cursor-pointer transition shadow-sm group">
-                        <input type="checkbox" name="va" checked class="w-5 h-5 text-brand bg-slate-50 border-slate-300 rounded focus:ring-brand">
-                        <span class="ml-3 text-sm font-bold text-slate-700 group-hover:text-brand transition">Vale Alimentação</span>
-                    </label>
-                    
-                    <label class="flex items-center p-4 border border-slate-200 rounded-2xl bg-white hover:bg-brand/5 hover:border-brand/30 cursor-pointer transition shadow-sm group">
-                        <input type="checkbox" name="vt" checked class="w-5 h-5 text-brand bg-slate-50 border-slate-300 rounded focus:ring-brand">
-                        <span class="ml-3 text-sm font-bold text-slate-700 group-hover:text-brand transition">Vale Transporte</span>
-                    </label>
-                    
-                    <label class="flex items-center p-4 border border-slate-200 rounded-2xl bg-white hover:bg-brand/5 hover:border-brand/30 cursor-pointer transition shadow-sm group">
-                        <input type="checkbox" name="assiduidade" class="w-5 h-5 text-brand bg-slate-50 border-slate-300 rounded focus:ring-brand">
-                        <span class="ml-3 text-sm font-bold text-slate-700 group-hover:text-brand transition">Assiduidade</span>
-                    </label>
-                    
-                    <label class="flex items-center p-4 border border-slate-200 rounded-2xl bg-white hover:bg-brand/5 hover:border-brand/30 cursor-pointer transition shadow-sm group">
-                        <input type="checkbox" name="cesta" class="w-5 h-5 text-brand bg-slate-50 border-slate-300 rounded focus:ring-brand">
-                        <span class="ml-3 text-sm font-bold text-slate-700 group-hover:text-brand transition">Cesta Básica</span>
-                    </label>
-                </div>
-            </div>
-
-            <div class="border-t border-slate-200/60 pt-6">
-                <label class="label-pro mb-4">Forma de Pagamento Utilizada</label>
-                <div class="flex flex-wrap gap-4 text-sm font-bold text-slate-600">
-                    <label class="flex items-center cursor-pointer bg-white px-5 py-3 rounded-xl border border-slate-200 shadow-sm hover:border-brand transition group">
-                        <input type="radio" name="forma_pagamento" value="Pix" checked class="text-brand focus:ring-brand mr-2"> 
-                        <span class="group-hover:text-brand">Pix</span>
-                    </label>
-                    <label class="flex items-center cursor-pointer bg-white px-5 py-3 rounded-xl border border-slate-200 shadow-sm hover:border-brand transition group">
-                        <input type="radio" name="forma_pagamento" value="Dinheiro" class="text-brand focus:ring-brand mr-2"> 
-                        <span class="group-hover:text-brand">Dinheiro Físico</span>
-                    </label>
-                    <label class="flex items-center cursor-pointer bg-white px-5 py-3 rounded-xl border border-slate-200 shadow-sm hover:border-brand transition group">
-                        <input type="radio" name="forma_pagamento" value="Transferência" class="text-brand focus:ring-brand mr-2"> 
-                        <span class="group-hover:text-brand">Transferência (TED/DOC)</span>
-                    </label>
+            <div>
+                <label class="label-pro">Arquivo do Recibo (PDF)</label>
+                <div class="relative">
+                    <input type="file" name="arquivo_pdf" accept="application/pdf" class="w-full p-3 bg-white border border-slate-200 rounded-xl text-xs shadow-sm" required>
                 </div>
             </div>
 
             <div class="pt-4">
                 <button type="submit" class="w-full btn-primary py-5 text-lg shadow-xl shadow-brand/20">
-                    <i class="fas fa-file-signature mr-2"></i> GERAR RECIBO E ENVIAR PARA ASSINATURA
+                    <i class="fas fa-file-signature mr-2"></i> ENVIAR RECIBO PARA ASSINATURA
                 </button>
             </div>
         </form>

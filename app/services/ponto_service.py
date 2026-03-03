@@ -1,9 +1,16 @@
+import io
+import calendar
 from datetime import datetime, time, timedelta
+from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import A4
+
+from app.extensions import db
 from app.repositories.ponto_repository import (PontoRegistroRepository, PontoResumoRepository, 
                                                PontoAjusteRepository, SolicitacaoAusenciaRepository)
 from app.repositories.user_repository import UserRepository
-from app.models import PontoRegistro, PontoResumo, PontoAjuste, SolicitacaoAusencia
-from app.utils import time_to_minutes, get_brasil_time
+from app.models import PontoRegistro, PontoResumo, PontoAjuste, SolicitacaoAusencia, Holerite, Empresa, User
+from app.utils import time_to_minutes, get_brasil_time, format_minutes_to_hm, enviar_notificacao
+from app.documentos.storage import salvar_no_storage
 
 class PontoService:
     def __init__(self):
@@ -111,7 +118,6 @@ class PontoService:
 
             if vender_ferias:
                 dias_abono = qtd_dias // 2 
-                # Simulação simples de dias de direito (Idealmente passado por parâmetro ou calculado no service)
                 dias_direito = 30
                 if dias_abono > (dias_direito / 3):
                     raise ValueError(f"A CLT permite vender no máximo 1/3 das férias (Max: {int(dias_direito/3)} dias).")
@@ -123,7 +129,7 @@ class PontoService:
                     raise ValueError(f"Saldo insuficiente. Você possui apenas {saldo} dias.")
 
             if qtd_dias < 5:
-                raise ValueError("Pela CLT (Reforma 2017), o período fracionado de férias não pode ser inferior a 5 dias.")
+                raise ValueError("Pela CLT, o período fracionado de férias não pode ser inferior a 5 dias.")
 
             if user.escala == '5x2' and dt_inicio.weekday() in [3, 4]:
                 raise ValueError("Ilegal: O início das férias não pode ocorrer nos 2 dias que antecedem o repouso semanal (Sáb/Dom).")
@@ -135,4 +141,122 @@ class PontoService:
         self.ausencia_repo.add(nova_solicitacao)
         self.ausencia_repo.commit()
         return tipo
+
+    def gerar_espelhos_lote(self, empresa_id, mes_ref):
+        """Ponto 20: Gera os PDFs de Espelho de Ponto em lote e distribui para assinatura."""
+        try:
+            ano, mes = map(int, mes_ref.split('-'))
+            _, ultimo_dia = calendar.monthrange(ano, mes)
+            data_inicio = datetime(ano, mes, 1).date()
+            data_fim = datetime(ano, mes, ultimo_dia).date()
+        except Exception:
+            return False, "Mês de referência inválido."
+
+        empresa = Empresa.query.get(empresa_id)
+        if not empresa: 
+            return False, "Empresa não encontrada."
+
+        usuarios = User.query.filter_by(empresa_id=empresa_id).filter(User.role != 'Terminal', User.username != '50097952800').all()
+        
+        count = 0
+        for u in usuarios:
+            pontos = PontoResumo.query.filter(
+                PontoResumo.user_id == u.id, 
+                PontoResumo.data_referencia >= data_inicio, 
+                PontoResumo.data_referencia <= data_fim
+            ).order_by(PontoResumo.data_referencia).all()
+            
+            if not pontos:
+                continue
+
+            # Inicia o gerador de PDF
+            buffer = io.BytesIO()
+            p = canvas.Canvas(buffer, pagesize=A4)
+            
+            # Cabeçalho
+            p.setFont("Helvetica-Bold", 14)
+            p.drawString(50, 800, f"ESPELHO DE PONTO - REFERÊNCIA: {mes_ref}")
+            p.setFont("Helvetica", 10)
+            p.drawString(50, 780, f"EMPRESA: {empresa.nome}")
+            p.drawString(50, 765, f"COLABORADOR: {u.real_name}")
+            p.drawString(50, 750, f"CPF: {u.cpf}   |   CARGO: {u.role}")
+            
+            # Tabela (Cabeçalho)
+            y = 710
+            p.setFont("Helvetica-Bold", 9)
+            p.drawString(50, y, "DATA")
+            p.drawString(120, y, "STATUS")
+            p.drawString(240, y, "TRABALHADO")
+            p.drawString(340, y, "ESPERADO")
+            p.drawString(440, y, "SALDO (Extra/Falta)")
+            p.line(50, y - 5, 500, y - 5)
+            y -= 20
+            
+            total_trab = 0
+            total_esp = 0
+            
+            p.setFont("Helvetica", 9)
+            for pt in pontos:
+                if y < 50:
+                    p.showPage()
+                    p.setFont("Helvetica", 9)
+                    y = 800
+                    
+                p.drawString(50, y, pt.data_referencia.strftime('%d/%m/%Y'))
+                p.drawString(120, y, pt.status_dia or "OK")
+                p.drawString(240, y, format_minutes_to_hm(pt.minutos_trabalhados))
+                p.drawString(340, y, format_minutes_to_hm(pt.minutos_esperados))
+                
+                saldo_str = format_minutes_to_hm(abs(pt.minutos_saldo))
+                sinal = "+" if pt.minutos_saldo >= 0 else "-"
+                p.drawString(440, y, f"{sinal} {saldo_str}")
+                
+                total_trab += pt.minutos_trabalhados
+                total_esp += pt.minutos_esperados
+                y -= 15
+            
+            # Totais
+            y -= 10
+            p.line(50, y + 10, 500, y + 10)
+            saldo_final = total_trab - total_esp
+            sinal_final = "+" if saldo_final >= 0 else "-"
+            
+            p.setFont("Helvetica-Bold", 10)
+            p.drawString(50, y, "TOTAIS DO MÊS:")
+            p.drawString(240, y, format_minutes_to_hm(total_trab))
+            p.drawString(340, y, format_minutes_to_hm(total_esp))
+            p.drawString(440, y, f"{sinal_final} {format_minutes_to_hm(abs(saldo_final))}")
+            
+            # Rodapé para Assinatura Eletrónica
+            y -= 50
+            p.setFont("Helvetica-Oblique", 8)
+            p.drawString(50, y, "Documento gerado e assinado digitalmente pelo sistema Vortice SaaS.")
+            
+            p.showPage()
+            p.save()
+            
+            pdf_bytes = buffer.getvalue()
+            
+            # Salvar no Storage
+            caminho_blob = salvar_no_storage(pdf_bytes, f"espelhos/{mes_ref}", empresa.slug)
+            
+            if caminho_blob:
+                holerite_existente = Holerite.query.filter_by(user_id=u.id, mes_referencia=mes_ref, empresa_id=empresa_id).filter(Holerite.url_arquivo.like('%espelhos%')).first()
+                if not holerite_existente:
+                    novo_h = Holerite(
+                        user_id=u.id, mes_referencia=mes_ref, url_arquivo=caminho_blob,
+                        status='Enviado', enviado_em=get_brasil_time(), empresa_id=empresa_id
+                    )
+                    db.session.add(novo_h)
+                else:
+                    holerite_existente.url_arquivo = caminho_blob
+                    holerite_existente.status = 'Enviado'
+                    holerite_existente.enviado_em = get_brasil_time()
+                    holerite_existente.visualizado = False 
+                
+                enviar_notificacao(u.id, f"Novo Espelho de Ponto disponível para assinatura ({mes_ref}).", "/documentos/meus-documentos")
+                count += 1
+
+        db.session.commit()
+        return True, f"{count} espelhos gerados e disponibilizados com sucesso."
 

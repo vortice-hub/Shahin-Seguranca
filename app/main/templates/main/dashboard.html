@@ -61,26 +61,20 @@
     </div>
 
     {% if has_permission('PONTO') %}
-    <div class="glass-panel p-6 relative overflow-hidden group flex flex-col justify-between min-h-[160px] {% if not is_pro %}opacity-80{% endif %}">
+    <div class="glass-panel p-6 relative overflow-hidden group flex flex-col justify-between min-h-[160px]">
         <div class="flex justify-between items-start relative z-10">
             <div>
                 <p class="text-[10px] font-bold text-amber-500 uppercase tracking-wider mb-1">Aprovações</p>
-                <h3 class="text-lg font-black text-slate-800 leading-tight">{% if is_pro %}{{ admin.ajustes_pendentes }} Ajustes{% else %}Bloqueado{% endif %}</h3>
+                <h3 class="text-lg font-black text-slate-800 leading-tight">{{ admin.ajustes_pendentes }} Ajustes</h3>
             </div>
-            <div class="w-10 h-10 rounded-full {% if is_pro %}bg-amber-50 text-amber-600{% else %}bg-slate-100 text-slate-400{% endif %} flex items-center justify-center text-lg shadow-sm">
-                <i class="fas {% if is_pro %}fa-balance-scale{% else %}fa-lock{% endif %}"></i>
+            <div class="w-10 h-10 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center text-lg shadow-sm">
+                <i class="fas fa-balance-scale"></i>
             </div>
         </div>
         <div class="mt-4 relative z-10">
-            {% if is_pro %}
             <a href="/admin/solicitacoes" class="btn-glass w-full justify-center !py-2.5 text-xs !text-amber-600 hover:!bg-amber-100">
                 Revisar Agora
             </a>
-            {% else %}
-            <button disabled class="btn-glass w-full justify-center !py-2.5 text-xs !text-slate-400 cursor-not-allowed border-dashed">
-                Plano PRO Necessário
-            </button>
-            {% endif %}
         </div>
     </div>
     {% endif %}
@@ -104,238 +98,5 @@
     </div>
     {% endif %}
 </div>
-
-{% if is_master %}
-<div class="mb-8 animate-fade-in" style="animation-delay: 0.2s; animation-fill-mode: both;">
-    <div class="flex items-center gap-3 mb-6">
-        <div class="w-8 h-8 rounded-full bg-brand/10 text-brand flex items-center justify-center shadow-sm">
-            <i class="fas fa-chart-pie text-sm"></i>
-        </div>
-        <h3 class="text-xl font-black text-slate-800 tracking-tight">Business Intelligence</h3>
-        <span class="bg-brand/10 text-brand text-[9px] font-bold uppercase px-2 py-0.5 rounded-full ml-1">Executivo</span>
-    </div>
-    
-    <div id="loading-bi" class="glass-panel p-16 text-center">
-        <i class="fas fa-circle-notch fa-spin text-4xl text-brand mb-4 opacity-50"></i>
-        <h4 class="text-slate-800 font-bold">A processar dados da {{ dados.nome_empresa }}...</h4>
-        <p class="text-slate-500 text-sm mt-1">A cruzar métricas de Ponto, Estoque e Documentos.</p>
-    </div>
-
-    <div id="content-bi" class="hidden grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
-        <div class="glass-panel p-6 flex flex-col col-span-1 lg:col-span-2">
-            <div class="flex justify-between items-start mb-6">
-                <div>
-                    <h4 class="font-bold text-slate-800 text-sm">Risco Semanal de Folha</h4>
-                    <p class="text-[11px] text-slate-400 mt-0.5">Faltas (Qtd) vs Horas Extras (Horas).</p>
-                </div>
-            </div>
-            <div class="flex-1 relative min-h-[250px]">
-                <canvas id="chartRisco"></canvas>
-            </div>
-        </div>
-
-        <div class="glass-panel p-6 flex flex-col justify-between items-center text-center">
-            <div class="w-full">
-                <h4 class="font-bold text-slate-800 text-sm mb-1">Escudo de Conformidade</h4>
-                <p class="text-[10px] text-slate-400 uppercase tracking-widest font-bold mb-6">Assinaturas no Mês</p>
-            </div>
-            <div class="relative w-40 h-40 flex items-center justify-center my-4">
-                <svg class="w-full h-full transform -rotate-90">
-                    <circle cx="80" cy="80" r="70" stroke="currentColor" stroke-width="8" fill="transparent" class="text-slate-100" />
-                    <circle id="escudo-circle" cx="80" cy="80" r="70" stroke="currentColor" stroke-width="8" fill="transparent" stroke-dasharray="440" stroke-dashoffset="440" class="text-brand transition-all duration-1000 ease-out" stroke-linecap="round" />
-                </svg>
-                <div class="absolute inset-0 flex flex-col items-center justify-center">
-                    <span id="escudo-text" class="text-4xl font-black text-slate-800 tracking-tighter">0%</span>
-                    <i id="escudo-icon" class="fas fa-shield-check text-brand mt-1 opacity-50"></i>
-                </div>
-            </div>
-            <div class="w-full mt-auto">
-                <p class="text-[11px] text-slate-500 font-medium bg-slate-50 py-2 rounded-xl border border-slate-100">Meta Legal: <strong class="text-slate-800">100%</strong></p>
-            </div>
-        </div>
-
-        {% if is_pro %}
-        <div class="glass-panel p-6 flex flex-col">
-            <h4 class="font-bold text-slate-800 text-sm">Logística (Mês)</h4>
-            <p class="text-[11px] text-slate-400 mt-0.5 mb-6">Uniformes entregues por Departamento.</p>
-            <div class="flex-1 relative min-h-[200px]">
-                <canvas id="chartCustos"></canvas>
-            </div>
-        </div>
-        {% else %}
-        <div class="glass-panel p-6 flex flex-col justify-center items-center text-center bg-slate-50 border-2 border-dashed border-slate-200 opacity-90">
-            <div class="w-12 h-12 bg-white rounded-full flex items-center justify-center text-slate-300 shadow-sm mb-3">
-                <i class="fas fa-lock text-xl"></i>
-            </div>
-            <h4 class="font-bold text-slate-500 text-sm">Logística e Estoque</h4>
-            <p class="text-[10px] text-brand font-black uppercase tracking-widest mt-2 px-3 py-1 bg-brand/10 rounded-full">Exclusivo Plano PRO</p>
-        </div>
-        {% endif %}
-
-        <div class="glass-panel p-6 flex flex-col">
-            <h4 class="font-bold text-slate-800 text-sm">Pontualidade</h4>
-            <p class="text-[11px] text-slate-400 mt-0.5 mb-6">Dispersão de entradas hoje.</p>
-            <div class="flex-1 relative min-h-[200px]">
-                <canvas id="chartPontualidade"></canvas>
-            </div>
-        </div>
-
-        <div class="glass-panel p-6 flex flex-col bg-brand/5 border-brand/20 relative overflow-hidden">
-            <div class="absolute -right-6 -top-6 opacity-5">
-                <i class="fas fa-bolt text-9xl text-brand"></i>
-            </div>
-            <div class="relative z-10">
-                <h4 class="font-bold text-brand text-sm mb-1">Raio-X Hoje</h4>
-                <p class="text-[11px] text-brand/60 mb-6">Resumo de status diário.</p>
-                <div class="space-y-3" id="raiox-container">
-                </div>
-            </div>
-        </div>
-
-    </div>
-</div>
-
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script>
-document.addEventListener('DOMContentLoaded', async function() {
-    try {
-        const response = await fetch('/api/analytics');
-        const data = await response.json();
-        
-        document.getElementById('loading-bi').classList.add('hidden');
-        document.getElementById('content-bi').classList.remove('hidden');
-
-        // Configuração de cores adaptada ao design clean
-        const gridColor = 'rgba(226, 232, 240, 0.6)';
-        const textColor = '#64748b';
-        
-        const ctxRisco = document.getElementById('chartRisco').getContext('2d');
-        new Chart(ctxRisco, {
-            type: 'line',
-            data: {
-                labels: data.risco.labels,
-                datasets: [
-                    {
-                        label: 'Faltas (Qtd)',
-                        data: data.risco.faltas,
-                        borderColor: '#ef4444', backgroundColor: '#ef4444',
-                        borderWidth: 2, tension: 0.4, yAxisID: 'y', pointRadius: 3
-                    },
-                    {
-                        label: 'Extras (Horas)',
-                        data: data.risco.extras,
-                        borderColor: '#eab308', backgroundColor: 'rgba(234, 179, 8, 0.1)',
-                        borderWidth: 2, tension: 0.4, fill: true, yAxisID: 'y1', pointRadius: 3
-                    }
-                ]
-            },
-            options: {
-                responsive: true, maintainAspectRatio: false,
-                plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, boxWidth: 6, font: { size: 10 } } } },
-                scales: {
-                    x: { grid: { display: false }, ticks: { color: textColor, font: { size: 9 } } },
-                    y: { type: 'linear', display: true, position: 'left', grid: { color: gridColor, drawBorder: false }, ticks: { color: textColor, font: { size: 9 } } },
-                    y1: { type: 'linear', display: true, position: 'right', grid: { drawOnChartArea: false }, ticks: { color: textColor, font: { size: 9 } } }
-                }
-            }
-        });
-
-        // O gráfico de Logística só é desenhado se o elemento Canvas existir (Plano PRO)
-        const elementCustos = document.getElementById('chartCustos');
-        if (elementCustos) {
-            const ctxCustos = elementCustos.getContext('2d');
-            new Chart(ctxCustos, {
-                type: 'doughnut',
-                data: {
-                    labels: data.custos.labels,
-                    datasets: [{
-                        data: data.custos.data,
-                        backgroundColor: ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#64748b'],
-                        borderWidth: 0, hoverOffset: 4
-                    }]
-                },
-                options: {
-                    responsive: true, maintainAspectRatio: false, cutout: '75%',
-                    plugins: { legend: { position: 'right', labels: { usePointStyle: true, boxWidth: 6, font: { size: 10 } } } }
-                }
-            });
-        }
-
-        const ctxPont = document.getElementById('chartPontualidade').getContext('2d');
-        new Chart(ctxPont, {
-            type: 'polarArea',
-            data: {
-                labels: ['No Horário', 'Atraso Leve', 'Atraso Crítico'],
-                datasets: [{
-                    data: data.pontualidade,
-                    backgroundColor: ['rgba(16, 185, 129, 0.6)', 'rgba(245, 158, 11, 0.6)', 'rgba(239, 68, 68, 0.6)'],
-                    borderWidth: 1, borderColor: '#ffffff'
-                }]
-            },
-            options: {
-                responsive: true, maintainAspectRatio: false,
-                scales: { r: { pointLabels: { font: { size: 9 } }, ticks: { display: false }, grid: { color: gridColor } } },
-                plugins: { legend: { display: false } }
-            }
-        });
-
-        const circle = document.getElementById('escudo-circle');
-        const text = document.getElementById('escudo-text');
-        const icon = document.getElementById('escudo-icon');
-        const percent = data.escudo;
-        
-        let corEscudo = '#10b981'; // Emerald
-        let iconeEscudo = 'fa-shield-check';
-        if (percent < 75) { corEscudo = '#ef4444'; iconeEscudo = 'fa-shield-alt'; } 
-        else if (percent < 90) { corEscudo = '#f59e0b'; iconeEscudo = 'fa-shield-alt'; }
-
-        circle.style.color = corEscudo;
-        icon.className = `fas ${iconeEscudo} mt-1 opacity-50`;
-        icon.style.color = corEscudo;
-
-        const offset = 440 - (440 * percent) / 100;
-        setTimeout(() => { circle.style.strokeDashoffset = offset; }, 100);
-        
-        let count = 0;
-        const step = percent / 50;
-        const timer = setInterval(() => {
-            count += step;
-            if (count >= percent) { clearInterval(timer); text.innerText = Math.round(percent) + '%'; } 
-            else { text.innerText = Math.round(count) + '%'; }
-        }, 20);
-
-        const raiox = document.getElementById('raiox-container');
-        const rData = data.raio_x;
-        const confRaiox = {
-            'OK': { cor: 'text-emerald-500', icone: 'fa-check-circle' },
-            'Falta': { cor: 'text-red-500', icone: 'fa-times-circle' },
-            'Incompleto': { cor: 'text-amber-500', icone: 'fa-exclamation-circle' },
-            'Hora Extra': { cor: 'text-brand', icone: 'fa-plus-circle' },
-            'Folga': { cor: 'text-slate-400', icone: 'fa-bed' }
-        };
-        
-        if (Object.keys(rData).length === 0) {
-            raiox.innerHTML = '<div class="text-brand/50 text-xs italic">Nenhum registo processado.</div>';
-        } else {
-            let html = '';
-            for (const [status, qtd] of Object.entries(rData)) {
-                const cfg = confRaiox[status] || { cor: 'text-slate-500', icone: 'fa-info-circle' };
-                html += `
-                    <div class="flex justify-between items-center border-b border-brand/10 pb-2">
-                        <span class="text-xs font-bold text-slate-700 flex items-center gap-2"><i class="fas ${cfg.icone} ${cfg.cor}"></i> ${status}</span>
-                        <span class="font-black text-base text-slate-800">${qtd}</span>
-                    </div>
-                `;
-            }
-            raiox.innerHTML = html;
-        }
-
-    } catch (e) {
-        document.getElementById('loading-bi').innerHTML = `<p class="text-red-500 text-sm">Erro de conexão com o B.I.</p>`;
-    }
-});
-</script>
-{% endif %}
 {% endblock %}
 
