@@ -139,11 +139,13 @@ def auto_cadastro():
         senha = request.form.get('senha')
         confirma = request.form.get('confirmacao')
         
+        # Validação para não deixar passar e-mail ou senhas vazias silenciosamente
         if not email or not senha:
+            flash('Por favor, preencha o E-mail e a Senha para continuar.', 'error')
             return redirect(url_for('auth.auto_cadastro', step=2, cpf=cpf_input))
             
         if senha != confirma:
-            flash('Senhas não coincidem.', 'error')
+            flash('As senhas digitadas não coincidem. Tente novamente.', 'error')
             return redirect(url_for('auth.auto_cadastro', step=2, cpf=cpf_input))
             
         novo_user = User(
