@@ -1,25 +1,29 @@
 {
-  "name": "Shahin Gestão Operacional",
-  "short_name": "Shahin App",
-  "description": "Sistema Integrado de Gestão de Ponto e RH",
+  "name": "{{ empresa.nome if empresa else 'Vortice Gestão' }}",
+  "short_name": "{{ (empresa.nome.split(' ')[0] ~ ' App') if empresa else 'Vortice App' }}",
+  "description": "Sistema Integrado de Gestão Operacional e RH",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#0f172a",
-  "orientation": "portrait",
+  "background_color": "#f8fafc",
+  "theme_color": "{{ (empresa.config_json.get('cor_primaria', '#0f172a')) if empresa and empresa.config_json else '#0f172a' }}",
+  "orientation": "portrait-primary",
+  "prefer_related_applications": false,
   "icons": [
     {
-      "src": "/static/icons/icon-192x192.png",
+      "src": "{{ (empresa.config_json.get('logo_url', '/static/icons/icon-192x192.png')) if empresa and empresa.config_json else '/static/icons/icon-192x192.png' }}",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "/static/icons/icon-512x512.png",
+      "src": "{{ (empresa.config_json.get('logo_url', '/static/icons/icon-512x512.png')) if empresa and empresa.config_json else '/static/icons/icon-512x512.png' }}",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
     }
   ]
 }
+
+
 

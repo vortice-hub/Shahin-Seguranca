@@ -154,3 +154,140 @@ body {
     transform: translateY(0) scale(1);
 }
 
+/* =========================================================
+   ESTILOS EXCLUSIVOS DO APP NATIVO (PWA STANDALONE)
+   ========================================================= */
+
+/* Por padrão (na web), o menu de app inferior fica oculto */
+.bottom-nav-pwa {
+    display: none;
+}
+
+/* Quando o utilizador abre pela tela inicial do telemóvel (Standalone) */
+@media all and (display-mode: standalone) {
+    
+    body {
+        /* Desativa comportamento elástico de puxar a página no topo (bounce) */
+        overscroll-behavior-y: none; 
+        
+        /* Remove o destaque/seleção azul indesejado ao tocar na tela */
+        -webkit-tap-highlight-color: transparent;
+        -webkit-user-select: none;
+        user-select: none;
+        
+        /* Adiciona espaço global no fundo para a barra inferior não cobrir os conteúdos */
+        padding-bottom: calc(85px + env(safe-area-inset-bottom));
+    }
+
+    /* Esconde a barra de navegação superior antiga da versão web */
+    .glass-nav {
+        display: none !important;
+    }
+
+    /* Ajusta o container principal para compensar a barra do topo que foi removida */
+    main.pt-24, main.md\:pt-28 {
+        padding-top: max(1.5rem, env(safe-area-inset-top)) !important;
+    }
+
+    /* Oculta completamente o menu mobile lateral (Drawer) no App */
+    #mobile-drawer, #mobile-overlay {
+        display: none !important;
+    }
+
+    /* Mostra a nova barra de navegação inferior estilo Glassmorphism */
+    .bottom-nav-pwa {
+        display: flex !important;
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: rgba(255, 255, 255, 0.90);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border-top: 1px solid rgba(226, 232, 240, 0.8);
+        justify-content: space-around;
+        align-items: center;
+        padding-top: 12px;
+        /* env() garante que o menu fica acima da barra preta de gestos do iPhone/Android */
+        padding-bottom: max(15px, env(safe-area-inset-bottom));
+        z-index: 999;
+        box-shadow: 0 -4px 30px rgba(0, 0, 0, 0.05);
+    }
+
+    /* Item comum da barra inferior */
+    .bottom-nav-item {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 4px;
+        color: #94a3b8; /* Cor inativa (cinza) */
+        font-size: 10px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        transition: all 0.2s ease;
+        text-decoration: none;
+        width: 65px;
+        position: relative;
+    }
+
+    /* Item ativo da barra inferior (adota a cor da empresa) */
+    .bottom-nav-item.active {
+        color: var(--primary-color, #2563eb);
+        transform: translateY(-2px);
+    }
+
+    .bottom-nav-item i {
+        font-size: 22px;
+    }
+
+    /* O botão principal "Flutuante" no meio da barra inferior (ex: Ponto) */
+    .bottom-nav-fab-container {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        width: 65px;
+    }
+
+    .bottom-nav-fab {
+        width: 58px;
+        height: 58px;
+        background-color: var(--primary-color, #2563eb);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        box-shadow: 0 8px 20px color-mix(in srgb, var(--primary-color) 40%, transparent);
+        position: absolute;
+        top: -30px;
+        border: 4px solid #f8fafc; /* Cor do background do body para criar "recorte" */
+        transition: transform 0.2s ease;
+    }
+
+    .bottom-nav-fab:active {
+        transform: scale(0.92);
+    }
+
+    .bottom-nav-fab i {
+        font-size: 24px;
+    }
+
+    .bottom-nav-fab-text {
+        color: var(--primary-color, #2563eb);
+        font-size: 10px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-top: 32px; /* Empurra o texto para baixo do FAB */
+    }
+
+    /* Aumenta a altura dos botões no app para facilitar o toque (Touch Targets Apple/Google) */
+    .btn-primary, .input-pro {
+        min-height: 52px;
+    }
+}
+
+

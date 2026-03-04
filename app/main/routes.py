@@ -105,6 +105,9 @@ def serve_logo(slug):
     except Exception as e:
         return redirect(icone_padrao)
 
+# ==============================================================================
+# 📱 GERADOR DINÂMICO DE MANIFEST PWA (WHITE-LABEL)
+# ==============================================================================
 @main_bp.route('/manifest.json')
 def dynamic_manifest():
     slug = request.args.get('slug')
@@ -115,33 +118,39 @@ def dynamic_manifest():
     elif hasattr(g, 'empresa') and g.empresa:
         empresa_contexto = g.empresa
 
-    app_name = "Vortice SaaS"
-    short_name = "Vortice"
+    # Valores padrão Vortice
+    app_name = "Vortice Gestão"
+    short_name = "Vortice App"
     icon_url = "/static/icons/vortice-icon.png"
     theme_color = "#0f172a"
     
-    url_inicial = f"/login/{slug}" if slug else "/login"
+    url_inicial = f"/login/{slug}" if slug else "/"
     
+    # Sobrescreve com os dados da empresa (White-label)
     if empresa_contexto:
         app_name = empresa_contexto.nome
-        short_name = empresa_contexto.nome.split()[0]
+        short_name = f"{empresa_contexto.nome.split()[0]} App"
         config = empresa_contexto.config_json or {}
         icon_url = config.get('logo_url') if config.get('logo_url') else icon_url
         theme_color = config.get('cor_primaria', theme_color)
 
     manifest = {
-        "short_name": short_name,
         "name": app_name,
-        "icons": [
-            { "src": icon_url, "sizes": "192x192", "purpose": "any maskable" },
-            { "src": icon_url, "sizes": "512x512", "purpose": "any maskable" }
-        ],
+        "short_name": short_name,
+        "description": "O controle total da sua operação e recursos humanos em um único lugar.",
         "start_url": url_inicial,
-        "display": "standalone",
         "scope": "/",
+        "display": "standalone",
+        "background_color": "#f8fafc", # Cor de fundo que bate com o body do CSS para evitar flashes brancos
         "theme_color": theme_color,
-        "background_color": "#ffffff"
+        "orientation": "portrait-primary", # Bloqueia rotação indesejada no telemóvel
+        "prefer_related_applications": False,
+        "icons": [
+            { "src": icon_url, "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+            { "src": icon_url, "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+        ]
     }
+    
     return jsonify(manifest)
 
 @main_bp.route('/api/notificacoes', methods=['GET'])
@@ -331,4 +340,5 @@ def push_subscribe():
     except Exception as e:
         traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
+
 

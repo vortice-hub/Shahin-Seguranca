@@ -2,13 +2,14 @@
 <html lang="pt-pt">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Meta tag essencial para o App Nativo: viewport-fit=cover permite que o app use todo o ecrã, até por baixo do notch -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>{% if g.empresa %}{{ g.empresa.nome }}{% else %}Vortice SaaS{% endif %} - Portal</title>
     
     <link rel="manifest" href="/manifest.json?v=1.3{% if g.empresa %}&slug={{ g.empresa.slug }}{% elif empresa_login %}&slug={{ empresa_login.slug }}{% endif %}">
     <meta name="theme-color" content="{{ (g.empresa.config_json or {}).get('cor_primaria', '#ffffff') if g.empresa else '#ffffff' }}">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="{% if g.empresa %}{{ g.empresa.nome }}{% else %}Vortice{% endif %}">
     
     {% set apple_icon = (g.empresa.config_json or {}).get('logo_url', '/static/icons/vortice-icon.png') if g.empresa else '/static/icons/vortice-icon.png' %}
@@ -74,6 +75,7 @@
 
     {% if current_user.is_authenticated and not current_user.is_first_access and not request.path.startswith('/vortice') %}
     
+    <!-- HEADER DA WEB (Escondido no modo App Nativo via CSS) -->
     <nav class="glass-nav fixed top-3 left-3 right-3 md:left-6 md:right-6 z-50 rounded-2xl px-4 md:px-6 py-3 flex justify-between items-center shadow-sm transition-all">
         <a href="/" class="flex items-center gap-3 transition transform active:scale-95 group">
             <img src="{{ (g.empresa.config_json or {}).get('logo_url', '/static/icons/vortice-icon.png') if g.empresa else '/static/icons/vortice-icon.png' }}" 
@@ -214,6 +216,8 @@
             </div>
         </div>
     </nav>
+    
+    <!-- MENU MOBILE LATERAL (Também Escondido no modo App Nativo) -->
     <div id="mobile-overlay" onclick="toggleMobileMenu()" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[90] hidden transition-opacity duration-300 opacity-0"></div>
     <div id="mobile-drawer" class="fixed inset-y-0 right-0 w-72 bg-white shadow-2xl z-[100] transform translate-x-full transition-transform duration-300 flex flex-col border-l border-slate-100">
         <div class="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
@@ -320,9 +324,51 @@
             </a>
         </div>
     </div>
+    
+    <!-- MÁGICA: BARRA DE NAVEGAÇÃO INFERIOR PARA APP NATIVO (Só aparece quando instalado) -->
+    <nav class="bottom-nav-pwa">
+        <a href="/" class="bottom-nav-item {% if request.path == '/' %}active{% endif %}">
+            <i class="fas fa-home"></i>
+            <span>Início</span>
+        </a>
+        
+        {% if feat_docs %}
+        <a href="/documentos/meus-documentos" class="bottom-nav-item {% if request.path.startswith('/documentos') and not 'admin' in request.path %}active{% endif %}">
+            <i class="fas fa-folder-open"></i>
+            <span>Docs</span>
+        </a>
+        {% endif %}
+        
+        {% if feat_ponto %}
+        <div class="bottom-nav-fab-container">
+            <a href="/ponto/registrar" class="bottom-nav-fab">
+                <i class="fas fa-fingerprint"></i>
+            </a>
+            <span class="bottom-nav-fab-text">Ponto</span>
+        </div>
+        {% endif %}
+        
+        {% if is_master or 'PONTO' in perms or 'DOCUMENTOS' in perms or 'ESTOQUE' in perms %}
+        <a href="/admin/solicitacoes" class="bottom-nav-item {% if request.path.startswith('/admin') %}active{% endif %}">
+            <i class="fas fa-lock"></i>
+            <span>Gestão</span>
+        </a>
+        {% elif feat_estoque %}
+        <a href="/estoque/solicitar-uniforme" class="bottom-nav-item {% if request.path.startswith('/estoque') %}active{% endif %}">
+            <i class="fas fa-box"></i>
+            <span>EPIs</span>
+        </a>
+        {% endif %}
+        
+        <a href="/ponto/espelho" class="bottom-nav-item {% if request.path == '/ponto/espelho' %}active{% endif %}">
+            <i class="fas fa-user-circle"></i>
+            <span>Perfil</span>
+        </a>
+    </nav>
+    
     {% endif %}
 
-    <main class="flex-1 w-full pt-24 md:pt-28 pb-16 px-4 md:px-8 max-w-7xl mx-auto z-10 {% if not current_user.is_authenticated or current_user.is_first_access or request.path.startswith('/vortice') %}!pt-8 !max-w-4xl{% endif %}">
+    <main class="flex-1 w-full pt-24 md:pt-28 pb-6 px-4 md:px-8 max-w-7xl mx-auto z-10 {% if not current_user.is_authenticated or current_user.is_first_access or request.path.startswith('/vortice') %}!pt-8 !max-w-4xl{% endif %}">
         
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
@@ -337,11 +383,12 @@
     </main>
     
     {% if current_user.is_authenticated and not current_user.is_first_access and not request.path.startswith('/vortice') %}
-    <footer class="py-8 text-center z-10 mt-auto">
+    <footer class="py-8 text-center z-10 mt-auto hidden md:block">
         <p class="text-[11px] font-medium text-slate-400">&copy; {{ g.empresa.nome if g.empresa else 'Vortice SaaS' }} - Sistema Integrado</p>
     </footer>
     {% endif %}
 
+    <!-- Modais de Confirmação e Scripts padrão mantidos sem alteração -->
     <div id="modal-confirmacao" class="hidden fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm transition-opacity opacity-0">
         <div class="glass-panel max-w-sm w-full mx-4 overflow-hidden transform scale-95 transition-transform duration-300 ease-out" id="modal-content">
             <div class="p-8 text-center bg-white/80">
@@ -432,8 +479,8 @@
                 const msg = el.innerText;
                 const cat = el.getAttribute('data-cat');
                 Toastify({
-                    text: msg, duration: 4000, close: true, gravity: "top", position: "right", 
-                    style: { background: cat === 'error' ? "linear-gradient(to right, #ef4444, #b91c1c)" : "linear-gradient(to right, var(--primary-color, #3b82f6), var(--primary-hover, #2563eb))", borderRadius: "12px", fontSize: "13px", fontWeight: "600", padding: "12px 20px", boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.1)" },
+                    text: msg, duration: 4000, close: true, gravity: "top", position: "center", 
+                    style: { background: cat === 'error' ? "linear-gradient(to right, #ef4444, #b91c1c)" : "linear-gradient(to right, var(--primary-color, #3b82f6), var(--primary-hover, #2563eb))", borderRadius: "12px", fontSize: "14px", fontWeight: "600", padding: "14px 24px", boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.1)" },
                 }).showToast();
             });
 
@@ -545,4 +592,5 @@
     </script>
 </body>
 </html>
+
 
